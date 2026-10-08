@@ -7,12 +7,15 @@ viewpoint, so they come out pre-warped and continuous across edges.
 - [`docs/feasibility.md`](docs/feasibility.md): how feasible the whole pipeline
   is, stage by stage, measured results from the sandbox, and a suggested build
   order.
+- [`docs/hardware.md`](docs/hardware.md): what to expect from a cheap
+  projector indoors and outdoors, which projector and phone features matter,
+  and outdoor practicalities.
 - [`docs/prior-art.md`](docs/prior-art.md): what MadMapper, Resolume, HeavyM,
   Lightform, disguise and the open-source tools teach us.
 - [`app/`](app/README.md): **Surface Mapper**, the phone-first app. Trace
   surfaces on the projector frame, fill them with effects, video and images,
   and drive them with sound. Static files; deploys to Vercel as-is (see
-  `vercel.json`).
+  `vercel.json`). Live at https://surface-mapper-alpha.vercel.app.
 - [`sim/index.html`](sim/index.html): the **Projection Mapping Sandbox**, a
   browser simulation of a room, a projector and a few boxes. Open it directly
   in a browser (it loads three.js from jsDelivr).
