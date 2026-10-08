@@ -1,0 +1,2573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Projection Mapping Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* Layout: a darkened projection booth. Room view fills the stage; the operator's console runs down the right. */
+:root {
+  --bg: #0d1016;          /* booth: blue-black */
+  --panel: #151a23;
+  --raise: #1d2430;
+  --line: #2a3342;
+  --fg: #dde3ec;
+  --muted: #8b96a8;
+  --lamp: #ffb547;        /* projector-lamp amber, the one accent */
+  --lamp-dim: #ffb54733;
+  --ok: #59d39a;
+  --warn: #ffcf5a;
+  --bad: #ff6b6b;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+header h1 span { color: var(--lamp); }
+header p { margin: 0; color: var(--muted); font-size: 13px; min-width: 0; }
+.stage { position: relative; min-height: 0; min-width: 0; background: #07090d; }
+#room { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#room:active { cursor: grabbing; }
+.hud { position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; right: 12px; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud-bottom { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; pointer-events: none; font: 12px var(--mono); color: var(--muted); }
+.hud-bottom > * { background: #07090dcc; padding: 4px 8px; border-radius: 4px; }
+.console { overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); min-height: 0; }
+section { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+h2 { margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+h2 small { font: 11px var(--mono); text-transform: none; letter-spacing: 0; }
+.proj-wrap { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.slot > .view { position: relative; aspect-ratio: 16 / 10; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: #07090d; }
+.stage > .view { position: absolute; inset: 0; }
+.stage > .proj-wrap { position: absolute; inset: 0; margin: auto; border-radius: 0; }
+.slot > .view .hud-bottom { display: none; }
+.btn.mini { padding: 2px 8px; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.subhead { font-size: 12px; color: var(--muted); min-width: 70px; }
+.subpanel { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+.subpanel h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.decode { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 4fr); gap: 8px; align-items: end; }
+.decode figure { margin: 0; display: grid; gap: 3px; min-width: 0; }
+.decode canvas { width: 100%; height: auto; display: block; background: #000; border: 1px solid var(--line); image-rendering: pixelated; }
+.decode figcaption { font-size: 11px; color: var(--muted); }
+input[type=number] { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: 12px var(--mono); }
+select.btn { padding: 4px 6px; }
+#proj.edit2d { cursor: default; }
+.proj-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#projOverlay { pointer-events: none; }
+#proj { touch-action: none; cursor: crosshair; }
+.note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 13px; line-height: 1.3; }
+.btn:hover { border-color: #3c4759; }
+.btn:focus-visible, .chip:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
+.btn.primary { background: var(--lamp); color: #1a1205; border-color: var(--lamp); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+.chip[aria-pressed="true"] { background: var(--lamp-dim); border-color: var(--lamp); color: var(--fg); }
+.tabs { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.tabs button { flex: 1; background: transparent; border: 0; padding: 6px; cursor: pointer; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--raise); color: var(--fg); box-shadow: inset 0 -2px 0 var(--lamp); }
+.sliders { display: grid; grid-template-columns: auto minmax(0, 1fr) 62px; gap: 4px 10px; align-items: center; font-size: 12.5px; }
+.sliders label { color: var(--muted); }
+.sliders output { font: 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--lamp); }
+.check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--lamp); }
+.stats { font: 12px/1.6 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; margin: 0; white-space: pre-wrap; }
+.stats b { color: var(--fg); font-weight: 500; }
+.pill { font: 11px var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; resize: vertical; }
+#code { font: 12px/1.5 var(--mono); min-height: 220px; tab-size: 2; white-space: pre; overflow-x: auto; }
+#prompt { min-height: 58px; }
+#codeStatus { font: 12px var(--mono); white-space: pre-wrap; margin: 0; color: var(--muted); }
+#codeStatus.err { color: var(--bad); }
+details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.boxes { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; height: auto; }
+  .stage { aspect-ratio: 4 / 3; max-width: 100%; }
+  .console { border-left: 0; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Projection Mapping <span>Sandbox</span></h1>
+    <p>A virtual room and projector for testing two ways to map real surfaces: a 3D model of the scene, or flat shapes traced directly in the projector's image.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="view" id="roomWrap">
+    <canvas id="room" aria-label="Room view: drag to orbit, scroll or pinch to zoom"></canvas>
+    <div class="hud" role="toolbar" aria-label="Room camera">
+      <button class="chip" data-view="audience" aria-pressed="true">Audience</button>
+      <button class="chip" data-view="side" aria-pressed="false">Side</button>
+      <button class="chip" data-view="top" aria-pressed="false">Top</button>
+      <button class="chip" data-view="projector" aria-pressed="false">From projector</button>
+    </div>
+    <div class="hud-bottom">
+      <span id="fps">Room view · drag to orbit</span>
+      <span id="alignReadout">Alignment …</span>
+    </div>
+    </div>
+  </div>
+
+  <aside class="console">
+    <section>
+      <h2>Projector output <span class="row"><small id="projRes">1280 × 720</small><button class="btn mini" id="swapViews">Enlarge</button></span></h2>
+      <div class="slot" id="projSlot">
+        <div class="proj-wrap" id="projWrap">
+          <canvas id="proj" aria-label="Projector output and editing canvas"></canvas>
+          <canvas id="projOverlay"></canvas>
+        </div>
+      </div>
+      <p class="note" id="projNote"></p>
+      <label class="check"><input type="checkbox" id="showHandles" checked> Show outlines and handles on this preview (not projected)</label>
+    </section>
+
+    <section>
+      <h2>Surface map</h2>
+      <div class="tabs" role="tablist" aria-label="Mapping method">
+        <button role="tab" id="tab3d" aria-selected="true">3D model</button>
+        <button role="tab" id="tab2d" aria-selected="false">2D surfaces</button>
+      </div>
+
+      <div id="pane3d" style="display:grid;gap:10px">
+      <pre class="stats" id="solveStats" hidden></pre>
+      <div class="tabs" role="tablist" aria-label="3D model source">
+        <button role="tab" id="tabManual" aria-selected="false">Manual boxes</button>
+        <button role="tab" id="tabScan" aria-selected="true">Depth scan</button>
+      </div>
+
+      <div id="paneScan" class="grid" style="display:grid;gap:10px">
+        <p class="note">Simulates a depth sensor mounted next to the projector (think phone LiDAR). Fits planes to the wall and floor with RANSAC, clusters what's left, and fits a rotated box to each cluster.</p>
+        <div class="sliders">
+          <label for="noise">Sensor noise</label><input type="range" id="noise" min="0" max="3" step="0.1" value="1"><output id="noiseOut">1.0×</output>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="runScan">Run depth scan</button>
+          <label class="check"><input type="checkbox" id="showCloud"> Show point cloud</label>
+        </div>
+        <pre class="stats" id="scanStats">No scan yet.</pre>
+      </div>
+
+      <div id="paneManual" style="display:none;gap:10px">
+        <p class="note">Add a box per real object, then drag and size it until its outline sits on the real edges in the room view. In a real setup you'd watch the physical object while you do this.</p>
+        <div class="boxes" id="boxList"></div>
+        <div class="row">
+          <button class="btn" id="addBox">Add box</button>
+          <button class="btn" id="delBox">Delete selected</button>
+          <button class="btn" id="scramble">Knock out of alignment</button>
+          <button class="btn" id="clearModel">Start empty</button>
+        </div>
+        <div class="sliders" id="boxSliders"></div>
+      </div>
+      </div>
+
+      <div id="pane2d" style="display:none;gap:10px">
+        <p class="note">No 3D model and no projector calibration. The preview above is a blank canvas covering the projector's whole frame. Add a shape, see where it lands in the room, then drag it and its corners onto a real flat surface.</p>
+        <div class="subpanel">
+          <h3>Find surfaces with a camera</h3>
+          <p class="note">The projector shows a sequence of stripe patterns while a camera standing somewhere near it photographs each one. Decoding the photos tells which projector pixel lit each camera pixel. A flat surface shows up as a region where that mapping is a single perspective transform. The camera's exact position doesn't matter, but it must be off to one side: the parallax is the signal.</p>
+          <div class="sliders">
+            <label for="camDist">Camera distance from projector</label><input type="range" id="camDist" min="0" max="1.5" step="0.05" value="0.6"><output id="camDistOut"></output>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="capture">Project patterns and capture</button>
+            <button class="btn" id="camSpot">Move camera</button>
+            <label class="check"><input type="checkbox" id="keepBg"> Keep wall and floor</label>
+          </div>
+          <div class="decode">
+            <figure><canvas id="camShot" width="160" height="120"></canvas><figcaption>Camera photo</figcaption></figure>
+            <figure><canvas id="decodeView" width="320" height="180"></canvas><figcaption>Planes found, in projector space</figcaption></figure>
+          </div>
+          <pre class="stats" id="capStats">Not captured yet. The camera is drawn in the room view.</pre>
+        </div>
+        <div class="row"><span class="subhead">New surface</span>
+          <button class="btn" data-add="square">Square</button><button class="btn" data-add="circle">Circle</button><button class="btn" data-add="triangle">Triangle</button>
+        </div>
+        <div class="row"><span class="subhead">Handles</span>
+          <div class="tabs" role="tablist" aria-label="Handle mode" style="flex:1"><button role="tab" id="edWarp" aria-selected="true">Warp corners</button><button role="tab" id="edPoints" aria-selected="false">Edit points</button></div>
+        </div>
+        <div class="row"><span class="subhead">Combine</span>
+          <select id="partShape" class="btn" aria-label="Shape to combine"><option value="square">Square</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
+          <button class="btn" id="partAdd">Add to surface</button><button class="btn" id="partCut">Cut out</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="delPoint">Delete point</button><button class="btn" id="delSurface">Delete surface</button>
+          <button class="btn" id="from3d">Start from 3D boxes</button><button class="btn" id="clear2d">Clear all</button>
+        </div>
+        <label class="check"><input type="checkbox" id="snap" checked> Snap to nearby corners, so neighboring surfaces share edges</label>
+        <p class="note" id="hint2d"></p>
+        <pre class="stats" id="stats2d"></pre>
+        <div class="subpanel">
+          <h3>Upgrade to a 3D model</h3>
+          <p class="note">Treats each group of welded surfaces as a box standing on the floor, then solves for the projector's aim and lens and each box's size and position from the corners. One viewpoint can't tell absolute size, so the solve needs two tape measurements. The lens offset comes from the projector's spec sheet: 0% means the image is centred on the lens, 100% means it sits entirely above it. Aiming lower and shifting the image up look almost the same in the corners, so the solve can't work this out on its own.</p>
+          <div class="sliders">
+            <label for="mHeight">Projector lens height</label><input type="number" id="mHeight" min="0.2" max="5" step="0.01" value="1.55"><output>m</output>
+            <label for="mDist">Projector to wall</label><input type="number" id="mDist" min="0.5" max="15" step="0.01" value="3.30"><output>m</output>
+            <label for="mOffset">Lens offset (spec sheet)</label><input type="number" id="mOffset" min="-150" max="150" step="1" value="0"><output>%</output>
+          </div>
+          <div class="row"><button class="btn primary" id="solve3d">Solve 3D from surfaces</button></div>
+          <pre class="stats" id="solveMsg"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Content <small id="effectName"></small></h2>
+      <div class="row" id="presets"></div>
+      <div id="aiBlock" style="display:grid;gap:8px">
+        <label for="prompt" class="note">Describe a look and Claude writes a shader that knows this scene's geometry.</label>
+        <textarea id="prompt" placeholder="An aquarium: water fills each box to a different level, fish swim along the wall"></textarea>
+        <div class="row" id="ideas"></div>
+        <div class="row">
+          <button class="btn primary" id="generate">Generate with Claude</button>
+          <button class="btn" id="stopGen" hidden>Stop</button>
+        </div>
+      </div>
+      <p class="note" id="aiOff" hidden>AI generation is available when this page is opened as a published Claude artifact. You can still edit the shader below.</p>
+      <details id="codeDetails">
+        <summary>Shader code (GLSL, editable)</summary>
+        <div style="display:grid;gap:8px;margin-top:8px">
+          <textarea id="code" spellcheck="false"></textarea>
+          <div class="row"><button class="btn" id="applyCode">Compile and project</button></div>
+        </div>
+      </details>
+      <pre id="codeStatus"></pre>
+    </section>
+
+    <section>
+      <h2>Room and projector</h2>
+      <div class="sliders">
+        <label for="ambient">Room lights</label><input type="range" id="ambient" min="0" max="0.6" step="0.01" value="0.06"><output id="ambientOut"></output>
+        <label for="lumens">Projector brightness</label><input type="range" id="lumens" min="0.2" max="2" step="0.05" value="1"><output id="lumensOut"></output>
+        <label for="projErr">Projector pose error</label><input type="range" id="projErr" min="0" max="15" step="0.5" value="0"><output id="projErrOut"></output>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="showModel" checked> Model wireframe</label>
+        <label class="check"><input type="checkbox" id="showFrustum" checked> Projector frustum</label>
+        <label class="check"><input type="checkbox" id="paused"> Pause</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="newLayout">New real-world layout</button>
+      </div>
+      <p class="note">"Projector pose error" shifts and turns the app's idea of where the projector is, the way an imperfect calibration would. Watch how far a few centimeters throws the edges off.</p>
+    </section>
+  </aside>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+// ---------- constants ----------
+const PROJ_W = 1280, PROJ_H = 720;
+const MAX_BOXES = 8;
+const PROJ_POS = new THREE.Vector3(0, 1.55, 3.3);
+const PROJ_TARGET = new THREE.Vector3(0, 0.75, 0.3);
+const PROJ_FOV = 36;
+const D2R = Math.PI / 180;
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- state ----------
+const state = {
+  real: [],
+  model: [],
+  sel: -1,
+  ambient: 0.06,
+  lumens: 1,
+  projErr: 0,
+  showModel: true,
+  showFrustum: true,
+  showCloud: false,
+  showHandles: true,
+  paused: false,
+  noise: 1,
+  method: '3d',
+  surfaces: [],
+  sel2: -1,
+  selPin: -1,
+  selVert: null,
+  edit2: 'warp',
+  snap: true,
+  seeded2d: false,
+  camDist: 0.6,
+  keepBg: false,
+  capturing: false,
+  projSolved: null,
+};
+
+const DEFAULT_REAL = [
+  { x: -0.95, z: 0.32, w: 0.6, h: 0.95, d: 0.5, yaw: 0 },
+  { x: 0.05, z: 0.42, w: 0.85, h: 0.5, d: 0.6, yaw: 12 * D2R },
+  { x: 0.95, z: 0.29, w: 0.42, h: 1.35, d: 0.42, yaw: -18 * D2R },
+  { x: -0.25, z: 1.15, w: 0.36, h: 0.36, d: 0.36, yaw: 38 * D2R },
+];
+state.real = DEFAULT_REAL.map((b) => ({ ...b }));
+
+// ---------- geometry ----------
+// yaw convention matches three.js rotation.y: world = (c*lx + s*lz, ly, -s*lx + c*lz)
+function toWorld(b, lx, ly, lz) {
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  return [b.x + c * lx + s * lz, ly, b.z - s * lx + c * lz];
+}
+function rotDir(yaw, v) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
+}
+
+function buildSurfaceGeometry(boxes, albedo) {
+  const pos = [], nor = [], uv = [], size = [], info = [], center = [], dims = [], col = [];
+  function quad(o, U, V, N, sx, sy, obj, face, cen, dim, yaw, color) {
+    const P = [o, [o[0] + U[0], o[1] + U[1], o[2] + U[2]], [o[0] + U[0] + V[0], o[1] + U[1] + V[1], o[2] + U[2] + V[2]], [o[0] + V[0], o[1] + V[1], o[2] + V[2]]];
+    const T = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      pos.push(...P[i]); nor.push(...N); uv.push(...T[i]); size.push(sx, sy);
+      info.push(obj, face, yaw, 0); center.push(...cen); dims.push(...dim); col.push(...color);
+    }
+  }
+  quad([-3, 0, 0], [6, 0, 0], [0, 3, 0], [0, 0, 1], 6, 3, 0, 6, [0, 1.5, 0], [6, 3, 0], 0, albedo.wall);
+  quad([-3, 0, 4], [6, 0, 0], [0, 0, -4], [0, 1, 0], 6, 4, 1, 7, [0, 0, 2], [6, 0, 4], 0, albedo.floor);
+  boxes.forEach((b, i) => {
+    const { w, h, d } = b;
+    const cen = [b.x, h / 2, b.z];
+    const faces = [
+      // origin (local), U, V, normal, sizeU, sizeV, faceId
+      [[-w / 2, 0, d / 2], [w, 0, 0], [0, h, 0], [0, 0, 1], w, h, 0],
+      [[w / 2, 0, -d / 2], [-w, 0, 0], [0, h, 0], [0, 0, -1], w, h, 1],
+      [[w / 2, 0, d / 2], [0, 0, -d], [0, h, 0], [1, 0, 0], d, h, 2],
+      [[-w / 2, 0, -d / 2], [0, 0, d], [0, h, 0], [-1, 0, 0], d, h, 3],
+      [[-w / 2, h, d / 2], [w, 0, 0], [0, 0, -d], [0, 1, 0], w, d, 4],
+    ];
+    const tint = albedo.box(i);
+    for (const [o, U, V, N, su, sv, f] of faces) {
+      quad(toWorld(b, ...o), rotDir(b.yaw, U), rotDir(b.yaw, V), rotDir(b.yaw, N), su, sv, 2 + i, f, cen, [w, h, d], b.yaw, tint);
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('aSize', new THREE.Float32BufferAttribute(size, 2));
+  g.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 4));
+  g.setAttribute('aCenter', new THREE.Float32BufferAttribute(center, 3));
+  g.setAttribute('aDims', new THREE.Float32BufferAttribute(dims, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
+function boxCorners(b) {
+  const out = [];
+  for (const sy of [0, 1]) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    out.push(new THREE.Vector3(...toWorld(b, sx * b.w / 2, sy * b.h, sz * b.d / 2)));
+  }
+  return out;
+}
+const BOX_EDGES = [];
+for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) { const x = i ^ j; if (x === 1 || x === 2 || x === 4) BOX_EDGES.push([i, j]); }
+
+// ---------- shaders ----------
+const SURF_VERT = /* glsl */`
+precision highp float;
+in vec3 position; in vec3 normal; in vec2 uv; in vec2 aSize; in vec4 aInfo; in vec3 aCenter; in vec3 aDims;
+uniform mat4 modelMatrix; uniform mat4 viewMatrix; uniform mat4 projectionMatrix;
+out vec3 vP; out vec3 vN; out vec2 vUV; out vec2 vSize; out vec4 vInfo; out vec3 vCenter; out vec3 vDims;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vP = wp.xyz; vN = mat3(modelMatrix) * normal; vUV = uv; vSize = aSize; vInfo = aInfo; vCenter = aCenter; vDims = aDims;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+
+const COMMON_GLSL = /* glsl */`
+const float PI = 3.14159265;
+float hash1(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash1(i), hash1(i + vec3(1,0,0)), f.x), mix(hash1(i + vec3(0,1,0)), hash1(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash1(i + vec3(0,0,1)), hash1(i + vec3(1,0,1)), f.x), mix(hash1(i + vec3(0,1,1)), hash1(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p *= 2.02; a *= 0.5; } return s; }
+vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
+vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
+`;
+
+const SURF_HEAD = /* glsl */`
+precision highp float; precision highp int;
+uniform float uTime;
+uniform vec4 uBoxA[${MAX_BOXES}];
+uniform vec4 uBoxB[${MAX_BOXES}];
+uniform int uBoxCount;
+in vec3 vP; in vec3 vN; in vec2 vUV; in vec2 vSize; in vec4 vInfo; in vec3 vCenter; in vec3 vDims;
+out vec4 outColor;
+
+struct Surf {
+  vec3 P;      // world position, meters. Wall is the z=0 plane, floor is y=0, +z points at the audience
+  vec3 N;      // world normal
+  vec2 uv;     // 0..1 across this face (v=0 at the bottom edge of side faces, at the front edge of top faces)
+  vec2 size;   // face size in meters
+  float obj;   // 0 = wall, 1 = floor, 2+ = box index + 2
+  float face;  // boxes: 0 front, 1 back, 2 right, 3 left, 4 top; 6 = wall, 7 = floor
+  float isBox; // 1.0 on boxes
+  vec3 center; // box center (wall/floor: plane center)
+  vec3 dims;   // box width, height, depth in meters
+  vec3 L;      // position in the box's own frame, relative to its center (unrotated)
+  float yaw;   // box rotation about y, radians
+  float edge;  // distance to the nearest edge of this face, meters
+};
+
+${COMMON_GLSL}vec3 toLocal(vec3 v, float yaw) { float c = cos(yaw), s = sin(yaw); return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
+// distance along the ray to box i, or -1.0 if missed
+float rayBox(vec3 ro, vec3 rd, int i) {
+  vec4 A = uBoxA[i]; vec4 B = uBoxB[i];
+  vec3 o = toLocal(ro - A.xyz, A.w); vec3 d = toLocal(rd, A.w);
+  d = mix(d, vec3(1e-5), step(abs(d), vec3(1e-5)));
+  vec3 hs = B.xyz * 0.5; vec3 inv = 1.0 / d;
+  vec3 t0 = (-hs - o) * inv, t1 = (hs - o) * inv;
+  vec3 tmn = min(t0, t1), tmx = max(t0, t1);
+  float tn = max(max(tmn.x, tmn.y), tmn.z), tf = min(min(tmx.x, tmx.y), tmx.z);
+  return tf > max(tn, 0.0) ? max(tn, 0.0) : -1.0;
+}
+// 0.0 if any box blocks the path from P toward direction Ldir
+float shadow(vec3 P, vec3 Ldir) {
+  for (int i = 0; i < ${MAX_BOXES}; i++) { if (i >= uBoxCount) break; if (rayBox(P + Ldir * 0.004, Ldir, i) > 0.0) return 0.0; }
+  return 1.0;
+}
+`;
+
+const SURF_MAIN = /* glsl */`
+void main() {
+  Surf s;
+  s.P = vP; s.N = normalize(vN); s.uv = vUV; s.size = vSize;
+  s.obj = floor(vInfo.x + 0.5); s.face = floor(vInfo.y + 0.5); s.yaw = vInfo.z;
+  s.isBox = step(1.5, s.obj); s.center = vCenter; s.dims = vDims;
+  s.L = toLocal(vP - vCenter, s.yaw);
+  vec2 m = vUV * vSize;
+  s.edge = min(min(m.x, m.y), min(vSize.x - m.x, vSize.y - m.y));
+  vec3 c = effect(s, uTime);
+  outColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+const API_DOC = `// Write: vec3 effect(Surf s, float t)  — return 0..1 RGB; black = projector dark.
+// Surf fields: P (world m; wall z=0, floor y=0, +z toward audience), N, uv (0..1 on face),
+//   size (face m), obj (0 wall, 1 floor, 2+ boxes), face (0 front,1 back,2 right,3 left,4 top,6 wall,7 floor),
+//   isBox, center, dims (w,h,d m), L (box-local pos), yaw, edge (m to nearest face edge).
+// Helpers: hash1(vec3) hash2(vec2) noise(vec3) fbm(vec3) hsv(h,s,v) pal(t,a,b,c,d) toLocal(v,yaw)
+//   rayBox(ro,rd,i) shadow(P,lightDir)  uniforms: uBoxCount, uBoxA[i]=(cx,cy,cz,yaw), uBoxB[i]=(w,h,d,0)
+`;
+
+const PRESETS = {
+  calib: { name: 'Alignment grid', code: `vec3 effect(Surf s, float t) {
+  // 5 cm checkerboard per face plus bright edges: the pattern you align boxes against
+  vec2 m = s.uv * s.size;
+  vec2 ch = floor(m / 0.05);
+  float k = mod(ch.x + ch.y, 2.0);
+  vec3 col = s.isBox > 0.5 ? hsv(hash1(vec3(s.obj)) * 0.8, 0.7, 1.0) : vec3(0.5);
+  vec3 c = col * (0.12 + 0.25 * k);
+  c += vec3(1.0) * smoothstep(0.012, 0.004, s.edge);
+  if (s.isBox < 0.5) c *= 0.35;
+  return c;
+}` },
+  city: { name: 'Night city', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) {
+    if (s.obj > 0.5) return vec3(0.0);                      // floor stays dark
+    vec3 c = mix(vec3(0.0, 0.01, 0.05), vec3(0.06, 0.02, 0.12), s.P.y / 3.0);
+    vec2 g = s.P.xy * 40.0; vec2 id = floor(g); float h = hash2(id);
+    c += step(0.985, h) * smoothstep(0.35, 0.0, length(fract(g) - 0.5)) * (0.6 + 0.4 * sin(t * 3.0 + h * 50.0));
+    float m = length(s.P.xy - vec2(1.45, 2.05));
+    c += vec3(1.0, 0.95, 0.8) * smoothstep(0.13, 0.12, m) + vec3(0.25, 0.25, 0.35) * exp(-m * 3.0) * 0.5;
+    return c;
+  }
+  if (s.face == 4.0) {                                       // roofs with a blinking beacon
+    float blink = step(0.85, fract(t * 0.5 + hash1(vec3(s.obj))));
+    return vec3(0.03, 0.03, 0.05) + vec3(1.0, 0.1, 0.1) * blink * smoothstep(0.035, 0.02, length(s.L.xz));
+  }
+  // windows at a fixed real-world pitch, so every box gets the same window size
+  vec2 m = s.uv * s.size; vec2 pitch = vec2(0.09, 0.12);
+  vec2 cell = floor(m / pitch); vec2 f = fract(m / pitch);
+  float inside = step(0.04, m.x) * step(0.04, s.size.x - m.x) * step(0.05, m.y) * step(0.06, s.size.y - m.y);
+  float win = step(0.22, f.x) * step(f.x, 0.78) * step(0.2, f.y) * step(f.y, 0.8) * inside;
+  float h = hash1(vec3(cell, s.obj * 13.0 + s.face));
+  float on = step(0.45, fract(h + floor(t * 0.25 + h * 7.0) * 0.37));
+  vec3 lit = mix(vec3(1.0, 0.78, 0.42), vec3(0.6, 0.8, 1.0), step(0.8, h));
+  return vec3(0.04, 0.04, 0.06) + win * (on * lit * 0.9 + (1.0 - on) * vec3(0.02, 0.03, 0.05));
+}` },
+  sun: { name: 'Moving sun', code: `vec3 effect(Surf s, float t) {
+  // a virtual light orbits the set; faces shade by their real normals and boxes cast shadows on the wall
+  float a = t * 0.35;
+  vec3 Ld = normalize(vec3(cos(a) * 1.3, 1.0 + 0.4 * sin(a * 0.7), 0.9));
+  vec3 base = s.isBox > 0.5 ? hsv(0.07 + hash1(vec3(s.obj)) * 0.08, 0.3, 0.95)
+            : (s.obj < 0.5 ? vec3(0.42, 0.45, 0.58) : vec3(0.3, 0.27, 0.24));
+  float diff = max(dot(s.N, Ld), 0.0);
+  float sh = diff > 0.0 ? shadow(s.P, Ld) : 0.0;
+  vec3 sky = vec3(0.12, 0.16, 0.3) * (0.6 + 0.4 * s.N.y);
+  return base * (sky + vec3(1.0, 0.86, 0.62) * diff * sh * 1.15);
+}` },
+  liquid: { name: 'Liquid fill', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) return vec3(0.0, 0.015, 0.04);
+  float h = hash1(vec3(s.obj * 7.1));
+  float level = s.dims.y * (0.2 + 0.65 * (0.5 + 0.5 * sin(t * 0.35 + h * 6.28)));
+  float wave = 0.025 * sin(s.L.x * 9.0 + t * 2.3) + 0.02 * sin(s.L.z * 11.0 - t * 1.7);
+  float yb = s.L.y + s.dims.y * 0.5;                         // height above the box's base
+  float d = yb - (level + wave);                             // same world level on every face
+  vec3 liquid = mix(vec3(0.0, 0.3, 0.9), vec3(0.0, 0.9, 0.75), clamp(yb / s.dims.y, 0.0, 1.0));
+  float bub = smoothstep(0.8, 0.95, noise(vec3(s.P.x * 30.0, s.P.y * 30.0 - t * 4.0, s.P.z * 30.0)));
+  vec3 c = d < 0.0 ? liquid * (0.55 + 0.45 * fbm(s.P * 8.0 + vec3(0.0, -t, 0.0))) + bub * 0.5 : vec3(0.01);
+  c += vec3(0.6, 1.0, 1.0) * exp(-abs(d) / 0.006);           // meniscus wraps around corners
+  c += vec3(0.7) * exp(-s.edge / 0.004) * 0.25;
+  return c;
+}` },
+  edges: { name: 'Edge pulse', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) return vec3(0.0);
+  float h = hash1(vec3(s.obj));
+  vec3 col = hsv(fract(h + t * 0.03), 0.7, 1.0);
+  float glow = exp(-s.edge / 0.01) + 0.3 * exp(-s.edge / 0.06);
+  // pulse phase is a world-space coordinate, so it flows continuously from face to face
+  float run = fract(s.P.y * 1.5 + s.P.x + s.P.z - t * 0.6 + h);
+  float pulse = smoothstep(0.0, 0.05, run) * smoothstep(0.25, 0.05, run);
+  return col * glow * (0.3 + 1.6 * pulse) + col * (0.04 + 0.04 * sin(t * 1.3 + s.obj));
+}` },
+  ripple: { name: 'Ripple', code: `vec3 effect(Surf s, float t) {
+  // spherical waves expanding from a point on the wall, measured in 3D, so they climb over the boxes
+  vec3 src = vec3(-0.4, 1.7, 0.0);
+  float r = length(s.P - src);
+  float ring = smoothstep(0.75, 1.0, sin(r * 14.0 - t * 4.0));
+  vec3 c = hsv(fract(r * 0.15 - t * 0.05), 0.6, 1.0) * ring * (0.25 + exp(-r * 0.6));
+  if (s.isBox > 0.5) c += vec3(0.9) * exp(-s.edge / 0.006) * 0.4;
+  return c;
+}` },
+  lava: { name: 'Lava flow', code: `vec3 effect(Surf s, float t) {
+  vec3 p = s.P * 3.0; p.y += t * 0.5;
+  float n = fbm(p + fbm(p * 1.7 - vec3(0.0, t * 0.3, 0.0)) * 1.5);
+  vec3 c = pal(n * 1.3, vec3(0.5, 0.2, 0.05), vec3(0.5, 0.3, 0.1), vec3(1.0, 1.0, 0.5), vec3(0.0, 0.1, 0.2));
+  c *= smoothstep(0.3, 0.7, n);
+  if (s.isBox < 0.5) c *= 0.12;
+  return c * 1.3;
+}` },
+  scan: { name: 'Laser sweep', code: `vec3 effect(Surf s, float t) {
+  // a plane of light sweeps out from the wall toward the audience; a second sweeps upward
+  float z = mod(t * 0.5, 2.0) - 0.2;
+  float d = abs(s.P.z - z);
+  vec3 c = vec3(0.0, 1.0, 0.6) * exp(-d / 0.008) + vec3(0.0, 0.4, 0.3) * exp(-d / 0.08) * 0.4;
+  c += vec3(1.0, 0.2, 0.6) * exp(-abs(s.P.y - mod(t * 0.37, 2.8)) / 0.008);
+  vec3 g = smoothstep(0.46, 0.5, abs(fract(s.P * 10.0) - 0.5)) * (1.0 - abs(s.N));
+  c += vec3(0.1, 0.15, 0.2) * max(g.x, max(g.y, g.z)) * 0.6;
+  if (s.isBox > 0.5) c += vec3(0.8) * exp(-s.edge / 0.004) * 0.4;
+  return c;
+}` },
+};
+
+// ---------- 2D surface shaders ----------
+const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_VERTS = 2048, EDGE_MARGIN = 64;
+
+const FLAT_VERT = /* glsl */`
+precision highp float;
+in vec3 position;
+void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const FLAT_HEAD = /* glsl */`
+precision highp float; precision highp int; precision highp sampler2D;
+uniform float uTime;
+uniform vec2 uRes;
+uniform vec2 uView;   // size of the buffer being drawn (the preview may be smaller than the projector)
+uniform sampler2D uPoly;
+uniform int uSurfCount;
+uniform mat3 uHinv[${MAX_SURF}];
+uniform vec4 uSurfInfo[${MAX_SURF}];
+uniform vec4 uPart[${MAX_PARTS}];
+uniform vec4 uPartBox[${MAX_PARTS}];
+out vec4 outColor;
+
+struct Surf2 {
+  vec2 uv;      // 0..1 between the surface's four corner pins (u right, v up); perspective-correct on a flat surface
+  vec2 px;      // projector pixel, (0,0) top-left, 1280 x 720
+  vec2 screen;  // 0..1 across the whole projector frame (x right, y up); continuous across neighboring surfaces
+  float id;     // surface number, 0 = first added
+  float count;  // number of surfaces
+  float edge;   // distance to the surface's outline in projector pixels (exact up to ${EDGE_MARGIN} px)
+  vec2 size;    // rough surface size in projector pixels (width, height of its corner-pin quad)
+};
+${COMMON_GLSL}
+`;
+
+const FLAT_MAIN = /* glsl */`
+float segDist(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0); return length(pa - ba * h); }
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uView.y - gl_FragCoord.y) * uRes / uView;
+  vec3 col = vec3(0.0);
+  for (int si = ${MAX_SURF - 1}; si >= 0; si--) {   // topmost surface wins
+    if (si >= uSurfCount) continue;
+    vec4 info = uSurfInfo[si];
+    int p0 = int(info.x), pc = int(info.y);
+    float D = ${EDGE_MARGIN}.0;                      // signed distance to the combined outline, negative inside
+    for (int j = 0; j < ${MAX_PARTS}; j++) {
+      if (j >= pc) break;
+      vec4 part = uPart[p0 + j]; vec4 bb = uPartBox[p0 + j];
+      float sd = ${EDGE_MARGIN}.0;
+      if (px.x >= bb.x && px.x <= bb.z && px.y >= bb.y && px.y <= bb.w) {
+        int v0 = int(part.x), vc = int(part.y);
+        bool pin = false; float md = 1e6;
+        vec2 a = texelFetch(uPoly, ivec2(v0 + vc - 1, 0), 0).xy;
+        for (int k = 0; k < ${MAX_PART_VERTS}; k++) {
+          if (k >= vc) break;
+          vec2 b = texelFetch(uPoly, ivec2(v0 + k, 0), 0).xy;
+          if ((b.y > px.y) != (a.y > px.y) && px.x < (a.x - b.x) * (px.y - b.y) / (a.y - b.y) + b.x) pin = !pin;
+          md = min(md, segDist(px, a, b));
+          a = b;
+        }
+        sd = pin ? -md : min(md, ${EDGE_MARGIN}.0);
+      }
+      D = j == 0 ? sd : (part.z > 0.0 ? min(D, sd) : max(D, -sd));   // add = union, cut = subtract
+    }
+    if (D < 0.5) {
+      Surf2 s;
+      vec3 h = uHinv[si] * vec3(px, 1.0);
+      s.uv = h.xy / h.z; s.px = px; s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
+      s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
+      col = clamp(effect2(s, uTime), 0.0, 1.0) * clamp(0.5 - D, 0.0, 1.0);
+      break;
+    }
+  }
+  outColor = vec4(col, 1.0);
+}`;
+
+const PRESETS2 = {
+  outline: { name: 'Alignment grid', code: `vec3 effect2(Surf2 s, float t) {
+  // checkerboard in the surface's own uv plus a bright outline; the dot marks the first corner
+  vec3 col = hsv(fract(s.id * 0.13), 0.7, 1.0);
+  vec2 g = floor(s.uv * 8.0);
+  vec3 c = col * (0.12 + 0.22 * mod(g.x + g.y, 2.0));
+  c += vec3(1.0) * smoothstep(3.0, 1.0, s.edge);
+  c += vec3(1.0, 0.8, 0.3) * smoothstep(0.07, 0.05, length(s.uv));
+  return c;
+}` },
+  sequence: { name: 'Beat sequence', code: `vec3 effect2(Surf2 s, float t) {
+  // the classic projection-mapping move: surfaces flash one after another on the beat
+  float beat = floor(t * 2.0);
+  float on = s.id == mod(beat, max(s.count, 1.0)) ? 1.0 : 0.0;
+  vec3 col = hsv(fract(s.id * 0.17 + beat * 0.03), 0.75, 1.0);
+  return col * (on * (1.0 - fract(t * 2.0)) * 0.9 + exp(-s.edge / 4.0) * 0.6);
+}` },
+  sweep: { name: 'Screen sweep', code: `vec3 effect2(Surf2 s, float t) {
+  // defined across the whole projector frame, so it crosses shared edges with no seam
+  float x = s.screen.x * 1.6 + s.screen.y * 0.6 - mod(t * 0.45, 2.8) + 0.3;
+  vec3 c = vec3(0.2, 0.9, 1.0) * exp(-abs(x) * 16.0) + vec3(0.02, 0.03, 0.05);
+  c += vec3(0.6) * exp(-s.edge / 2.5) * 0.5;
+  return c;
+}` },
+  tiles: { name: 'Tiles', code: `vec3 effect2(Surf2 s, float t) {
+  // tile count follows each surface's size, and tiles follow its perspective
+  vec2 n = max(floor(s.size / 40.0), 1.0);
+  vec2 g = s.uv * n; vec2 id = floor(g); vec2 f = fract(g);
+  float h = hash2(id + s.id * 17.0);
+  float on = step(0.5, fract(h + floor(t * 0.7 + h * 5.0) * 0.31));
+  float tile = step(0.1, f.x) * step(f.x, 0.9) * step(0.1, f.y) * step(f.y, 0.9);
+  return tile * mix(vec3(0.05), hsv(0.08 + h * 0.1, 0.6, 1.0), on);
+}` },
+  trace: { name: 'Outline trace', code: `vec3 effect2(Surf2 s, float t) {
+  float a = atan(s.uv.y - 0.5, s.uv.x - 0.5);
+  float run = fract(a / 6.2832 - t * 0.3 + s.id * 0.21);
+  float pulse = smoothstep(0.0, 0.03, run) * smoothstep(0.2, 0.03, run);
+  vec3 col = hsv(fract(s.id * 0.13 + t * 0.02), 0.7, 1.0);
+  return col * exp(-s.edge / 3.0) * (0.4 + 2.0 * pulse) + col * 0.03;
+}` },
+  plasma: { name: 'Plasma', code: `vec3 effect2(Surf2 s, float t) {
+  vec2 p = s.screen * vec2(16.0 / 9.0, 1.0) * 3.0;
+  float v = sin(p.x * 2.0 + t) + sin(p.y * 3.0 - t * 1.3) + sin((p.x + p.y) * 2.0 + t * 0.7) + sin(length(p - 2.0) * 4.0 - t * 2.0);
+  vec3 c = pal(v * 0.15 + t * 0.05, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0, 0.33, 0.67));
+  return c * (0.6 + 0.4 * exp(-s.edge / 6.0));
+}` },
+};
+
+const ROOM_VERT = /* glsl */`
+precision highp float;
+in vec3 position; in vec3 normal; in vec3 color;
+uniform mat4 modelMatrix; uniform mat4 viewMatrix; uniform mat4 projectionMatrix;
+out vec3 vP; out vec3 vN; out vec3 vC;
+void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vP = wp.xyz; vN = mat3(modelMatrix) * normal; vC = color; gl_Position = projectionMatrix * viewMatrix * wp; }`;
+
+const ROOM_FRAG = /* glsl */`
+precision highp float;
+uniform sampler2D uContent; uniform sampler2D uDepth;
+uniform mat4 uProjVP; uniform vec3 uProjPos; uniform float uAmbient; uniform float uLumens; uniform vec2 uTexel;
+in vec3 vP; in vec3 vN; in vec3 vC;
+out vec4 outColor;
+void main() {
+  vec3 N = normalize(vN);
+  vec3 light = vec3(0.0);
+  vec4 clip = uProjVP * vec4(vP, 1.0);
+  if (clip.w > 0.0) {
+    vec3 ndc = clip.xyz / clip.w;
+    if (abs(ndc.x) < 1.0 && abs(ndc.y) < 1.0) {
+      vec2 tuv = ndc.xy * 0.5 + 0.5;
+      float z = ndc.z * 0.5 + 0.5;
+      float vis = 0.0;
+      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+        vis += (z - 0.0006 < texture(uDepth, tuv + vec2(i, j) * uTexel).r) ? 1.0 : 0.0;
+      }
+      vis /= 9.0;
+      vec3 Ld = uProjPos - vP; float dist = length(Ld);
+      float cosT = max(dot(N, Ld / dist), 0.0);
+      vec3 emitted = texture(uContent, tuv).rgb + 0.018;    // projectors can't emit true black
+      light = emitted * vis * cosT * uLumens * 11.0 / (dist * dist);
+    }
+  }
+  vec3 amb = vec3(1.0, 0.96, 0.9) * uAmbient * (0.65 + 0.35 * N.y);
+  vec3 col = vC * (amb + light);
+  outColor = vec4(pow(col, vec3(1.0 / 1.5)), 1.0);
+}`;
+
+const POS_FRAG = /* glsl */`
+precision highp float;
+in vec3 vP; in vec3 vN; in vec3 vC;
+out vec4 outColor;
+void main() { outColor = vec4(vP, 1.0); }`;
+
+// ---------- renderers ----------
+const roomCanvas = $('room');
+const projCanvas = $('proj');
+const overlay = $('projOverlay');
+const octx = overlay.getContext('2d');
+
+const roomR = new THREE.WebGLRenderer({ canvas: roomCanvas, antialias: true });
+roomR.outputColorSpace = THREE.LinearSRGBColorSpace;
+roomR.setPixelRatio(Math.min(devicePixelRatio, 2));
+const projR = new THREE.WebGLRenderer({ canvas: projCanvas, antialias: true });
+projR.outputColorSpace = THREE.LinearSRGBColorSpace;
+projR.setPixelRatio(1);
+projR.setSize(PROJ_W / 2, PROJ_H / 2, false);   // preview only; the projector image is rendered at full size
+
+const contentRT = new THREE.WebGLRenderTarget(PROJ_W, PROJ_H, { colorSpace: THREE.NoColorSpace });
+contentRT.texture.minFilter = THREE.LinearFilter;
+const depthRT = new THREE.WebGLRenderTarget(1024, 576);
+depthRT.depthTexture = new THREE.DepthTexture(1024, 576);
+depthRT.depthTexture.type = THREE.UnsignedIntType;
+
+// projectors: the true one lights the room, the model one is the app's belief
+const trueProj = new THREE.PerspectiveCamera(PROJ_FOV, PROJ_W / PROJ_H, 0.5, 12);
+trueProj.position.copy(PROJ_POS); trueProj.lookAt(PROJ_TARGET); trueProj.updateMatrixWorld();
+const modelProj = trueProj.clone();
+function updateModelProjector() {
+  const e = state.projErr / 100; // cm -> m
+  const S = state.projSolved;
+  if (S) {
+    modelProj.position.set(S.x, S.y, S.z);
+    modelProj.rotation.set(S.pitch, S.yaw, S.roll, 'YXZ');
+    modelProj.fov = S.fov / D2R;
+  } else {
+    modelProj.position.copy(PROJ_POS);
+    modelProj.fov = PROJ_FOV;
+    modelProj.lookAt(PROJ_TARGET);
+  }
+  // simulated calibration error on top of whatever the app believes
+  modelProj.position.add(new THREE.Vector3(e * 0.8, -e * 0.5, e * 0.3));
+  modelProj.rotateY(e * 0.18); modelProj.rotateX(e * 0.12);
+  modelProj.updateMatrixWorld(); modelProj.updateProjectionMatrix();
+  if (S && S.shift) { modelProj.projectionMatrix.elements[9] -= S.shift; modelProj.projectionMatrixInverse.copy(modelProj.projectionMatrix).invert(); }
+}
+
+// scenes
+const realScene = new THREE.Scene();
+const modelScene = new THREE.Scene();
+const overlayScene = new THREE.Scene();
+
+const roomMat = new THREE.RawShaderMaterial({
+  glslVersion: THREE.GLSL3, vertexShader: ROOM_VERT, fragmentShader: ROOM_FRAG,
+  uniforms: {
+    uContent: { value: contentRT.texture }, uDepth: { value: depthRT.depthTexture },
+    uProjVP: { value: new THREE.Matrix4() }, uProjPos: { value: PROJ_POS.clone() },
+    uAmbient: { value: state.ambient }, uLumens: { value: state.lumens }, uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 576) },
+  },
+});
+const posMat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: ROOM_VERT, fragmentShader: POS_FRAG });
+const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+
+const surfUniforms = {
+  uTime: { value: 0 },
+  uBoxA: { value: Array.from({ length: MAX_BOXES }, () => new THREE.Vector4()) },
+  uBoxB: { value: Array.from({ length: MAX_BOXES }, () => new THREE.Vector4()) },
+  uBoxCount: { value: 0 },
+};
+const fx = {
+  '3d': { key: 'city', code: '', label: '', mat: null },
+  '2d': { key: 'outline', code: '', label: '', mat: null },
+};
+
+const polyData = new Float32Array(MAX_VERTS * 4);
+const polyTex = new THREE.DataTexture(polyData, MAX_VERTS, 1, THREE.RGBAFormat, THREE.FloatType);
+polyTex.minFilter = polyTex.magFilter = THREE.NearestFilter;
+const flatUniforms = {
+  uTime: surfUniforms.uTime,
+  uRes: { value: new THREE.Vector2(PROJ_W, PROJ_H) },
+  uView: { value: new THREE.Vector2(PROJ_W, PROJ_H) },
+  uPoly: { value: polyTex },
+  uSurfCount: { value: 0 },
+  uHinv: { value: Array.from({ length: MAX_SURF }, () => new THREE.Matrix3()) },
+  uSurfInfo: { value: Array.from({ length: MAX_SURF }, () => new THREE.Vector4()) },
+  uPart: { value: Array.from({ length: MAX_PARTS }, () => new THREE.Vector4()) },
+  uPartBox: { value: Array.from({ length: MAX_PARTS }, () => new THREE.Vector4()) },
+};
+const flatScene = new THREE.Scene();
+const flatGeo = new THREE.BufferGeometry();
+flatGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+const flatMesh = new THREE.Mesh(flatGeo, null);
+flatMesh.frustumCulled = false;
+flatScene.add(flatMesh);
+
+const realAlbedo = {
+  wall: [0.72, 0.71, 0.69], floor: [0.34, 0.32, 0.3],
+  box: (i) => [[0.88, 0.86, 0.82], [0.84, 0.85, 0.86], [0.9, 0.88, 0.84], [0.86, 0.84, 0.8]][i % 4],
+};
+const modelAlbedo = { wall: [1, 1, 1], floor: [1, 1, 1], box: () => [1, 1, 1] };
+
+const realMesh = new THREE.Mesh(new THREE.BufferGeometry(), roomMat);
+realScene.add(realMesh);
+const modelMesh = new THREE.Mesh(new THREE.BufferGeometry(), null);
+modelMesh.frustumCulled = false;
+modelScene.add(modelMesh);
+
+function rebuildReal() {
+  realMesh.geometry.dispose();
+  realMesh.geometry = buildSurfaceGeometry(state.real, realAlbedo);
+}
+
+// overlays: model wireframe, projector frustum, point cloud
+const wireMat = new THREE.LineBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.7 });
+const wireSelMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const modelWire = new THREE.Group(); overlayScene.add(modelWire);
+const frustum = new THREE.Group(); overlayScene.add(frustum);
+let cloud = null;
+
+function rebuildFrustum() {
+  frustum.clear();
+  const cam = trueProj;
+  const far = 3.6;
+  const h = Math.tan(cam.fov * D2R / 2) * far, w = h * cam.aspect;
+  const pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, -far).applyMatrix4(cam.matrixWorld));
+  const o = cam.position.clone();
+  const v = [];
+  for (let i = 0; i < 4; i++) { v.push(o, pts[i], pts[i], pts[(i + 1) % 4]); }
+  const g = new THREE.BufferGeometry().setFromPoints(v);
+  frustum.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.18 })));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.25), new THREE.MeshBasicMaterial({ color: 0x2a3342 }));
+  body.position.copy(cam.position).add(new THREE.Vector3(0, 0, 0.12));
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.035, 20), new THREE.MeshBasicMaterial({ color: 0xffb547 }));
+  lens.position.copy(cam.position); lens.lookAt(PROJ_TARGET);
+  frustum.add(body, lens);
+}
+
+// raycast proxies for picking boxes in the projector view
+const pickGroup = new THREE.Group();
+
+function rebuildModel() {
+  modelMesh.geometry.dispose();
+  modelMesh.geometry = buildSurfaceGeometry(state.model, modelAlbedo);
+  const n = Math.min(state.model.length, MAX_BOXES);
+  surfUniforms.uBoxCount.value = n;
+  state.model.slice(0, MAX_BOXES).forEach((b, i) => {
+    surfUniforms.uBoxA.value[i].set(b.x, b.h / 2, b.z, b.yaw);
+    surfUniforms.uBoxB.value[i].set(b.w, b.h, b.d, 0);
+  });
+  modelWire.clear();
+  pickGroup.clear();
+  state.model.forEach((b, i) => {
+    const c = boxCorners(b);
+    const pts = [];
+    for (const [a, z] of BOX_EDGES) pts.push(c[a], c[z]);
+    modelWire.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), i === state.sel ? wireSelMat : wireMat));
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d));
+    m.position.set(b.x, b.h / 2, b.z); m.rotation.y = b.yaw; m.updateMatrixWorld(); m.userData.i = i;
+    pickGroup.add(m);
+  });
+  pickGroup.updateMatrixWorld(true);
+  renderBoxUI();
+  updateAlignment();
+}
+
+// ---------- shader compile with readable errors ----------
+function checkCompile(vertSrc, fragSrc) {
+  const gl = roomR.getContext();
+  const make = (type, src) => {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, '#version 300 es\n' + src); gl.compileShader(sh);
+    const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS);
+    const log = ok ? '' : gl.getShaderInfoLog(sh);
+    return { sh, ok, log };
+  };
+  const v = make(gl.VERTEX_SHADER, vertSrc), f = make(gl.FRAGMENT_SHADER, fragSrc);
+  let ok = v.ok && f.ok, log = v.log + f.log;
+  if (ok) {
+    const p = gl.createProgram(); gl.attachShader(p, v.sh); gl.attachShader(p, f.sh); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { ok = false; log = gl.getProgramInfoLog(p); }
+    gl.deleteProgram(p);
+  }
+  gl.deleteShader(v.sh); gl.deleteShader(f.sh);
+  return { ok, log: (log || '').replace(/\0/g, '').trim() };
+}
+
+function fragFor(userCode) { return SURF_HEAD + '\n#line 1\n' + userCode + '\n' + SURF_MAIN; }
+function frag2For(userCode) { return FLAT_HEAD + '\n#line 1\n' + userCode + '\n' + FLAT_MAIN; }
+
+function applyEffect(code, label, method = state.method) {
+  const M = method === '2d'
+    ? { vert: FLAT_VERT, src: frag2For(code), uniforms: flatUniforms, mesh: flatMesh }
+    : { vert: SURF_VERT, src: fragFor(code), uniforms: surfUniforms, mesh: modelMesh };
+  const res = checkCompile(M.vert, M.src);
+  const status = $('codeStatus');
+  const visible = method === state.method;
+  if (!res.ok) {
+    if (visible) {
+      status.className = 'err';
+      status.textContent = 'Shader did not compile. Line numbers refer to the code above.\n' + res.log;
+    }
+    return res;
+  }
+  const mat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: M.vert, fragmentShader: M.src, uniforms: M.uniforms });
+  const slot = fx[method];
+  if (slot.mat) slot.mat.dispose();
+  Object.assign(slot, { mat, code, label });
+  M.mesh.material = mat;
+  if (visible) showEffect();
+  return res;
+}
+function showEffect() {
+  const slot = fx[state.method];
+  const status = $('codeStatus');
+  status.className = '';
+  status.textContent = slot.label ? 'Projecting: ' + slot.label : '';
+  $('effectName').textContent = slot.label;
+  $('code').value = slot.code;
+}
+
+// ---------- depth scan + box fitting ----------
+const SCAN_W = 192, SCAN_H = 108;
+const scanRT = new THREE.WebGLRenderTarget(SCAN_W, SCAN_H, { type: THREE.FloatType, format: THREE.RGBAFormat });
+const scanCam = new THREE.PerspectiveCamera(52, SCAN_W / SCAN_H, 0.2, 12);
+scanCam.position.copy(PROJ_POS).add(new THREE.Vector3(0.14, 0.06, 0));
+scanCam.lookAt(PROJ_TARGET); scanCam.updateMatrixWorld();
+
+let rngSeed = 7;
+function rand() { rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0; return rngSeed / 4294967296; }
+function gauss() { let u = 0, v = 0; while (u === 0) u = rand(); v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const sigmaAt = (d) => (0.002 + 0.0012 * d * d) * state.noise;
+
+function percentile(arr, p) {
+  const a = Float32Array.from(arr).sort();
+  return a[Math.min(a.length - 1, Math.max(0, Math.floor(p * (a.length - 1))))];
+}
+
+function runScan() {
+  const t0 = performance.now();
+  rngSeed = (Math.random() * 1e9) >>> 0;
+  // 1. capture: render world positions from the sensor, then add range noise and dropouts
+  const prevClear = roomR.getClearAlpha();
+  roomR.setRenderTarget(scanRT); roomR.setClearColor(0x000000, 0); roomR.clear();
+  realScene.overrideMaterial = posMat; roomR.render(realScene, scanCam); realScene.overrideMaterial = null;
+  const buf = new Float32Array(SCAN_W * SCAN_H * 4);
+  roomR.readRenderTargetPixels(scanRT, 0, 0, SCAN_W, SCAN_H, buf);
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, prevClear || 1);
+
+  const N = SCAN_W * SCAN_H;
+  const P = new Float32Array(N * 3), valid = new Uint8Array(N), range = new Float32Array(N);
+  const o = scanCam.position;
+  let nValid = 0;
+  for (let i = 0; i < N; i++) {
+    if (buf[i * 4 + 3] < 0.5 || rand() < 0.015) continue;
+    let x = buf[i * 4] - o.x, y = buf[i * 4 + 1] - o.y, z = buf[i * 4 + 2] - o.z;
+    const d = Math.hypot(x, y, z);
+    const dn = d + gauss() * sigmaAt(d);
+    x = x / d * dn; y = y / d * dn; z = z / d * dn;
+    P[i * 3] = o.x + x; P[i * 3 + 1] = o.y + y; P[i * 3 + 2] = o.z + z;
+    valid[i] = 1; range[i] = d; nValid++;
+  }
+
+  const localNormal = (i) => {
+    const x = i % SCAN_W, y = (i / SCAN_W) | 0, k = 3;
+    if (x < k || y < k || x >= SCAN_W - k || y >= SCAN_H - k) return null;
+    const a = i - k, b = i + k, c = i - k * SCAN_W, d = i + k * SCAN_W;
+    if (!valid[a] || !valid[b] || !valid[c] || !valid[d]) return null;
+    const u = new THREE.Vector3(P[b * 3] - P[a * 3], P[b * 3 + 1] - P[a * 3 + 1], P[b * 3 + 2] - P[a * 3 + 2]);
+    const v = new THREE.Vector3(P[d * 3] - P[c * 3], P[d * 3 + 1] - P[c * 3 + 1], P[d * 3 + 2] - P[c * 3 + 2]);
+    if (u.length() > 0.25 || v.length() > 0.25) return null; // straddles a depth edge
+    const n = u.cross(v); const l = n.length();
+    return l > 1e-8 ? n.divideScalar(l) : null;
+  };
+
+  // 2. RANSAC: find and remove the two dominant planes (wall and floor)
+  const bg = new Uint8Array(N);
+  const planes = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const idx = [];
+    for (let i = 0; i < N; i++) if (valid[i] && !bg[i]) idx.push(i);
+    const sample = [];
+    for (let k = 0; k < 1500; k++) sample.push(idx[(rand() * idx.length) | 0]);
+    let best = null, bestCount = -1;
+    for (let it = 0; it < 250; it++) {
+      const a = idx[(rand() * idx.length) | 0], b = idx[(rand() * idx.length) | 0], c = idx[(rand() * idx.length) | 0];
+      const A = new THREE.Vector3(P[a * 3], P[a * 3 + 1], P[a * 3 + 2]);
+      const B = new THREE.Vector3(P[b * 3], P[b * 3 + 1], P[b * 3 + 2]).sub(A);
+      const C = new THREE.Vector3(P[c * 3], P[c * 3 + 1], P[c * 3 + 2]).sub(A);
+      const n = B.cross(C); if (n.length() < 1e-6) continue; n.normalize();
+      const off = -n.dot(A);
+      let count = 0;
+      for (const s of sample) if (Math.abs(n.x * P[s * 3] + n.y * P[s * 3 + 1] + n.z * P[s * 3 + 2] + off) < 2.5 * sigmaAt(range[s]) + 0.004) count++;
+      if (count > bestCount) { bestCount = count; best = { n, off }; }
+    }
+    // a point joins the plane only if it is close to it AND its local surface faces the same way,
+    // so the top of a box pushed against the wall isn't swallowed by the wall
+    let inl = 0;
+    for (const i of idx) {
+      if (Math.abs(best.n.x * P[i * 3] + best.n.y * P[i * 3 + 1] + best.n.z * P[i * 3 + 2] + best.off) >= 3 * sigmaAt(range[i]) + 0.006) continue;
+      const nl = localNormal(i);
+      if (nl && Math.abs(nl.dot(best.n)) < 0.35) continue;
+      bg[i] = 1; inl++;
+    }
+    planes.push({ n: best.n, inliers: inl });
+  }
+
+  // 3. cluster the remaining points: 4-connected on the sensor grid, joined if close in 3D
+  const label = new Int32Array(N).fill(-1);
+  const clusters = [];
+  for (let i = 0; i < N; i++) {
+    if (!valid[i] || bg[i] || label[i] >= 0) continue;
+    const members = [i]; label[i] = clusters.length;
+    for (let q = 0; q < members.length; q++) {
+      const j = members[q], x = j % SCAN_W, y = (j / SCAN_W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= SCAN_W || ny >= SCAN_H) continue;
+        const k = ny * SCAN_W + nx;
+        if (!valid[k] || bg[k] || label[k] >= 0) continue;
+        const dist = Math.hypot(P[j * 3] - P[k * 3], P[j * 3 + 1] - P[k * 3 + 1], P[j * 3 + 2] - P[k * 3 + 2]);
+        if (dist < 0.06 + 3 * sigmaAt(range[j])) { label[k] = clusters.length; members.push(k); }
+      }
+    }
+    clusters.push(members);
+  }
+  const kept = clusters.filter((m) => m.length >= 40);
+
+  // 4. fit an oriented box to each cluster
+  const boxes = [];
+  for (const m of kept) {
+    const xs = [], ys = [], zs = [], sig = [];
+    for (const i of m) { xs.push(P[i * 3]); ys.push(P[i * 3 + 1]); zs.push(P[i * 3 + 2]); sig.push(sigmaAt(range[i])); }
+    const sMed = percentile(sig, 0.5);
+    const yTop = percentile(ys, 0.99);
+    const topY = ys.filter((y) => y > yTop - 4 * sMed - 0.01);
+    const h = percentile(topY, 0.5);
+    let best = null;
+    for (let deg = -45; deg < 45; deg += 1) {
+      const a = deg * D2R, c = Math.cos(a), s = Math.sin(a);
+      const lx = [], lz = [];
+      for (let k = 0; k < xs.length; k++) { lx.push(c * xs[k] - s * zs[k]); lz.push(s * xs[k] + c * zs[k]); }
+      const x0 = percentile(lx, 0.005), x1 = percentile(lx, 0.995), z0 = percentile(lz, 0.005), z1 = percentile(lz, 0.995);
+      const area = (x1 - x0) * (z1 - z0);
+      if (!best || area < best.area) best = { area, a, x0, x1, z0, z1 };
+    }
+    const c = Math.cos(best.a), s = Math.sin(best.a);
+    // only the front face was seen (no top or side): the depth is unknown, so assume the box runs back to the wall
+    let inferred = false;
+    if (best.z1 - best.z0 < 0.12) {
+      const zWall = (0.015 + Math.max(s * best.x0, s * best.x1)) / c;
+      if (zWall < best.z0) { best.z0 = zWall; inferred = true; }
+    }
+    const shrink = sMed;
+    const w = Math.max(0.05, best.x1 - best.x0), d = Math.max(0.05, best.z1 - best.z0 - (inferred ? 1 : 2) * shrink);
+    const lcx = (best.x0 + best.x1) / 2, lcz = (best.z0 + best.z1) / 2;
+    boxes.push({ x: c * lcx + s * lcz, z: -s * lcx + c * lcz, w, h, d, yaw: best.a, n: m.length, inferred });
+  }
+  boxes.sort((a, b) => a.x - b.x);
+
+  // point cloud overlay, colored by cluster
+  if (cloud) { overlayScene.remove(cloud); cloud.geometry.dispose(); }
+  const cp = [], cc = [];
+  kept.forEach((m, ci) => {
+    const col = new THREE.Color().setHSL((ci * 0.17) % 1, 0.8, 0.6);
+    for (const i of m) { cp.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); cc.push(col.r, col.g, col.b); }
+  });
+  for (let i = 0; i < N; i += 3) if (valid[i] && bg[i]) { cp.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); cc.push(0.16, 0.19, 0.24); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+  cloud = new THREE.Points(g, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true }));
+  cloud.visible = state.showCloud;
+  overlayScene.add(cloud);
+
+  state.model = boxes.slice(0, MAX_BOXES).map(({ n, inferred, ...b }) => b);
+  const nInferred = boxes.filter((b) => b.inferred).length;
+  state.sel = -1;
+  rebuildModel();
+
+  const ms = performance.now() - t0;
+  const ang = (n, axis) => (Math.acos(Math.min(1, Math.abs(n.dot(axis)))) / D2R).toFixed(1);
+  const pl = planes.map((p) => (Math.abs(p.n.y) > Math.abs(p.n.z) ? `floor (tilt ${ang(p.n, new THREE.Vector3(0, 1, 0))}°)` : `wall (tilt ${ang(p.n, new THREE.Vector3(0, 0, 1))}°)`));
+  $('scanStats').innerHTML =
+    `<b>${nValid.toLocaleString()}</b> depth points · noise at 3 m ≈ <b>${(sigmaAt(3) * 100).toFixed(1)} cm</b>\n` +
+    `Planes removed: <b>${pl.join(', ')}</b>\n` +
+    `Clusters: <b>${kept.length}</b> objects (${clusters.length - kept.length} specks dropped)\n` +
+    `Boxes fitted: <b>${boxes.length}</b> in <b>${ms.toFixed(0)} ms</b>` +
+    (nInferred ? `\n${nInferred} box${nInferred > 1 ? 'es' : ''} showed only a front face; depth assumed to reach the wall` : '');
+}
+
+// ---------- alignment metric ----------
+function updateAlignment() {
+  if (state.method === '2d') return;
+  const el = $('alignReadout');
+  if (!state.model.length) { el.textContent = 'No surfaces mapped yet'; return; }
+  let total = 0, n = 0, matched = 0;
+  for (const r of state.real) {
+    let best = null, bd = Infinity;
+    for (const m of state.model) { const d = Math.hypot(m.x - r.x, m.z - r.z, (m.h - r.h) / 2); if (d < bd) { bd = d; best = m; } }
+    if (!best || bd > 0.4) continue;
+    matched++;
+    const rc = boxCorners(r), mc = boxCorners(best);
+    for (const p of rc) { let md = Infinity; for (const q of mc) md = Math.min(md, p.distanceTo(q)); total += md; n++; }
+  }
+  const cm = n ? (total / n) * 100 : 0;
+  const extra = Math.max(0, state.model.length - matched);
+  const grade = !n ? 'bad' : cm < 1.5 ? 'ok' : cm < 4 ? 'warn' : 'bad';
+  el.innerHTML = `Mapped ${matched}/${state.real.length} objects · mean corner error <span class="pill ${grade}">${n ? cm.toFixed(1) + ' cm' : '—'}</span>` +
+    (extra ? ` · ${extra} extra` : '') + (state.projErr ? ` · projector off by ${state.projErr} cm` : '');
+}
+
+// ---------- room camera (simple orbit) ----------
+const roomCam = new THREE.PerspectiveCamera(45, 1, 0.05, 50);
+const orbit = { target: new THREE.Vector3(0, 0.7, 0.6), az: 0, el: 0, r: 4 };
+const VIEWS = {
+  audience: { pos: [-1.6, 1.35, 4.6], target: [0, 0.75, 0.5] },
+  side: { pos: [3.4, 1.6, 2.4], target: [0, 0.7, 0.5] },
+  top: { pos: [0.01, 5.2, 2.2], target: [0, 0, 1.0] },
+  projector: { pos: PROJ_POS.toArray(), target: PROJ_TARGET.toArray(), fov: PROJ_FOV },
+};
+function setView(name) {
+  const v = VIEWS[name];
+  orbit.target.set(...v.target);
+  const d = new THREE.Vector3(...v.pos).sub(orbit.target);
+  orbit.r = d.length(); orbit.el = Math.asin(d.y / orbit.r); orbit.az = Math.atan2(d.x, d.z);
+  roomCam.fov = v.fov || 45; roomCam.updateProjectionMatrix();
+  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+}
+function applyOrbit() {
+  const { az, el, r, target } = orbit;
+  roomCam.position.set(target.x + r * Math.cos(el) * Math.sin(az), target.y + r * Math.sin(el), target.z + r * Math.cos(el) * Math.cos(az));
+  roomCam.lookAt(target);
+}
+{
+  const ptrs = new Map(); let pinch0 = 0, r0 = 0;
+  roomCanvas.addEventListener('pointerdown', (e) => { roomCanvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); r0 = orbit.r; } });
+  roomCanvas.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 1) {
+      orbit.az -= (e.clientX - prev[0]) * 0.006;
+      orbit.el = Math.max(-0.1, Math.min(1.5, orbit.el + (e.clientY - prev[1]) * 0.006));
+      if (roomCam.fov !== 45) { roomCam.fov = 45; roomCam.updateProjectionMatrix(); }
+      document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    } else if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch0) orbit.r = Math.max(1, Math.min(10, r0 * pinch0 / d));
+    }
+  });
+  const up = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
+  roomCanvas.addEventListener('pointerup', up); roomCanvas.addEventListener('pointercancel', up);
+  roomCanvas.addEventListener('wheel', (e) => { e.preventDefault(); orbit.r = Math.max(1, Math.min(10, orbit.r * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+}
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+
+// ---------- projector view interaction ----------
+const raycaster = new THREE.Raycaster();
+function projNDC(e) {
+  const r = projCanvas.getBoundingClientRect();
+  return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+}
+{
+  let drag = null;
+  projCanvas.addEventListener('pointerdown', (e) => {
+    if (state.method === '2d') { projCanvas.setPointerCapture(e.pointerId); pointerDown2D(e); return; }
+    raycaster.setFromCamera(projNDC(e), modelProj);
+    const hit = raycaster.intersectObjects(pickGroup.children, false)[0];
+    if (!hit) { state.sel = -1; rebuildModel(); return; }
+    state.sel = hit.object.userData.i;
+    const b = state.model[state.sel];
+    drag = { plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y), start: hit.point.clone(), x: b.x, z: b.z };
+    projCanvas.setPointerCapture(e.pointerId);
+    selectTab('manual');
+    rebuildModel();
+  });
+  projCanvas.addEventListener('pointermove', (e) => {
+    if (state.method === '2d') { pointerMove2D(e); return; }
+    if (!drag) return;
+    raycaster.setFromCamera(projNDC(e), modelProj);
+    const p = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(drag.plane, p)) return;
+    const b = state.model[state.sel];
+    b.x = drag.x + (p.x - drag.start.x); b.z = Math.max(0.05, drag.z + (p.z - drag.start.z));
+    rebuildModel();
+  });
+  const end = () => { drag = null; drag2 = null; };
+  projCanvas.addEventListener('pointerup', end); projCanvas.addEventListener('pointercancel', end);
+  projCanvas.addEventListener('wheel', (e) => {
+    if (state.method === '2d' || state.sel < 0) return;
+    e.preventDefault();
+    state.model[state.sel].yaw += Math.sign(e.deltaY) * 1.5 * D2R;
+    rebuildModel();
+  }, { passive: false });
+}
+
+function drawOverlay() {
+  const r = overlay.getBoundingClientRect();
+  const dpr = Math.min(devicePixelRatio, 2);
+  if (overlay.width !== Math.round(r.width * dpr)) { overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr); }
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!state.showHandles) return;
+  const W = overlay.width, H = overlay.height;
+  if (state.method === '2d') { drawOverlay2D(W, H, dpr); return; }
+  state.model.forEach((b, i) => {
+    const c = boxCorners(b).map((p) => { const v = p.clone().project(modelProj); return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H]; });
+    octx.strokeStyle = i === state.sel ? '#ffb547' : 'rgba(255,255,255,0.28)';
+    octx.lineWidth = (i === state.sel ? 2 : 1) * dpr;
+    octx.beginPath();
+    for (const [a, z] of BOX_EDGES) { octx.moveTo(...c[a]); octx.lineTo(...c[z]); }
+    octx.stroke();
+  });
+}
+
+// ---------- 2D surfaces: shapes traced in projector space ----------
+// A surface has four corner pins in projector pixels. They define a homography from the unit square,
+// so anything drawn in the surface's uv space lands perspective-correct on a flat physical surface.
+// Its outline is one or more parts (polygons in that uv space), each added (union) or cut out.
+const SHAPES = {
+  square: () => [[0, 0], [1, 0], [1, 1], [0, 1]],
+  triangle: () => [[0, 0], [1, 0], [0.5, 1]],
+  circle: () => Array.from({ length: 48 }, (_, i) => [0.5 + 0.5 * Math.cos(i / 48 * 2 * Math.PI), 0.5 + 0.5 * Math.sin(i / 48 * 2 * Math.PI)]),
+};
+
+// Heckbert's square-to-quad: unit square corners (0,0),(1,0),(1,1),(0,1) -> q[0..3]. Row-major 3x3.
+function squareToQuad(q) {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dy1 = y1 - y2, dy2 = y3 - y2;
+  const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
+  let g = 0, h = 0;
+  const den = dx1 * dy2 - dx2 * dy1;
+  if (Math.abs(den) > 1e-9) { g = (sx * dy2 - dx2 * sy) / den; h = (dx1 * sy - sx * dy1) / den; }
+  return [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+}
+function inv3(m) {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C || 1e-12;
+  return [A / det, -(b * i - c * h) / det, (b * f - c * e) / det, B / det, (a * i - c * g) / det, -(a * f - c * d) / det, C / det, -(a * h - b * g) / det, (a * e - b * d) / det];
+}
+function hApply(H, x, y) { const w = H[6] * x + H[7] * y + H[8]; return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w]; }
+
+function pointInPoly(x, y, pts) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+let geom2 = [];
+function surfaceGeom(s) {
+  const H = squareToQuad(s.pins);
+  return { H, Hi: inv3(H), parts: s.parts.map((p) => ({ op: p.op, px: p.pts.map(([u, v]) => hApply(H, u, v)) })) };
+}
+function insideSurface(g, x, y) {
+  let inside = false;
+  g.parts.forEach((p, j) => { const pin = pointInPoly(x, y, p.px); inside = j === 0 ? pin : p.op > 0 ? inside || pin : inside && !pin; });
+  return inside;
+}
+function surfaceAt(x, y) { for (let i = geom2.length - 1; i >= 0; i--) if (insideSurface(geom2[i], x, y)) return i; return -1; }
+
+function sync2D() {
+  geom2 = state.surfaces.map(surfaceGeom);
+  let vi = 0, pi = 0;
+  const n = Math.min(geom2.length, MAX_SURF);
+  for (let si = 0; si < n; si++) {
+    const g = geom2[si], q = state.surfaces[si].pins, first = pi;
+    for (const part of g.parts) {
+      if (pi >= MAX_PARTS || vi + part.px.length > MAX_VERTS) break;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of part.px) {
+        polyData[vi * 4] = x; polyData[vi * 4 + 1] = y; vi++;
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      }
+      flatUniforms.uPart.value[pi].set(vi - part.px.length, part.px.length, part.op, 0);
+      flatUniforms.uPartBox.value[pi].set(x0 - EDGE_MARGIN, y0 - EDGE_MARGIN, x1 + EDGE_MARGIN, y1 + EDGE_MARGIN);
+      pi++;
+    }
+    flatUniforms.uHinv.value[si].set(...g.Hi);
+    const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    flatUniforms.uSurfInfo.value[si].set(first, pi - first, (d(q[0], q[1]) + d(q[3], q[2])) / 2, (d(q[0], q[3]) + d(q[1], q[2])) / 2);
+  }
+  flatUniforms.uSurfCount.value = n;
+  polyTex.needsUpdate = true;
+  render2DUI();
+  scheduleCoverage();
+}
+
+function newSurface(shape) {
+  if (state.surfaces.length >= MAX_SURF) return;
+  const k = state.surfaces.length % 5, cx = 640 + k * 36, cy = 360 + k * 24, r = 110;
+  state.surfaces.push({ pins: [[cx - r, cy + r], [cx + r, cy + r], [cx + r, cy - r], [cx - r, cy - r]], parts: [{ op: 1, pts: SHAPES[shape]() }] });
+  state.sel2 = state.surfaces.length - 1; state.selPin = -1; state.selVert = null;
+  sync2D();
+}
+function addPart(op) {
+  const s = state.surfaces[state.sel2];
+  if (!s || s.parts.length >= 8) return;
+  s.parts.push({ op, pts: SHAPES[$('partShape').value]().map(([u, v]) => [0.3 + 0.4 * u, 0.3 + 0.4 * v]) });
+  setEdit2('points');
+  sync2D();
+}
+
+// visible faces of the 3D boxes, projected through the app's projector, become 2D surfaces
+function surfacesFrom3D() {
+  const out = [];
+  const cam = modelProj.position;
+  for (const b of state.model) {
+    const { w, h, d } = b;
+    const defs = [
+      [[-w / 2, 0, d / 2], [w, 0, 0], [0, h, 0], [0, 0, 1]],
+      [[w / 2, 0, -d / 2], [-w, 0, 0], [0, h, 0], [0, 0, -1]],
+      [[w / 2, 0, d / 2], [0, 0, -d], [0, h, 0], [1, 0, 0]],
+      [[-w / 2, 0, -d / 2], [0, 0, d], [0, h, 0], [-1, 0, 0]],
+      [[-w / 2, h, d / 2], [w, 0, 0], [0, 0, -d], [0, 1, 0]],
+    ];
+    for (const [o, U, V, N] of defs) {
+      const O = new THREE.Vector3(...toWorld(b, ...o)), u = new THREE.Vector3(...rotDir(b.yaw, U)), v = new THREE.Vector3(...rotDir(b.yaw, V));
+      const n = new THREE.Vector3(...rotDir(b.yaw, N));
+      const corners = [O.clone(), O.clone().add(u), O.clone().add(u).add(v), O.clone().add(v)];
+      const center = O.clone().addScaledVector(u, 0.5).addScaledVector(v, 0.5);
+      if (n.dot(cam.clone().sub(center).normalize()) < 0.05) continue;
+      const pins = corners.map((c) => { const p = c.clone().project(modelProj); return [(p.x + 1) / 2 * PROJ_W, (1 - p.y) / 2 * PROJ_H]; });
+      out.push({ pins, parts: [{ op: 1, pts: SHAPES.square() }], dist: center.distanceTo(cam) });
+    }
+  }
+  out.sort((a, b) => b.dist - a.dist); // far faces first, so nearer ones draw on top
+  return out.slice(0, MAX_SURF).map(({ dist, ...s }) => s);
+}
+
+// ---- pointer editing on the projector canvas ----
+let drag2 = null;
+function toPx(e) { const r = projCanvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * PROJ_W, (e.clientY - r.top) / r.height * PROJ_H]; }
+function handleR() { return 13 * PROJ_W / projCanvas.getBoundingClientRect().width; }
+const near = (a, b, r) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= r;
+function snapPoint(p) {
+  if (!state.snap) return p;
+  let best = null, bd = handleR() * 0.9;
+  geom2.forEach((g, si) => {
+    if (si === state.sel2) return;
+    const cands = state.surfaces[si].pins.concat(...g.parts.map((pt) => pt.px));
+    for (const q of cands) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = q; } }
+  });
+  return best ? [best[0], best[1]] : p;
+}
+function pointerDown2D(e) {
+  const p = toPx(e), r = handleR();
+  const s = state.surfaces[state.sel2], g = geom2[state.sel2];
+  if (s && state.edit2 === 'warp') {
+    const k = s.pins.findIndex((q) => near(q, p, r));
+    if (k >= 0) { drag2 = { type: 'pin', k }; state.selPin = k; render2DUI(); return; }
+  }
+  if (s && state.edit2 === 'points') {
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      const k = g.parts[j].px.findIndex((q) => near(q, p, r));
+      if (k >= 0) { drag2 = { type: 'vert', j, k }; state.selVert = { j, k }; render2DUI(); return; }
+    }
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      const px = g.parts[j].px;
+      for (let k = 0; k < px.length; k++) {
+        const a = px[k], b = px[(k + 1) % px.length];
+        if (s.parts[j].pts.length < MAX_PART_VERTS && near([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], p, r * 0.8)) {
+          s.parts[j].pts.splice(k + 1, 0, hApply(g.Hi, ...p));
+          drag2 = { type: 'vert', j, k: k + 1 }; state.selVert = { j, k: k + 1 };
+          sync2D(); return;
+        }
+      }
+    }
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      if (pointInPoly(p[0], p[1], g.parts[j].px)) {
+        drag2 = { type: 'part', j, start: hApply(g.Hi, ...p), pts: s.parts[j].pts.map((q) => [...q]) };
+        return;
+      }
+    }
+  }
+  const hit = surfaceAt(...p);
+  if (hit >= 0) {
+    if (hit !== state.sel2) { state.sel2 = hit; state.selPin = -1; state.selVert = null; }
+    drag2 = { type: 'move', start: p, pins: state.surfaces[hit].pins.map((q) => [...q]) };
+  } else { state.sel2 = -1; state.selPin = -1; state.selVert = null; }
+  render2DUI();
+}
+function pointerMove2D(e) {
+  if (!drag2) return;
+  const p = toPx(e), s = state.surfaces[state.sel2], g = geom2[state.sel2];
+  if (!s) return;
+  if (drag2.type === 'pin') s.pins[drag2.k] = snapPoint(p);
+  else if (drag2.type === 'vert') s.parts[drag2.j].pts[drag2.k] = hApply(g.Hi, ...snapPoint(p));
+  else if (drag2.type === 'part') {
+    const [u, v] = hApply(g.Hi, ...p), du = u - drag2.start[0], dv = v - drag2.start[1];
+    s.parts[drag2.j].pts = drag2.pts.map(([a, b]) => [a + du, b + dv]);
+  } else if (drag2.type === 'move') {
+    const dx = p[0] - drag2.start[0], dy = p[1] - drag2.start[1];
+    s.pins = drag2.pins.map(([x, y]) => [x + dx, y + dy]);
+  }
+  sync2D();
+}
+function deletePoint() {
+  const s = state.surfaces[state.sel2], v = state.selVert;
+  if (!s || !v || !s.parts[v.j]) return;
+  if (s.parts[v.j].pts.length <= 3) { $('hint2d').textContent = 'A shape needs at least three points. Delete the surface instead.'; return; }
+  s.parts[v.j].pts.splice(v.k, 1); state.selVert = null; sync2D();
+}
+projCanvas.addEventListener('dblclick', (e) => {
+  if (state.method !== '2d' || state.edit2 !== 'points' || !state.surfaces[state.sel2]) return;
+  const p = toPx(e), g = geom2[state.sel2];
+  for (let j = 0; j < g.parts.length; j++) {
+    const k = g.parts[j].px.findIndex((q) => near(q, p, handleR()));
+    if (k >= 0) { state.selVert = { j, k }; deletePoint(); return; }
+  }
+});
+window.addEventListener('keydown', (e) => {
+  if (state.method !== '2d' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+  const s = state.surfaces[state.sel2];
+  if (!s) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { if (state.edit2 === 'points' && state.selVert) deletePoint(); e.preventDefault(); return; }
+  const step = e.shiftKey ? 10 : 1;
+  const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  if (state.edit2 === 'warp' && state.selPin >= 0) { const q = s.pins[state.selPin]; s.pins[state.selPin] = [q[0] + d[0], q[1] + d[1]]; }
+  else if (state.edit2 === 'points' && state.selVert) {
+    const g = geom2[state.sel2], q = g.parts[state.selVert.j].px[state.selVert.k];
+    s.parts[state.selVert.j].pts[state.selVert.k] = hApply(g.Hi, q[0] + d[0], q[1] + d[1]);
+  } else s.pins = s.pins.map(([x, y]) => [x + d[0], y + d[1]]);
+  sync2D();
+});
+
+function drawOverlay2D(W, H, dpr) {
+  const sx = W / PROJ_W, sy = H / PROJ_H;
+  const path = (pts, close = true) => { octx.beginPath(); pts.forEach(([x, y], k) => (k ? octx.lineTo(x * sx, y * sy) : octx.moveTo(x * sx, y * sy))); if (close) octx.closePath(); };
+  geom2.forEach((g, si) => {
+    const sel = si === state.sel2;
+    for (const part of g.parts) {
+      octx.setLineDash(part.op < 0 ? [5 * dpr, 4 * dpr] : []);
+      octx.strokeStyle = sel ? '#ffb547' : 'rgba(255,255,255,0.35)';
+      octx.lineWidth = (sel ? 1.5 : 1) * dpr;
+      path(part.px); octx.stroke();
+    }
+    octx.setLineDash([]);
+    if (!sel) return;
+    const s = state.surfaces[si];
+    if (state.edit2 === 'warp') {
+      octx.setLineDash([3 * dpr, 3 * dpr]); octx.strokeStyle = 'rgba(255,181,71,0.55)'; octx.lineWidth = dpr;
+      path(s.pins); octx.stroke(); octx.setLineDash([]);
+      s.pins.forEach(([x, y], k) => {
+        octx.beginPath(); octx.arc(x * sx, y * sy, 6 * dpr, 0, Math.PI * 2);
+        octx.fillStyle = k === state.selPin ? '#ffffff' : '#ffb547'; octx.fill();
+        octx.strokeStyle = '#0d1016'; octx.lineWidth = 1.5 * dpr; octx.stroke();
+      });
+    } else {
+      g.parts.forEach((part, j) => {
+        part.px.forEach(([x, y], k) => {
+          const a = part.px[(k + 1) % part.px.length];
+          octx.beginPath(); octx.arc((x + a[0]) / 2 * sx, (y + a[1]) / 2 * sy, 3 * dpr, 0, Math.PI * 2);
+          octx.strokeStyle = 'rgba(255,181,71,0.7)'; octx.lineWidth = dpr; octx.stroke();
+        });
+        part.px.forEach(([x, y], k) => {
+          const on = state.selVert && state.selVert.j === j && state.selVert.k === k;
+          octx.fillStyle = on ? '#ffffff' : '#ffb547';
+          octx.fillRect(x * sx - 4 * dpr, y * sy - 4 * dpr, 8 * dpr, 8 * dpr);
+        });
+      });
+    }
+  });
+}
+
+// ---- how well do the traced surfaces cover the real boxes? (sampled in projector space) ----
+const COV_W = 160, COV_H = 90;
+const covRT = new THREE.WebGLRenderTarget(COV_W, COV_H, { type: THREE.FloatType });
+let targetMask = null, covTimer = 0;
+function computeTargetMask() {
+  roomR.setRenderTarget(covRT); roomR.setClearColor(0x000000, 0); roomR.clear();
+  realScene.overrideMaterial = posMat; roomR.render(realScene, trueProj); realScene.overrideMaterial = null;
+  const buf = new Float32Array(COV_W * COV_H * 4);
+  roomR.readRenderTargetPixels(covRT, 0, 0, COV_W, COV_H, buf);
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1);
+  targetMask = new Uint8Array(COV_W * COV_H);
+  for (let i = 0; i < COV_W * COV_H; i++) targetMask[i] = buf[i * 4 + 3] > 0.5 && buf[i * 4 + 1] > 0.004 && buf[i * 4 + 2] > 0.004 ? 1 : 0;
+}
+function scheduleCoverage() { clearTimeout(covTimer); covTimer = setTimeout(updateCoverage, 120); }
+function updateCoverage() {
+  if (state.method !== '2d') return;
+  if (!targetMask) computeTargetMask();
+  let tgt = 0, hit = 0, lit = 0;
+  for (let row = 0; row < COV_H; row++) for (let x = 0; x < COV_W; x++) {
+    const t = targetMask[row * COV_W + x];
+    const on = surfaceAt((x + 0.5) / COV_W * PROJ_W, (COV_H - 1 - row + 0.5) / COV_H * PROJ_H) >= 0;
+    tgt += t; if (on) { lit++; if (t) hit++; }
+  }
+  const cover = tgt ? hit / tgt : 0, spill = lit ? (lit - hit) / lit : 0;
+  const grade = cover > 0.95 && spill < 0.05 ? 'ok' : cover > 0.85 && spill < 0.15 ? 'warn' : 'bad';
+  $('alignReadout').innerHTML = `${state.surfaces.length} surfaces · box faces covered <span class="pill ${grade}">${Math.round(cover * 100)}%</span> · light off the boxes ${Math.round(spill * 100)}%`;
+}
+
+// ---- 2D console ----
+function setEdit2(mode) {
+  state.edit2 = mode; state.selVert = null;
+  $('edWarp').setAttribute('aria-selected', String(mode === 'warp'));
+  $('edPoints').setAttribute('aria-selected', String(mode === 'points'));
+  render2DUI();
+}
+function render2DUI() {
+  const s = state.surfaces[state.sel2];
+  const nCut = s ? s.parts.filter((p) => p.op < 0).length : 0, nAdd = s ? s.parts.length - nCut : 0;
+  $('stats2d').innerHTML = `<b>${state.surfaces.length}</b> surface${state.surfaces.length === 1 ? '' : 's'}` +
+    (s ? ` · selected: <b>surface ${state.sel2 + 1}</b> (${nAdd} shape${nAdd > 1 ? 's' : ''}${nCut ? `, ${nCut} cut-out${nCut > 1 ? 's' : ''}` : ''})` : ' · tap a surface in the preview to select it');
+  $('hint2d').textContent = !s ? 'Add a shape to begin, or tap one in the preview.'
+    : state.edit2 === 'warp' ? 'Drag the four corner dots onto the real surface\'s corners. Drag inside to move it. Arrow keys nudge the selected corner by 1 px (Shift: 10 px).'
+    : 'Drag a square to move a point, drag a ring on an edge to add one, double-click a point to remove it. Drag inside a shape to move just that shape.';
+  ['partAdd', 'partCut', 'delSurface'].forEach((id) => { $(id).disabled = !s; });
+  $('delPoint').disabled = !(s && state.edit2 === 'points' && state.selVert);
+}
+document.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => newSurface(b.dataset.add); });
+$('edWarp').onclick = () => setEdit2('warp');
+$('edPoints').onclick = () => setEdit2('points');
+$('partAdd').onclick = () => addPart(1);
+$('partCut').onclick = () => addPart(-1);
+$('delPoint').onclick = deletePoint;
+$('delSurface').onclick = () => { if (state.sel2 < 0) return; state.surfaces.splice(state.sel2, 1); state.sel2 = -1; sync2D(); };
+$('clear2d').onclick = () => { state.surfaces = []; state.sel2 = -1; sync2D(); };
+$('from3d').onclick = () => { state.surfaces = surfacesFrom3D(); state.sel2 = -1; sync2D(); };
+
+// ---------- mapping method + content per method ----------
+const PROJ_NOTES = {
+  '3d': 'This image is exactly what the projector emits. Click a box outline to select it, drag to slide it along the floor, scroll to rotate it.',
+  '2d': 'Your blank canvas: the projector\'s whole frame, with no camera image. Whatever you draw here is projected, so you align shapes by watching the room.',
+};
+function setMethod(m) {
+  state.method = m;
+  $('tab3d').setAttribute('aria-selected', String(m === '3d'));
+  $('tab2d').setAttribute('aria-selected', String(m === '2d'));
+  $('pane3d').style.display = m === '3d' ? 'grid' : 'none';
+  $('pane2d').style.display = m === '2d' ? 'grid' : 'none';
+  modelWire.visible = m === '3d' && state.showModel;
+  camViz.visible = m === '2d';
+  if (cloud) cloud.visible = m === '3d' && state.showCloud;
+  $('projErr').disabled = m === '2d';
+  $('projNote').textContent = PROJ_NOTES[m];
+  projCanvas.classList.toggle('edit2d', m === '2d');
+  if (m === '2d' && !state.seeded2d) { state.seeded2d = true; state.surfaces = surfacesFrom3D(); }
+  renderPresets(); renderIdeas(); showEffect();
+  if (m === '2d') sync2D(); else updateAlignment();
+}
+$('tab3d').onclick = () => setMethod('3d');
+$('tab2d').onclick = () => setMethod('2d');
+
+// ---------- swap big / small view ----------
+let bigView = 'room';
+function placeViews() {
+  const stage = $('stage'), slot = $('projSlot'), room = $('roomWrap'), proj = $('projWrap');
+  if (bigView === 'proj') { stage.appendChild(proj); slot.appendChild(room); } else { stage.appendChild(room); slot.appendChild(proj); }
+  $('swapViews').textContent = bigView === 'proj' ? 'Shrink' : 'Enlarge';
+  fitProj();
+}
+function fitProj() {
+  const proj = $('projWrap');
+  if (proj.parentElement.id !== 'stage') { proj.style.width = ''; proj.style.height = ''; return; }
+  const r = $('stage').getBoundingClientRect();
+  const w = Math.min(r.width, r.height * 16 / 9);
+  proj.style.width = w + 'px'; proj.style.height = w * 9 / 16 + 'px';
+}
+$('swapViews').onclick = () => { bigView = bigView === 'room' ? 'proj' : 'room'; placeViews(); };
+
+// ---------- structured light: find flat surfaces from photos ----------
+// The projector shows Gray-code stripes (plus all-black and all-white frames); a camera near it photographs each.
+// Decoding gives, for every camera pixel, the projector cell that lit it. Points on one plane are related by a
+// single homography between projector and camera images, so sequential RANSAC over that mapping finds the planes.
+const CELL = 4, GW = PROJ_W / CELL, GH = PROJ_H / CELL;            // 320 x 180 projector cells
+const XBITS = Math.ceil(Math.log2(GW)), YBITS = Math.ceil(Math.log2(GH));
+const CAM_W = 480, CAM_H = 360;
+const PATTERN_FRAG = /* glsl */`
+precision highp float; precision highp int;
+uniform int uMode; uniform int uAxis; uniform int uBit; uniform int uInvert; uniform vec2 uRes; uniform vec2 uView; uniform float uCell;
+out vec4 outColor;
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uView.y - gl_FragCoord.y) * uRes / uView;
+  float v = float(uMode);
+  if (uMode == 2) {
+    int idx = int(floor((uAxis == 0 ? px.x : px.y) / uCell));
+    int g = idx ^ (idx >> 1);
+    v = float((g >> uBit) & 1);
+    if (uInvert == 1) v = 1.0 - v;
+  }
+  outColor = vec4(vec3(v), 1.0);
+}`;
+const patternUniforms = {
+  uMode: { value: 0 }, uAxis: { value: 0 }, uBit: { value: 0 }, uInvert: { value: 0 },
+  uRes: { value: new THREE.Vector2(PROJ_W, PROJ_H) }, uView: flatUniforms.uView, uCell: { value: CELL },
+};
+const patternMat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: FLAT_VERT, fragmentShader: PATTERN_FRAG, uniforms: patternUniforms });
+const patternScene = new THREE.Scene();
+{ const m = new THREE.Mesh(flatGeo, patternMat); m.frustumCulled = false; patternScene.add(m); }
+const camRT = new THREE.WebGLRenderTarget(CAM_W, CAM_H);
+const photoCam = new THREE.PerspectiveCamera(48, CAM_W / CAM_H, 0.1, 20);
+const camViz = new THREE.Group(); overlayScene.add(camViz);
+let camAngle = 0.5;
+
+function placePhotoCam() {
+  const d = state.camDist;
+  photoCam.position.copy(PROJ_POS).add(new THREE.Vector3(Math.cos(camAngle) * d, Math.sin(camAngle) * d * 0.6, 0.12 * Math.sin(camAngle * 3)));
+  photoCam.position.y = Math.max(0.4, photoCam.position.y);
+  photoCam.lookAt(PROJ_TARGET.clone().add(new THREE.Vector3(Math.sin(camAngle * 2) * 0.25, Math.cos(camAngle * 5) * 0.1, 0)));
+  photoCam.rotateZ(Math.sin(camAngle * 7) * 0.05);   // handheld: a little tilt
+  photoCam.updateMatrixWorld(); photoCam.updateProjectionMatrix();
+  camViz.clear();
+  const far = 0.5, h = Math.tan(photoCam.fov * D2R / 2) * far, w = h * photoCam.aspect;
+  const pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, -far).applyMatrix4(photoCam.matrixWorld));
+  const v = [];
+  for (let i = 0; i < 4; i++) v.push(photoCam.position, pts[i], pts[i], pts[(i + 1) % 4]);
+  camViz.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(v), new THREE.LineBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.8 })));
+}
+
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+function setPattern(f) { patternUniforms.uMode.value = f.mode; patternUniforms.uAxis.value = f.axis || 0; patternUniforms.uBit.value = f.bit || 0; patternUniforms.uInvert.value = f.inv || 0; }
+function shoot() {
+  // what the projector emits right now (at full projector resolution)...
+  flatUniforms.uView.value.set(PROJ_W, PROJ_H);
+  roomR.setRenderTarget(contentRT); roomR.setClearColor(0x000000, 1); roomR.clear(); roomR.render(patternScene, modelProj);
+  // ...and what the camera sees: the real room lit by it, plus room light and sensor noise
+  roomR.setRenderTarget(camRT); roomR.clear(); roomR.render(realScene, photoCam);
+  const buf = new Uint8Array(CAM_W * CAM_H * 4);
+  roomR.readRenderTargetPixels(camRT, 0, 0, CAM_W, CAM_H, buf);
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1);
+  const lum = new Float32Array(CAM_W * CAM_H);
+  for (let i = 0; i < lum.length; i++) lum[i] = (buf[i * 4] + buf[i * 4 + 1] + buf[i * 4 + 2]) / 3 + gauss() * 2;
+  return lum;
+}
+function drawShot(lum) {
+  const c = $('camShot'), ctx = c.getContext('2d'), img = ctx.createImageData(c.width, c.height);
+  const sx = CAM_W / c.width, sy = CAM_H / c.height;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    const v = lum[(CAM_H - 1 - Math.floor(y * sy)) * CAM_W + Math.floor(x * sx)], o = (y * c.width + x) * 4;
+    img.data[o] = img.data[o + 1] = img.data[o + 2] = Math.max(0, Math.min(255, v)); img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// small linear algebra
+function solveLinear(A, b) {                        // Gaussian elimination with partial pivoting; A is n x n (array of rows)
+  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let v = M[r][n]; for (let k = r + 1; k < n; k++) v -= M[r][k] * x[k]; x[r] = v / M[r][r]; }
+  return x;
+}
+const mul3 = (a, b) => [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c]));
+function normT(pts) {                               // Hartley normalization
+  let mx = 0, my = 0; for (const [x, y] of pts) { mx += x; my += y; } mx /= pts.length; my /= pts.length;
+  let d = 0; for (const [x, y] of pts) d += Math.hypot(x - mx, y - my); d = d / pts.length || 1;
+  const k = Math.SQRT2 / d; return [k, 0, -k * mx, 0, k, -k * my, 0, 0, 1];
+}
+function fitHomography(src, dst) {                  // least-squares DLT with h33 = 1; exact for 4 points
+  const Ts = normT(src), Td = normT(dst);
+  const AtA = Array.from({ length: 8 }, () => new Array(8).fill(0)), Atb = new Array(8).fill(0);
+  for (let i = 0; i < src.length; i++) {
+    const [x, y] = hApply(Ts, ...src[i]), [X, Y] = hApply(Td, ...dst[i]);
+    for (const [row, rhs] of [[[x, y, 1, 0, 0, 0, -x * X, -y * X], X], [[0, 0, 0, x, y, 1, -x * Y, -y * Y], Y]]) {
+      for (let a = 0; a < 8; a++) { Atb[a] += row[a] * rhs; for (let b = 0; b < 8; b++) AtA[a][b] += row[a] * row[b]; }
+    }
+  }
+  const h = solveLinear(AtA, Atb);
+  return h ? mul3(inv3(Td), mul3([...h, 1], Ts)) : null;
+}
+
+let lastScan = null;
+async function runCapture() {
+  if (state.capturing) return;
+  state.capturing = true;
+  const btn = $('capture'); btn.disabled = true;
+  const t0 = performance.now();
+  rngSeed = (Math.random() * 1e9) >>> 0;
+  const frames = [{ mode: 0 }, { mode: 1 }];
+  for (let b = XBITS - 1; b >= 0; b--) frames.push({ mode: 2, axis: 0, bit: b }, { mode: 2, axis: 0, bit: b, inv: 1 });
+  for (let b = YBITS - 1; b >= 0; b--) frames.push({ mode: 2, axis: 1, bit: b }, { mode: 2, axis: 1, bit: b, inv: 1 });
+  const shots = [];
+  try {
+    for (let i = 0; i < frames.length; i++) {
+      setPattern(frames[i]);
+      $('capStats').textContent = `Capturing photo ${i + 1} of ${frames.length}…`;
+      await nextFrame();                              // let the room view show this pattern
+      shots.push(shoot());
+      if (i === 2 + 2 * 4) drawShot(shots[i]);        // a mid-frequency stripe photo makes a good thumbnail
+    }
+  } finally { state.capturing = false; btn.disabled = false; }
+  const t1 = performance.now();
+  const res = decodeAndSegment(shots);
+  lastScan = res;
+  const surfaces = res.regions.map((r, idx) => (state.keepBg || !r.background ? regionToSurface(r, idx, res) : null)).filter(Boolean);
+  weldPins(surfaces, 10);
+  state.surfaces = surfaces.slice(0, MAX_SURF); state.sel2 = -1; state.seeded2d = true;
+  sync2D();
+  drawDecode(res);
+  const nBg = res.regions.filter((r) => r.background).length;
+  $('capStats').innerHTML =
+    `<b>${frames.length}</b> photos · <b>${res.decoded.toLocaleString()}</b> camera pixels decoded\n` +
+    `Planes found: <b>${res.regions.length}</b>` + (nBg && !state.keepBg ? ` (${nBg} spanning the frame treated as wall/floor and dropped)` : '') + `\n` +
+    `Surfaces created: <b>${state.surfaces.length}</b> · capture ${(t1 - t0) / 1000 | 0 ? ((t1 - t0) / 1000).toFixed(1) + ' s' : Math.round(t1 - t0) + ' ms'}, analysis ${Math.round(performance.now() - t1)} ms` +
+    (res.degenerate ? `\nAlmost everything fit one plane. The camera is too close to the projector: without parallax, every surface looks like one plane. Move it further away.` : '');
+}
+
+function decodeAndSegment(shots) {
+  const N = CAM_W * CAM_H, black = shots[0], white = shots[1];
+  const sumX = new Float32Array(GW * GH), sumY = new Float32Array(GW * GH), cnt = new Uint16Array(GW * GH);
+  let decoded = 0;
+  for (let i = 0; i < N; i++) {
+    if (white[i] - black[i] < 25) continue;           // not lit by the projector, or not seen
+    let gx = 0, gy = 0, ok = true;
+    for (let b = 0; b < XBITS && ok; b++) { const d = shots[2 + 2 * b][i] - shots[3 + 2 * b][i]; if (Math.abs(d) < 8) ok = false; gx = (gx << 1) | (d > 0 ? 1 : 0); }
+    for (let b = 0; b < YBITS && ok; b++) { const d = shots[2 + 2 * XBITS + 2 * b][i] - shots[3 + 2 * XBITS + 2 * b][i]; if (Math.abs(d) < 8) ok = false; gy = (gy << 1) | (d > 0 ? 1 : 0); }
+    if (!ok) continue;
+    for (let s = 1; s < 16; s <<= 1) { gx ^= gx >> s; gy ^= gy >> s; }   // Gray -> binary
+    if (gx >= GW || gy >= GH) continue;
+    const c = gy * GW + gx;
+    sumX[c] += i % CAM_W; sumY[c] += (i / CAM_W) | 0; cnt[c]++; decoded++;
+  }
+  const valid = new Uint8Array(GW * GH), cam = new Float32Array(GW * GH * 2);
+  for (let c = 0; c < GW * GH; c++) if (cnt[c]) { valid[c] = 1; cam[c * 2] = sumX[c] / cnt[c]; cam[c * 2 + 1] = sumY[c] / cnt[c]; }
+  const proj = (c) => [(c % GW) * CELL + CELL / 2, ((c / GW) | 0) * CELL + CELL / 2];
+  const err = (H, c) => { const q = hApply(H, ...proj(c)); return Math.hypot(q[0] - cam[c * 2], q[1] - cam[c * 2 + 1]); };
+  const THR = 1.5;
+  const free = valid.slice();                         // decoded and not yet claimed by a plane
+  const label = new Int16Array(GW * GH).fill(-1);
+  const regions = [];
+  let nValid = 0; for (let c = 0; c < GW * GH; c++) nValid += valid[c];
+
+  const component = (seed, ok) => {                    // 4-connected cells containing seed where ok(c)
+    const out = [seed], seen = new Uint8Array(GW * GH); seen[seed] = 1;
+    for (let q = 0; q < out.length; q++) {
+      const c = out[q], x = c % GW, y = (c / GW) | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < GW - 1 ? c + 1 : -1, y > 0 ? c - GW : -1, y < GH - 1 ? c + GW : -1]) {
+        if (n >= 0 && !seen[n] && ok(n)) { seen[n] = 1; out.push(n); }
+      }
+    }
+    return out;
+  };
+  const fitCells = (cells) => {
+    const step = Math.max(1, Math.floor(cells.length / 1500));
+    const src = [], dst = [];
+    for (let k = 0; k < cells.length; k += step) { src.push(proj(cells[k])); dst.push([cam[cells[k] * 2], cam[cells[k] * 2 + 1]]); }
+    return fitHomography(src, dst);
+  };
+
+  for (let iter = 0; iter < 40; iter++) {
+    const rem = []; for (let c = 0; c < GW * GH; c++) if (free[c]) rem.push(c);
+    if (rem.length < 120) break;
+    let best = null;
+    for (let h = 0; h < 250; h++) {
+      const seed = rem[(rand() * rem.length) | 0], sx = seed % GW, sy = (seed / GW) | 0;
+      const pick = [seed];
+      for (let t = 0; t < 40 && pick.length < 4; t++) {
+        const x = sx + Math.round((rand() * 2 - 1) * 10), y = sy + Math.round((rand() * 2 - 1) * 10);
+        if (x < 0 || y < 0 || x >= GW || y >= GH) continue;
+        const c = y * GW + x;
+        if (free[c] && !pick.includes(c)) pick.push(c);
+      }
+      if (pick.length < 4) continue;
+      const P = pick.map(proj);
+      const area = Math.abs((P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1]));
+      if (area < 100) continue;
+      const H = fitHomography(P, pick.map((c) => [cam[c * 2], cam[c * 2 + 1]]));
+      if (!H) continue;
+      let score = 0;
+      for (let y = Math.max(0, sy - 15); y <= Math.min(GH - 1, sy + 15); y++) for (let x = Math.max(0, sx - 15); x <= Math.min(GW - 1, sx + 15); x++) {
+        const c = y * GW + x; if (free[c] && err(H, c) < THR) score++;
+      }
+      if (!best || score > best.score) best = { score, H, seed };
+    }
+    if (!best || best.score < 40) break;
+    let H = best.H, cells = [best.seed];
+    for (let k = 0; k < 3; k++) {                       // grow: inliers connected to the seed, refit, repeat
+      if (err(H, best.seed) >= THR * 2) break;
+      cells = component(best.seed, (c) => free[c] && err(H, c) < THR);
+      const H2 = cells.length >= 8 ? fitCells(cells) : null;
+      if (H2) H = H2;
+    }
+    for (const c of cells) free[c] = 0;
+    if (cells.length < 120) continue;                   // a sliver or noise; drop it
+    regions.push({ H, cells });
+    for (const c of cells) label[c] = regions.length - 1;
+  }
+
+  // creases between neighboring planes: hand each cell to whichever nearby plane predicts it best
+  for (let pass = 0; pass < 2; pass++) {
+    for (let c = 0; c < GW * GH; c++) {
+      if (label[c] < 0) continue;
+      const x = c % GW, y = (c / GW) | 0;
+      let bestL = label[c], bestE = err(regions[label[c]].H, c);
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+        const l = label[ny * GW + nx];
+        if (l >= 0 && l !== bestL) { const e = err(regions[l].H, c); if (e < bestE) { bestE = e; bestL = l; } }
+      }
+      label[c] = bestL;
+    }
+  }
+  // keep each plane's largest connected piece
+  const out = [];
+  const pieces = [];
+  regions.forEach((r, l) => {
+    const seen = new Uint8Array(GW * GH); let bestCells = [];
+    for (let c = 0; c < GW * GH; c++) {
+      if (label[c] !== l || seen[c]) continue;
+      const comp = component(c, (n) => label[n] === l);
+      for (const n of comp) seen[n] = 1;
+      if (comp.length > bestCells.length) bestCells = comp;
+    }
+    if (bestCells.length < 120) return;
+    pieces.push({ cells: bestCells, H: fitCells(bestCells) || r.H });
+  });
+  // pieces of the same physical plane (the floor seen between boxes) fit each other's homography;
+  // group them, and call a group wall/floor if it is big and reaches the edge of the frame
+  const group = pieces.map((_, i) => i), gfind = (i) => (group[i] === i ? i : (group[i] = gfind(group[i])));
+  for (let i = 0; i < pieces.length; i++) for (let j = 0; j < pieces.length; j++) {
+    if (i === j || gfind(i) === gfind(j)) continue;
+    const cells = pieces[j].cells, step = Math.max(1, Math.floor(cells.length / 300));
+    let fit = 0, n = 0;
+    for (let k = 0; k < cells.length; k += step) { n++; if (err(pieces[i].H, cells[k]) < THR * 2) fit++; }
+    if (fit / n > 0.8) group[gfind(j)] = gfind(i);
+  }
+  const touchesX = (cells, x0) => cells.some((c) => c % GW === x0);
+  const plabel = new Int16Array(GW * GH).fill(-1);
+  pieces.forEach((pc, i) => {
+    const mates = pieces.filter((_, j) => gfind(j) === gfind(i));
+    const size = mates.reduce((a, m) => a + m.cells.length, 0);
+    for (const c of pc.cells) plabel[c] = out.length;
+    // wall and floor run the full width of the frame (counting every fragment); box faces almost never do
+    const spans = mates.some((m) => touchesX(m.cells, 0)) && mates.some((m) => touchesX(m.cells, GW - 1));
+    out.push({ cells: pc.cells, H: pc.H, background: spans || size > GW * GH * 0.25 });
+  });
+  // Where two planes meet at a crease (two faces of one box) the projector->camera mapping is continuous, so
+  // each plane's homography also predicts the cells just across the boundary. Where one object hides another
+  // there's a depth jump, which shows up as parallax: the predictions miss by several pixels.
+  const pairErr = new Map();
+  for (let c = 0; c < GW * GH; c++) {
+    const a = plabel[c]; if (a < 0) continue;
+    for (const n of [c % GW < GW - 1 ? c + 1 : -1, c + GW < GW * GH ? c + GW : -1]) {
+      if (n < 0) continue;
+      const b = plabel[n]; if (b < 0 || b === a) continue;
+      const key = Math.min(a, b) + ',' + Math.max(a, b);
+      if (!pairErr.has(key)) pairErr.set(key, []);
+      pairErr.get(key).push((err(out[a].H, n) + err(out[b].H, c)) / 2);
+    }
+  }
+  const relation = new Map();
+  pairErr.forEach((es, key) => { es.sort((x, y) => x - y); relation.set(key, { crease: es[es.length >> 1] < 3, n: es.length }); });
+  const rel = (a, b) => relation.get(Math.min(a, b) + ',' + Math.max(a, b));
+  // faces joined by creases belong to one object
+  const obj = out.map((_, i) => i), ofind = (i) => (obj[i] === i ? i : (obj[i] = ofind(obj[i])));
+  relation.forEach((r, key) => {
+    const [a, b] = key.split(',').map(Number);
+    if (r.crease && r.n >= 8 && !out[a].background && !out[b].background) obj[ofind(a)] = ofind(b);
+  });
+  out.forEach((r, i) => { r.object = ofind(i); });
+  const degenerate = out.length > 0 && Math.max(...out.map((r) => r.cells.length)) > nValid * 0.85;
+  return { regions: out, decoded, plabel, rel, degenerate };
+}
+
+function drawDecode(res) {
+  const c = $('decodeView'), ctx = c.getContext('2d'), img = ctx.createImageData(GW, GH);
+  const color = new Map();
+  res.regions.forEach((r, i) => {
+    const col = r.background && !state.keepBg ? [45, 52, 64] : new THREE.Color().setHSL((i * 0.137) % 1, 0.75, 0.55).toArray().map((v) => v * 255);
+    for (const cell of r.cells) color.set(cell, col);
+  });
+  for (let k = 0; k < GW * GH; k++) {
+    const col = color.get(k) || [0, 0, 0];
+    img.data[k * 4] = col[0]; img.data[k * 4 + 1] = col[1]; img.data[k * 4 + 2] = col[2]; img.data[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// ---- turning a region of projector cells into an editable surface ----
+function convexHull(pts) {
+  const P = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const p of P) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+const shoelace = (q) => q.reduce((a, p, i) => { const n = q[(i + 1) % q.length]; return a + p[0] * n[1] - n[0] * p[1]; }, 0) / 2;
+function segDist2(p, a, b) {
+  const bx = b[0] - a[0], by = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * bx + (p[1] - a[1]) * by) / (bx * bx + by * by || 1)));
+  return Math.hypot(p[0] - a[0] - bx * t, p[1] - a[1] - by * t);
+}
+function fitLine(pts) {                                    // total least squares: point + unit direction
+  let mx = 0, my = 0; for (const [x, y] of pts) { mx += x; my += y; } mx /= pts.length; my /= pts.length;
+  let sxx = 0, syy = 0, sxy = 0; for (const [x, y] of pts) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
+  const a = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  return { p: [mx, my], d: [Math.cos(a), Math.sin(a)] };
+}
+function intersect(l1, l2) {
+  const den = l1.d[0] * l2.d[1] - l1.d[1] * l2.d[0];
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((l2.p[0] - l1.p[0]) * l2.d[1] - (l2.p[1] - l1.p[1]) * l2.d[0]) / den;
+  return [l1.p[0] + l1.d[0] * t, l1.p[1] + l1.d[1] * t];
+}
+function traceContour(member, start) {                    // Moore-neighbour boundary trace, clockwise on screen
+  const D = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+  const out = [start]; let cur = start, dir = 0;
+  for (let it = 0; it < GW * GH; it++) {
+    let found = false;
+    for (let k = 0; k < 8; k++) {
+      const d = (dir + 6 + k) % 8, x = cur % GW + D[d][0], y = ((cur / GW) | 0) + D[d][1];
+      if (x < 0 || y < 0 || x >= GW || y >= GH || !member(y * GW + x)) continue;
+      cur = y * GW + x; dir = d; found = true; break;
+    }
+    if (!found || cur === start) break;
+    out.push(cur);
+  }
+  return out;
+}
+function simplify(pts, eps) {                             // Douglas-Peucker on an open polyline
+  if (pts.length < 3) return pts;
+  let idx = 0, dmax = 0;
+  for (let i = 1; i < pts.length - 1; i++) { const d = segDist2(pts[i], pts[0], pts[pts.length - 1]); if (d > dmax) { dmax = d; idx = i; } }
+  if (dmax <= eps) return [pts[0], pts[pts.length - 1]];
+  return simplify(pts.slice(0, idx + 1), eps).slice(0, -1).concat(simplify(pts.slice(idx), eps));
+}
+function regionToSurface(region, idx, res) {
+  const plabel = res.plabel;
+  const inR = new Uint8Array(GW * GH); for (const c of region.cells) inR[c] = 1;
+  const center = (c) => [(c % GW) * CELL + CELL / 2, ((c / GW) | 0) * CELL + CELL / 2];
+  const boundary = region.cells.filter((c) => { const x = c % GW, y = (c / GW) | 0; return x === 0 || y === 0 || x === GW - 1 || y === GH - 1 || !inR[c - 1] || !inR[c + 1] || !inR[c - GW] || !inR[c + GW]; });
+  const corners = [];
+  for (const c of boundary) { const [x, y] = center(c); corners.push([x - 2, y - 2], [x + 2, y - 2], [x + 2, y + 2], [x - 2, y + 2]); }
+  let q = convexHull(corners);
+  while (q.length > 4) {                                  // drop the vertex whose removal loses the least area
+    let bi = 0, ba = Infinity;
+    for (let i = 0; i < q.length; i++) { const a = Math.abs(shoelace([q[(i + q.length - 1) % q.length], q[i], q[(i + 1) % q.length]])); if (a < ba) { ba = a; bi = i; } }
+    q.splice(bi, 1);
+  }
+  if (q.length < 4) return null;
+  // refine each side with a line fit to the boundary, then intersect neighbouring sides
+  const bpts = boundary.map(center);
+  const cx = bpts.reduce((a, p) => a + p[0], 0) / bpts.length, cy = bpts.reduce((a, p) => a + p[1], 0) / bpts.length;
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const lines = q.map((a, e) => {
+    const b = q[(e + 1) % 4];
+    const mineCells = boundary.filter((c) => { const p = center(c), d = segDist2(p, a, b); return d < 6 && [0, 1, 2, 3].every((k) => k === e || segDist2(p, q[k], q[(k + 1) % 4]) >= d); });
+    const mine = mineCells.map(center);
+    // a side that borders another surface along most of its length is a crease: both surfaces fit one line
+    // to the cells on either side of it, so their shared edge comes out identical
+    // look outward from each boundary cell, across any shadow gap, to see what lies beyond this side
+    const votes = new Map(); let total = 0;
+    for (const c of mineCells) for (const [dx, dy] of N4) {
+      const x0 = c % GW, y0 = (c / GW) | 0;
+      if (x0 + dx < 0 || y0 + dy < 0 || x0 + dx >= GW || y0 + dy >= GH || plabel[(y0 + dy) * GW + x0 + dx] === idx) continue;
+      for (let k = 1; k <= 6; k++) {
+        const x = x0 + dx * k, y = y0 + dy * k;
+        if (x < 0 || y < 0 || x >= GW || y >= GH) break;
+        const l = plabel[y * GW + x];
+        if (l < 0 || l === idx) continue;
+        total++; if (!res.regions[l].background) votes.set(l, (votes.get(l) || 0) + 1);
+        break;
+      }
+    }
+    let other = -1, ov = 0; votes.forEach((v, l) => { if (v > ov) { ov = v; other = l; } });
+    const r2 = other >= 0 ? res.rel(idx, other) : null;
+    if (other >= 0 && ov > total * 0.6 && r2 && r2.crease && mineCells.length >= 4) {
+      const pts = [];
+      for (const c of mineCells) {
+        let adj = false;
+        for (const [dx, dy] of N4) {
+          const x = c % GW + dx, y = ((c / GW) | 0) + dy;
+          if (x < 0 || y < 0 || x >= GW || y >= GH) continue;
+          const n = y * GW + x;
+          if (plabel[n] === other) { pts.push(center(n)); adj = true; }
+        }
+        if (adj) pts.push(center(c));
+      }
+      if (pts.length >= 6) return fitLine(pts);
+    }
+    if (mine.length < 4) return { p: a, d: [(b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]), (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1])] };
+    const L = fitLine(mine);
+    const n = [-L.d[1], L.d[0]], out = (L.p[0] - cx) * n[0] + (L.p[1] - cy) * n[1] > 0 ? 1 : -1;
+    L.p = [L.p[0] + n[0] * out * CELL / 2, L.p[1] + n[1] * out * CELL / 2];  // boundary cell centres sit half a cell inside
+    return L;
+  });
+  const pins = q.map((c, k) => { const r = intersect(lines[(k + 3) % 4], lines[k]); return r && Math.hypot(r[0] - c[0], r[1] - c[1]) < 25 ? r : c; });
+  // pin order: bottom-left, bottom-right, top-right, top-left
+  if (shoelace(pins) > 0) pins.reverse();
+  let k0 = 0; pins.forEach((p, k) => { if (p[1] - p[0] > pins[k0][1] - pins[k0][0]) k0 = k; });
+  const P = [0, 1, 2, 3].map((k) => pins[(k0 + k) % 4]);
+  const surf = { pins: P, parts: [{ op: 1, pts: SHAPES.square() }], object: region.object };
+  // partly hidden or non-rectangular: use the traced outline instead of the full quad
+  if (region.cells.length * CELL * CELL < Math.abs(shoelace(P)) * 0.92) {
+    const start = region.cells.reduce((a, c) => Math.min(a, c));
+    let eps = 6, poly;
+    const ring = traceContour((c) => inR[c] === 1, start).map(center);
+    do { poly = simplify(ring.concat([ring[0]]), eps).slice(0, -1); eps *= 1.5; } while (poly.length > MAX_PART_VERTS);
+    if (poly.length >= 3) {
+      const Hi = inv3(squareToQuad(P));
+      surf.parts = [{ op: 1, pts: poly.map(([x, y]) => hApply(Hi, x, y)) }];
+    }
+  }
+  return surf;
+}
+function weldPins(surfaces, tol) {                        // corners that nearly coincide become one shared corner
+  const all = []; surfaces.forEach((s) => s.pins.forEach((p) => all.push(p)));
+  const used = new Set();
+  for (let i = 0; i < all.length; i++) {
+    if (used.has(i)) continue;
+    const group = [i];
+    for (let j = i + 1; j < all.length; j++) if (!used.has(j) && Math.hypot(all[i][0] - all[j][0], all[i][1] - all[j][1]) < tol) group.push(j);
+    if (group.length < 2) continue;
+    const mx = group.reduce((a, k) => a + all[k][0], 0) / group.length, my = group.reduce((a, k) => a + all[k][1], 0) / group.length;
+    for (const k of group) { all[k][0] = mx; all[k][1] = my; used.add(k); }
+  }
+}
+
+$('capture').onclick = () => runCapture();
+$('camSpot').onclick = () => { camAngle = Math.random() * Math.PI * 2; placePhotoCam(); };
+$('keepBg').addEventListener('change', (e) => { state.keepBg = e.target.checked; });
+{
+  const el = $('camDist'), out = $('camDistOut');
+  const show = () => { out.textContent = Math.round(state.camDist * 100) + ' cm'; };
+  el.addEventListener('input', () => { state.camDist = parseFloat(el.value); show(); placePhotoCam(); });
+  el.value = state.camDist; show();
+}
+
+// ---------- 2D -> 3D: solve projector pose, lens and boxes from welded surfaces ----------
+// Each group of surfaces that share corners is treated as one box standing on the floor (y = 0) in front of the
+// wall (z = 0). Unknowns: projector yaw, pitch, roll, vertical field of view and vertical lens shift, plus
+// x, z, width, height, depth and rotation per box. The projector's height and distance to the wall come from a
+// tape measure, because one viewpoint can't tell a big far scene from a small near one.
+const BOX_FACE_DEFS = (b) => {
+  const { w, h, d } = b;
+  return [
+    [[-w / 2, 0, d / 2], [w, 0, 0], [0, h, 0]], [[w / 2, 0, -d / 2], [-w, 0, 0], [0, h, 0]],
+    [[w / 2, 0, d / 2], [0, 0, -d], [0, h, 0]], [[-w / 2, 0, -d / 2], [0, 0, d], [0, h, 0]],
+    [[-w / 2, h, d / 2], [w, 0, 0], [0, 0, -d]],
+  ];
+};
+function faceCorners(b, f) {
+  const [o, U, V] = BOX_FACE_DEFS(b)[f];
+  return [o, [o[0] + U[0], o[1] + U[1], o[2] + U[2]], [o[0] + U[0] + V[0], o[1] + U[1] + V[1], o[2] + U[2] + V[2]], [o[0] + V[0], o[1] + V[1], o[2] + V[2]]].map((l) => toWorld(b, ...l));
+}
+function camProject(cam, p) {
+  const dx = p[0] - cam.x, dy = p[1] - cam.y, dz = p[2] - cam.z;
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), cr = Math.cos(cam.roll), sr = Math.sin(cam.roll);
+  const x1 = cy * dx - sy * dz, z1 = sy * dx + cy * dz;
+  const y2 = cp * dy + sp * z1, z2 = -sp * dy + cp * z1;
+  const x3 = cr * x1 + sr * y2, y3 = -sr * x1 + cr * y2;
+  const zc = -z2; if (zc < 0.05) return null;
+  const t = Math.tan(cam.fov / 2);
+  return [(x3 / zc / (t * PROJ_W / PROJ_H) + 1) / 2 * PROJ_W, (1 - (y3 / zc / t + cam.shift)) / 2 * PROJ_H];
+}
+function camRay(cam, px, py) {
+  const t = Math.tan(cam.fov / 2);
+  let x = (px / PROJ_W * 2 - 1) * t * PROJ_W / PROJ_H, y = (1 - py / PROJ_H * 2 - cam.shift) * t, z = -1;
+  const cr = Math.cos(cam.roll), sr = Math.sin(cam.roll), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  [x, y] = [cr * x - sr * y, sr * x + cr * y];
+  [y, z] = [cp * y - sp * z, sp * y + cp * z];
+  [x, z] = [cy * x + sy * z, -sy * x + cy * z];
+  return { o: [cam.x, cam.y, cam.z], d: [x, y, z] };
+}
+const PERMS = [];
+for (let r = 0; r < 4; r++) for (const dir of [1, -1]) PERMS.push([0, 1, 2, 3].map((k) => (r + dir * k + 8) % 4));
+
+function solve3D() {
+  const msg = $('solveMsg');
+  const H = parseFloat($('mHeight').value), D = parseFloat($('mDist').value), shift0 = -(parseFloat($('mOffset').value) || 0) / 100;
+  if (!(H > 0) || !(D > 0)) { msg.textContent = 'Enter the projector height and distance to the wall in meters.'; return; }
+  const t0 = performance.now();
+  // very large surfaces are wall or floor, not box faces
+  let surfs = state.surfaces.map((s, i) => ({ i, pins: s.pins, object: s.object })).filter((s) => Math.abs(shoelace(s.pins)) < PROJ_W * PROJ_H * 0.15);
+  // T-junctions: a corner lying partway along another surface's edge is where that surface cuts this one off
+  // (an occlusion), not a real corner of the face, so it gets little weight
+  for (const a of surfs) a.pinW = a.pins.map((p) => {
+    for (const b of surfs) {
+      if (b === a) continue;
+      for (let k = 0; k < 4; k++) {
+        const u = b.pins[k], v = b.pins[(k + 1) % 4];
+        if (Math.hypot(p[0] - u[0], p[1] - u[1]) < 10 || Math.hypot(p[0] - v[0], p[1] - v[1]) < 10) continue;
+        if (segDist2(p, u, v) < 5) return 0.1;
+      }
+    }
+    return 1;
+  });
+  // group surfaces that share an edge (two corners). Faces of one box always do; two boxes that merely
+  // overlap in the image meet at a single point where one hides the other, which looks like a corner but isn't
+  const parent = surfs.map((_, k) => k), find = (k) => (parent[k] === k ? k : (parent[k] = find(parent[k])));
+  for (let a = 0; a < surfs.length; a++) for (let b = a + 1; b < surfs.length; b++) {
+    const shared = surfs[a].pins.filter((p) => surfs[b].pins.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 6)).length;
+    // the camera scan also knows which faces meet at a crease (see decodeAndSegment)
+    if (shared >= 2 || (surfs[a].object !== undefined && surfs[a].object === surfs[b].object)) parent[find(a)] = find(b);
+  }
+  let groups = [...new Set(surfs.map((_, k) => find(k)))].map((r) => surfs.filter((_, k) => find(k) === r));
+  groups = groups.slice(0, MAX_BOXES);
+  if (!groups.length) { msg.textContent = 'No surfaces to solve from. Map some box faces first.'; return; }
+
+  let result = null;
+  for (let round = 0; round < 2; round++) {
+    result = solveGroups(groups, H, D, shift0);
+    const bad = result.groupRms.map((r, g) => (r > 12 ? g : -1)).filter((g) => g >= 0);
+    if (!bad.length || bad.length === groups.length) break;
+    groups = groups.filter((_, g) => !bad.includes(g));  // these don't look like box faces; leave them 2D-only
+  }
+  const { cam, boxes, rms } = result;
+  state.projSolved = cam;
+  state.model = boxes;
+  state.sel = -1;
+  updateModelProjector();
+  rebuildModel();
+  // truth is only known because this is a simulation
+  const tPitch = Math.atan2(PROJ_TARGET.y - PROJ_POS.y, Math.hypot(PROJ_TARGET.x - PROJ_POS.x, PROJ_TARGET.z - PROJ_POS.z));
+  const used = groups.reduce((a, g) => a + g.length, 0);
+  $('solveStats').hidden = false;
+  $('solveStats').innerHTML =
+    `<b>3D model solved from ${used} 2D surfaces</b> (${groups.length} boxes) in ${Math.round(performance.now() - t0)} ms\n` +
+    `Corner reprojection error: <b>${rms.toFixed(1)} px</b> RMS\n` +
+    `Projector vs. truth: aim ${(Math.hypot(cam.pitch - tPitch, cam.yaw) / D2R).toFixed(2)}° off, lens ${((cam.fov / D2R) - PROJ_FOV).toFixed(2)}° wider than it really is\n` +
+    (used < state.surfaces.length ? `${state.surfaces.length - used} surfaces didn't fit a box (or touch the frame edge) and stay 2D-only.\n` : '') +
+    `Try "Moving sun": lighting and shadows need the 3D model.`;
+  msg.textContent = `Solved. Switched to the 3D model view. Reprojection error ${rms.toFixed(1)} px.`;
+  fx['3d'].key = 'sun';
+  applyEffect(PRESETS.sun.code, PRESETS.sun.name, '3d');
+  setMethod('3d');
+}
+
+function solveGroups(groups, H, D, shift0 = 0) {
+  const nb = groups.length;
+  const camOf = (p) => ({ x: 0, y: H, z: D, yaw: p[0], pitch: p[1], roll: p[2], fov: p[3], shift: p[4] });
+  const boxOf = (p, j) => ({ x: p[5 + 6 * j], z: p[6 + 6 * j], w: Math.abs(p[7 + 6 * j]), h: Math.abs(p[8 + 6 * j]), d: Math.abs(p[9 + 6 * j]), yaw: p[10 + 6 * j] });
+  // a corner sitting on the frame border was clipped by the frame, not a real corner: give it no weight
+  const onBorder = ([x, y]) => Math.abs(x) < 4 || Math.abs(y) < 4 || Math.abs(x - PROJ_W) < 4 || Math.abs(y - PROJ_H) < 4;
+  // ...but it does say the face continues past that edge, so the real corner must project beyond it
+  const clipOf = ([x, y]) => [x < 4 ? -1 : x > PROJ_W - 4 ? 1 : 0, y < 4 ? -1 : y > PROJ_H - 4 ? 1 : 0];
+  const flat = []; groups.forEach((g, j) => g.forEach((s) => flat.push({ j, pins: s.pins, clip: s.pins.map(clipOf), wt: s.pins.map((q, m) => (onBorder(q) ? 0 : s.pinW ? s.pinW[m] : 1)) })));
+
+  function assign(p) {
+    const cam = camOf(p);
+    return flat.map((s) => {
+      const b = boxOf(p, s.j);
+      let best = { f: 0, perm: PERMS[0], e: Infinity };
+      for (let f = 0; f < 5; f++) {
+        const pr = faceCorners(b, f).map((c) => camProject(cam, c));
+        if (pr.some((q) => !q)) continue;
+        for (const perm of PERMS) {
+          let e = 0; for (let k = 0; k < 4; k++) { const q = pr[perm[k]]; e += s.wt[k] * ((q[0] - s.pins[k][0]) ** 2 + (q[1] - s.pins[k][1]) ** 2); }
+          if (e < best.e) best = { f, perm, e };
+        }
+      }
+      return best;
+    });
+  }
+  function residuals(p, asg) {
+    const cam = camOf(p), r = [];
+    flat.forEach((s, k) => {
+      const pr = faceCorners(boxOf(p, s.j), asg[k].f).map((c) => camProject(cam, c));
+      for (let m = 0; m < 4; m++) {
+        const q = pr[asg[k].perm[m]], w = s.wt[m], [cx, cy] = s.clip[m];
+        if (!q) { r.push(300, 300); continue; }
+        if (cx || cy) {                                   // one-sided: only penalise falling short of the frame edge
+          r.push(cx < 0 ? Math.max(0, q[0]) : cx > 0 ? Math.max(0, PROJ_W - q[0]) : (q[0] - s.pins[m][0]) * w,
+                 cy < 0 ? Math.max(0, q[1]) : cy > 0 ? Math.max(0, PROJ_H - q[1]) : (q[1] - s.pins[m][1]) * w);
+        } else r.push((q[0] - s.pins[m][0]) * w, (q[1] - s.pins[m][1]) * w);
+      }
+    });
+    // weak priors: little lens shift and roll; projector square to the wall (without the wall in view,
+    // turning the whole scene about the projector changes nothing in the image, so this picks one answer)
+    // Huber: past 6 px a corner's pull grows linearly, so one surface that isn't a box face can't drag the solve
+    for (let k = 0; k < flat.length * 8; k++) { const a = Math.abs(r[k]); if (a > 6) r[k] = Math.sign(r[k]) * Math.sqrt(12 * a - 36); }
+    r.push((p[4] - shift0) * 3000, p[2] * 50, p[0] * 30);   // the offset is known from the spec sheet
+    for (let j = 0; j < nb; j++) {
+      const b = boxOf(p, j);
+      for (const v of [b.w, b.h, b.d]) r.push(v < 0.05 ? (0.05 - v) * 2000 : 0);
+      r.push((b.d - 0.4) * 2);                          // depth is weakly pulled to 40 cm when no top or side is mapped
+      const back = Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => toWorld(b, sx * b.w / 2, 0, sz * b.d / 2)[2]));
+      r.push(back < 0 ? -back * 500 : 0);               // boxes can't go through the wall
+    }
+    return r;
+  }
+  const sq = (r) => r.reduce((a, v) => a + v * v, 0);
+  function lm(p, iters) {
+    let lambda = 1e-2, asg = assign(p), r = residuals(p, asg), cost = sq(r);
+    for (let it = 0; it < iters; it++) {
+      asg = assign(p); r = residuals(p, asg); cost = sq(r);
+      const n = p.length, J = [];
+      for (let k = 0; k < n; k++) { const h = 1e-5, q = p.slice(); q[k] += h; const r2 = residuals(q, asg); J.push(r2.map((v, i) => (v - r[i]) / h)); }
+      const A = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => J[a].reduce((s, v, i) => s + v * J[b][i], 0)));
+      const g = J.map((col) => col.reduce((s, v, i) => s + v * r[i], 0));
+      let improved = false;
+      for (let tries = 0; tries < 6 && !improved; tries++) {
+        const Ad = A.map((row, a) => row.map((v, b) => (a === b ? v * (1 + lambda) + 1e-9 : v)));
+        const delta = solveLinear(Ad, g.map((v) => -v));
+        if (!delta) { lambda *= 10; continue; }
+        const q = p.map((v, k) => v + delta[k]);
+        const c2 = sq(residuals(q, asg));
+        if (c2 < cost) { p = q; cost = c2; lambda = Math.max(1e-7, lambda / 3); improved = true; } else lambda *= 5;
+      }
+      if (!improved) break;
+    }
+    return { p, cost };
+  }
+  function initBoxes(cam) {
+    return groups.map((g) => {
+      const pts = []; g.forEach((s) => s.pins.forEach((q) => { if (!pts.some((u) => Math.hypot(u[0] - q[0], u[1] - q[1]) < 6)) pts.push(q); }));
+      pts.sort((a, b) => b[1] - a[1]);
+      const floorHit = (q) => { const { o, d } = camRay(cam, ...q); if (d[1] >= -1e-4) return null; const t = -o[1] / d[1]; return [o[0] + d[0] * t, 0, o[2] + d[2] * t]; };
+      const A = floorHit(pts[0]), B = floorHit(pts[1] || pts[0]);
+      if (!A || !B) return [0, 1, 0.4, 0.4, 0.4, 0];
+      let ex = B[0] - A[0], ez = B[2] - A[2]; const w = Math.max(0.1, Math.min(2, Math.hypot(ex, ez)));
+      ex /= w || 1; ez /= w || 1;
+      let yaw = Math.atan2(-ez, ex);
+      let n = [Math.sin(yaw), Math.cos(yaw)];             // box front (local +z) in world xz
+      const mid = [(A[0] + B[0]) / 2, (A[2] + B[2]) / 2];
+      if (n[0] * (cam.x - mid[0]) + n[1] * (cam.z - mid[1]) < 0) { yaw += Math.PI; n = [-n[0], -n[1]]; }
+      const top = pts[pts.length - 1], { o, d } = camRay(cam, ...top);
+      const den = d[0] * n[0] + d[2] * n[1];
+      const tt = Math.abs(den) > 1e-6 ? ((mid[0] - o[0]) * n[0] + (mid[1] - o[2]) * n[1]) / den : 0;
+      const h = Math.max(0.1, Math.min(2.5, o[1] + d[1] * tt));
+      return [mid[0] - n[0] * 0.2, mid[1] - n[1] * 0.2, w, h, 0.4, yaw];
+    }).flat();
+  }
+  // a few starting guesses for aim and lens, keep the best
+  let best = null;
+  for (const pitch of [-5, -12, -20, -28, -36]) for (const fov of [24, 32, 40, 50]) {
+    const cam0 = [0, pitch * D2R, 0, fov * D2R, shift0];
+    const p0 = cam0.concat(initBoxes(camOf(cam0)));
+    const r = lm(p0, 10);
+    if (!best || r.cost < best.cost) best = r;
+  }
+  const fin = lm(best.p, 80);
+  const asg = assign(fin.p), r = residuals(fin.p, asg);
+  const groupErr = groups.map(() => [0, 0]);
+  let pinSq = 0, pinN = 0;
+  flat.forEach((s, k) => { for (let m = 0; m < 8; m++) { const w = s.wt[m >> 1]; groupErr[s.j][0] += r[k * 8 + m] ** 2; groupErr[s.j][1] += w; pinSq += r[k * 8 + m] ** 2; pinN += w; } });
+  const boxes = groups.map((_, j) => { const b = boxOf(fin.p, j); return { x: b.x, z: b.z, w: b.w, h: b.h, d: b.d, yaw: Math.atan2(Math.sin(b.yaw), Math.cos(b.yaw)) }; });
+  return { cam: camOf(fin.p), boxes, rms: Math.sqrt(pinSq / Math.max(1, pinN)), groupRms: groupErr.map(([e, n]) => Math.sqrt(e / Math.max(1, n))) };
+}
+$('solve3d').onclick = () => solve3D();
+
+// ---------- console UI ----------
+function selectTab(which) {
+  const manual = which === 'manual';
+  $('tabManual').setAttribute('aria-selected', String(manual));
+  $('tabScan').setAttribute('aria-selected', String(!manual));
+  $('paneManual').style.display = manual ? 'grid' : 'none';
+  $('paneScan').style.display = manual ? 'none' : 'grid';
+}
+$('tabManual').onclick = () => selectTab('manual');
+$('tabScan').onclick = () => selectTab('scan');
+
+const BOX_FIELDS = [
+  ['x', 'Left / right', -2.2, 2.2, 0.005, 'm'], ['z', 'Out from wall', 0.05, 2.5, 0.005, 'm'],
+  ['w', 'Width', 0.05, 1.6, 0.005, 'm'], ['h', 'Height', 0.05, 2.2, 0.005, 'm'], ['d', 'Depth', 0.05, 1.6, 0.005, 'm'],
+  ['yaw', 'Rotation', -90, 90, 0.5, 'deg'],
+];
+function renderBoxUI() {
+  const list = $('boxList');
+  list.innerHTML = '';
+  state.model.forEach((b, i) => {
+    const el = document.createElement('button');
+    el.className = 'chip'; el.textContent = 'Box ' + (i + 1);
+    el.setAttribute('aria-pressed', String(i === state.sel));
+    el.onclick = () => { state.sel = i; rebuildModel(); };
+    list.appendChild(el);
+  });
+  if (!state.model.length) list.innerHTML = '<span class="note">No boxes yet. Add one, or run a depth scan.</span>';
+  const sl = $('boxSliders');
+  const b = state.model[state.sel];
+  if (!b) { sl.innerHTML = state.model.length ? '<span class="note" style="grid-column:1/-1">Select a box to size it.</span>' : ''; return; }
+  if (sl.dataset.sel !== String(state.sel) || !sl.children.length || sl.children.length < 3) {
+    sl.innerHTML = '';
+    for (const [k, label, min, max, step] of BOX_FIELDS) {
+      const id = 'f_' + k;
+      sl.insertAdjacentHTML('beforeend', `<label for="${id}">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}"><output id="${id}o"></output>`);
+      $(id).addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        state.model[state.sel][k] = k === 'yaw' ? v * D2R : v;
+        rebuildModel();
+      });
+    }
+    sl.dataset.sel = String(state.sel);
+  }
+  for (const [k, , , , , unit] of BOX_FIELDS) {
+    const v = k === 'yaw' ? b.yaw / D2R : b[k];
+    const inp = $('f_' + k);
+    if (document.activeElement !== inp) inp.value = v;
+    $('f_' + k + 'o').textContent = unit === 'deg' ? v.toFixed(1) + '°' : (v * 100).toFixed(1) + ' cm';
+  }
+}
+$('addBox').onclick = () => {
+  if (state.model.length >= MAX_BOXES) return;
+  state.model.push({ x: 0, z: 0.7, w: 0.4, h: 0.4, d: 0.4, yaw: 0 });
+  state.sel = state.model.length - 1; rebuildModel();
+};
+$('delBox').onclick = () => { if (state.sel < 0) return; state.model.splice(state.sel, 1); state.sel = -1; rebuildModel(); };
+$('scramble').onclick = () => {
+  const j = (s) => (Math.random() * 2 - 1) * s;
+  state.model.forEach((b) => { b.x += j(0.08); b.z = Math.max(0.05, b.z + j(0.06)); b.w *= 1 + j(0.1); b.h *= 1 + j(0.1); b.d *= 1 + j(0.1); b.yaw += j(8) * D2R; });
+  rebuildModel();
+};
+$('clearModel').onclick = () => { state.model = []; state.sel = -1; rebuildModel(); };
+$('runScan').onclick = () => runScan();
+$('newLayout').onclick = () => { state.real = randomLayout(); rebuildReal(); targetMask = null; updateAlignment(); scheduleCoverage(); };
+
+function randomLayout() {
+  const out = [];
+  let tries = 0;
+  const n = 3 + Math.floor(Math.random() * 3);
+  while (out.length < n && tries++ < 400) {
+    const w = 0.3 + Math.random() * 0.6, d = 0.3 + Math.random() * 0.4, h = 0.3 + Math.random() * 1.1;
+    const b = { x: -1.5 + Math.random() * 3, z: d / 2 + 0.03 + Math.random() * 0.9, w, h, d, yaw: (Math.random() * 2 - 1) * 35 * D2R };
+    const rad = Math.hypot(w, d) / 2;
+    b.z = Math.max(b.z, rad + 0.03);
+    if (out.every((o) => Math.hypot(o.x - b.x, o.z - b.z) > rad + Math.hypot(o.w, o.d) / 2 + 0.06)) out.push(b);
+  }
+  return out;
+}
+
+function bindRange(id, key, fmt, after) {
+  const el = $(id), out = $(id + 'Out');
+  const show = () => { out.textContent = fmt(state[key]); };
+  el.addEventListener('input', () => { state[key] = parseFloat(el.value); show(); after && after(); });
+  el.value = state[key]; show();
+}
+bindRange('ambient', 'ambient', (v) => Math.round(v * 100 / 0.6) + '%', () => { roomMat.uniforms.uAmbient.value = state.ambient; });
+bindRange('lumens', 'lumens', (v) => Math.round(v * 100) + '%', () => { roomMat.uniforms.uLumens.value = state.lumens; });
+bindRange('projErr', 'projErr', (v) => v.toFixed(1) + ' cm', () => { updateModelProjector(); updateAlignment(); });
+bindRange('noise', 'noise', (v) => v.toFixed(1) + '×');
+function bindCheck(id, key, after) { const el = $(id); el.checked = state[key]; el.addEventListener('change', () => { state[key] = el.checked; after && after(); }); }
+bindCheck('showModel', 'showModel', () => { modelWire.visible = state.method === '3d' && state.showModel; });
+bindCheck('showFrustum', 'showFrustum', () => { frustum.visible = state.showFrustum; });
+bindCheck('showCloud', 'showCloud', () => { if (cloud) cloud.visible = state.method === '3d' && state.showCloud; });
+bindCheck('snap', 'snap');
+bindCheck('showHandles', 'showHandles');
+bindCheck('paused', 'paused');
+
+// presets
+const presetRow = $('presets');
+function renderPresets() {
+  presetRow.innerHTML = '';
+  for (const [key, p] of Object.entries(state.method === '2d' ? PRESETS2 : PRESETS)) {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = p.name; b.dataset.preset = key;
+    b.onclick = () => { fx[state.method].key = key; applyEffect(p.code, p.name); markPreset(); };
+    presetRow.appendChild(b);
+  }
+  markPreset();
+}
+function markPreset() { presetRow.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.preset === fx[state.method].key))); }
+$('applyCode').onclick = () => { fx[state.method].key = 'custom'; markPreset(); applyEffect($('code').value, 'Custom'); };
+
+// ---------- AI in the loop ----------
+const IDEAS = {
+  '3d': [
+    ['Aquarium', 'Aquarium: each box is a tank at a different water level, fish swim along the wall'],
+    ['Searchlight', 'Wooden crates lit by a slow searchlight that casts shadows on the wall'],
+    ['Power-up', 'A neon city that powers up one box at a time, tallest last'],
+    ['Book pages', 'Each box is a stack of glowing book pages turning'],
+  ],
+  '2d': [
+    ['Stained glass', 'Each surface is a stained glass window that glows as a beam of sunlight sweeps across all of them'],
+    ['Equalizer', 'Surfaces pulse like a music equalizer, one bar per surface, on a beat every half second'],
+    ['Falling blocks', 'Blocks fall and stack up inside each surface, following its perspective'],
+    ['Aurora', 'A green and violet aurora drifts across all the surfaces as one continuous sky'],
+  ],
+};
+function renderIdeas() {
+  const row = $('ideas');
+  row.innerHTML = '';
+  IDEAS[state.method].forEach(([label, t]) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = label;
+    b.title = t; b.onclick = () => { $('prompt').value = t; };
+    row.appendChild(b);
+  });
+  $('prompt').placeholder = IDEAS[state.method][0][1];
+}
+
+function describeScene() {
+  return state.model.map((b, i) =>
+    `box ${i} (obj=${i + 2}): center x=${b.x.toFixed(2)} z=${b.z.toFixed(2)}, width ${b.w.toFixed(2)} m, height ${b.h.toFixed(2)} m, depth ${b.d.toFixed(2)} m, yaw ${(b.yaw / D2R).toFixed(0)}°`
+  ).join('\n') || '(no boxes mapped)';
+}
+function describeSurfaces() {
+  return geom2.map((g, i) => {
+    const xs = g.parts[0].px.map((q) => q[0]), ys = g.parts[0].px.map((q) => q[1]);
+    const info = flatUniforms.uSurfInfo.value[i];
+    const cuts = g.parts.filter((p) => p.op < 0).length;
+    return `surface ${i}: roughly ${Math.round(info.z)} x ${Math.round(info.w)} px, centered near (${Math.round((Math.min(...xs) + Math.max(...xs)) / 2)}, ${Math.round((Math.min(...ys) + Math.max(...ys)) / 2)}) px` + (cuts ? `, ${cuts} cut-out${cuts > 1 ? 's' : ''}` : '');
+  }).join('\n') || '(no surfaces yet)';
+}
+function buildPrompt2D(request) {
+  return `You write GLSL ES 3.00 fragment-shader effects for a 2D projection-mapping app. There is no 3D model. The user has traced flat physical surfaces as shapes directly in the projector's 1280x720 image, and the app draws your effect inside each shape. Use s.uv for content that belongs to one surface and should follow its perspective (it is perspective-correct for a flat surface). Use s.screen for motion that should flow continuously across neighboring surfaces. Use s.edge for outlines and glows. Use s.id and s.count to give surfaces different roles or to sequence them.
+
+Already defined for you (do not redeclare any of it):
+${FLAT_HEAD.replace(/^precision.*$/gm, '').replace(/^uniform .*$/gm, '').replace(/^out .*$/gm, '').trim()}
+
+Surfaces (projector pixels, y down):
+${describeSurfaces()}
+
+Write the function
+vec3 effect2(Surf2 s, float t)
+where t is seconds. Return RGB in 0..1. Black means the projector emits nothing. Projected light reads best as bright accents on darkness. You may add helper functions above effect2() with unique names. Keep loops under 64 iterations, use no textures, and make it animate.
+
+The look to create: ${request}
+
+Reply with one \`\`\`glsl code block and nothing else.`;
+}
+function buildPrompt(request) {
+  if (state.method === '2d') return buildPrompt2D(request);
+  return `You write GLSL ES 3.00 fragment-shader effects for a projection-mapping app. A projector lights a real wall, floor, and some boxes standing on the floor in front of the wall. The app knows the 3D geometry, so effects are written in world space and the app renders them from the projector's viewpoint, which makes them land correctly on every surface. Continuity across box edges comes for free when you use world-space coordinates (s.P); use per-face coordinates (s.uv * s.size, meters) for things that should sit on one face at true physical scale.
+
+Already defined for you (do not redeclare any of it):
+${SURF_HEAD.replace(/^precision.*$/gm, '').replace(/^in .*$/gm, '').replace(/^out .*$/gm, '').trim()}
+
+Scene (meters; wall is z=0, floor is y=0, +z points toward the audience and projector, +y up, +x to the audience's right):
+${describeScene()}
+
+Write the function
+vec3 effect(Surf s, float t)
+where t is seconds. Return RGB in 0..1. Black means the projector emits nothing there; projected light reads best as bright accents on darkness, and the boxes are the stars, so keep the wall and floor mostly dark unless the idea needs them. You may add helper functions above effect() with unique names. Keep loops under 64 iterations, use no textures, and make it animate.
+
+The look to create: ${request}
+
+Reply with one \`\`\`glsl code block and nothing else.`;
+}
+function extractCode(text) {
+  const m = text.match(/```(?:glsl)?\s*\n([\s\S]*?)```/);
+  return (m ? m[1] : text).trim();
+}
+
+let sampleFn = null, aiCtl = null;
+(async () => {
+  if (!window.claude || typeof window.claude.use !== 'function') { $('aiBlock').hidden = true; $('aiOff').hidden = false; return; }
+  try { sampleFn = await window.claude.use('sample'); } catch { sampleFn = null; }
+  if (!sampleFn) { $('aiBlock').hidden = true; $('aiOff').hidden = false; }
+})();
+
+const AI_ERRORS = {
+  not_granted: 'Claude access was declined for this page. Shader editing still works.',
+  rate_limited: 'Too many requests right now. Wait a minute and try again.',
+  cancelled: 'Stopped.',
+};
+$('generate').onclick = async () => {
+  const req = $('prompt').value.trim() || $('prompt').placeholder;
+  if (!sampleFn) return;
+  const gen = $('generate'), stop = $('stopGen'), status = $('codeStatus');
+  gen.disabled = true; stop.hidden = false; status.className = ''; status.textContent = 'Thinking…';
+  $('codeDetails').open = true;
+  aiCtl = new AbortController();
+  try {
+    const prompt = buildPrompt(req);
+    const { text } = await sampleFn(prompt, { signal: aiCtl.signal, onText: ({ text }) => { status.textContent = 'Writing shader…'; $('code').value = extractCode(text); } });
+    let code = extractCode(text);
+    let res = applyEffect(code, 'Claude: ' + req.slice(0, 32));
+    if (!res.ok) {
+      // one repair round with the compiler log
+      status.className = ''; status.textContent = 'Fixing a compile error…';
+      const fix = await sampleFn([
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: '```glsl\n' + code + '\n```' },
+        { role: 'user', content: 'That failed to compile with:\n' + res.log + '\nReturn the corrected function in one ```glsl block.' },
+      ], { signal: aiCtl.signal });
+      code = extractCode(fix.text);
+      res = applyEffect(code, 'Claude: ' + req.slice(0, 32));
+    }
+    if (res.ok) { fx[state.method].key = 'custom'; markPreset(); }
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = AI_ERRORS[e && e.code] || ('Claude could not generate a shader: ' + ((e && e.message) || 'unknown error'));
+  } finally {
+    gen.disabled = false; stop.hidden = true; aiCtl = null;
+  }
+};
+$('stopGen').onclick = () => aiCtl && aiCtl.abort();
+
+// ---------- render loop ----------
+function resize() {
+  fitProj();
+  const r = roomCanvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (roomCanvas.width !== Math.round(w * roomR.getPixelRatio()) || roomCanvas.height !== Math.round(h * roomR.getPixelRatio())) {
+    roomR.setSize(w, h, false); roomCam.aspect = w / h; roomCam.updateProjectionMatrix();
+  }
+}
+
+let last = performance.now(), simT = 0, frames = 0, fpsT = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!state.paused) simT += dt;
+  surfUniforms.uTime.value = simT;
+  frames++; fpsT += dt;
+  if (fpsT > 1) { $('fps').textContent = `Room view · ${Math.round(frames / fpsT)} fps · drag to orbit`; frames = 0; fpsT = 0; }
+
+  resize(); applyOrbit();
+  roomMat.uniforms.uProjVP.value.multiplyMatrices(trueProj.projectionMatrix, trueProj.matrixWorldInverse);
+
+  // 1. depth of the real room from the real projector (for projector shadows)
+  realScene.overrideMaterial = depthOnly;
+  roomR.setRenderTarget(depthRT); roomR.clear(); roomR.render(realScene, trueProj);
+  realScene.overrideMaterial = null;
+  // 2. the content: 3D mode renders the model from where the app thinks the projector is;
+  //    2D mode draws the traced shapes straight into projector pixels
+  const content = state.capturing ? { scene: patternScene, mat: patternMat }
+    : state.method === '2d' ? { scene: flatScene, mat: fx['2d'].mat } : { scene: modelScene, mat: fx['3d'].mat };
+  flatUniforms.uView.value.set(PROJ_W, PROJ_H);
+  if (content.mat) { roomR.setRenderTarget(contentRT); roomR.setClearColor(0x000000, 1); roomR.clear(); roomR.render(content.scene, modelProj); }
+  // 3. the room as an audience member sees it
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1); roomR.clear();
+  roomR.render(realScene, roomCam);
+  roomR.autoClear = false; roomR.render(overlayScene, roomCam); roomR.autoClear = true;
+
+  // projector output preview (its own WebGL context)
+  flatUniforms.uView.value.set(PROJ_W / 2, PROJ_H / 2);
+  if (content.mat) projR.render(content.scene, modelProj);
+  drawOverlay();
+  requestAnimationFrame(frame);
+}
+
+// ---------- boot ----------
+rebuildReal();
+rebuildFrustum();
+updateModelProjector();
+setView('audience');
+applyEffect(PRESETS2.outline.code, PRESETS2.outline.name, '2d');
+applyEffect(PRESETS.city.code, PRESETS.city.name, '3d');
+resize();
+runScan();
+placePhotoCam();
+setMethod('3d');
+setEdit2('warp');
+requestAnimationFrame(frame);
+window.__sandbox = { lastScan: () => lastScan, solveGroups, runCapture, solve3D, camProject, solveLinear, fitHomography, state, runScan, applyEffect, PRESETS, PRESETS2, checkCompile, fragFor, frag2For, setMethod, sync2D, squareToQuad, hApply, inv3, FLAT_VERT, SURF_VERT, updateCoverage, surfacesFrom3D };
+</script>
+</body>
+</html>
