@@ -17,12 +17,19 @@ viewpoint, so they come out pre-warped and continuous across edges.
   see that surface-bound content stays locked to the boxes from any seat.
 - **Projector output**: the exact image the projector emits. Click and drag
   boxes here to align them by hand.
-- **Surface map**: build the 3D model of the scene either with manual boxes or
-  a simulated depth scan (RANSAC wall/floor removal, clustering, oriented box
-  fitting) from a noisy sensor beside the projector.
-- **Content**: eight procedural shader effects written in world/face space,
+- **Surface map, two methods**:
+  - *3D model*: manual boxes or a simulated depth scan (RANSAC wall/floor
+    removal, clustering, oriented box fitting) from a noisy sensor beside the
+    projector.
+  - *2D surfaces*: shapes traced directly in the projector's frame (squares,
+    circles, triangles), warped by four corner pins (a homography, so content
+    is perspective-correct on flat surfaces), combined or cut out, with
+    editable points. No calibration needed. A coverage score shows how much of
+    the real boxes the surfaces cover. *Enlarge* makes the projector canvas
+    the big view for editing.
+- **Content**: procedural shader effects for each method (eight in 3D, six in 2D),
   an editable GLSL panel, and (when opened as a published Claude artifact)
   "Generate with Claude", which writes a new shader from a text prompt using
-  the scene's actual box dimensions, with one automatic compile-error repair.
+  the scene's actual box dimensions or traced surfaces, with one automatic compile-error repair.
 - **Projector pose error**: simulates imperfect calibration to show how
   sensitive alignment is.

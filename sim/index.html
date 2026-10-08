@@ -47,6 +47,14 @@ section { padding: 14px 16px; border-bottom: 1px solid var(--line); display: gri
 h2 { margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 h2 small { font: 11px var(--mono); text-transform: none; letter-spacing: 0; }
 .proj-wrap { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.slot > .view { position: relative; aspect-ratio: 16 / 10; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: #07090d; }
+.stage > .view { position: absolute; inset: 0; }
+.stage > .proj-wrap { position: absolute; inset: 0; margin: auto; border-radius: 0; }
+.slot > .view .hud-bottom { display: none; }
+.btn.mini { padding: 2px 8px; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.subhead { font-size: 12px; color: var(--muted); min-width: 70px; }
+select.btn { padding: 4px 6px; }
+#proj.edit2d { cursor: default; }
 .proj-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #projOverlay { pointer-events: none; }
 #proj { touch-action: none; cursor: crosshair; }
@@ -91,10 +99,11 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 <div class="app">
   <header>
     <h1>Projection Mapping <span>Sandbox</span></h1>
-    <p>A virtual room, a virtual projector, and graphics written onto the 3D surfaces so the projector image comes out pre-warped.</p>
+    <p>A virtual room and projector for testing two ways to map real surfaces: a 3D model of the scene, or flat shapes traced directly in the projector's image.</p>
   </header>
 
-  <div class="stage">
+  <div class="stage" id="stage">
+    <div class="view" id="roomWrap">
     <canvas id="room" aria-label="Room view: drag to orbit, scroll or pinch to zoom"></canvas>
     <div class="hud" role="toolbar" aria-label="Room camera">
       <button class="chip" data-view="audience" aria-pressed="true">Audience</button>
@@ -106,22 +115,31 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
       <span id="fps">Room view · drag to orbit</span>
       <span id="alignReadout">Alignment …</span>
     </div>
+    </div>
   </div>
 
   <aside class="console">
     <section>
-      <h2>Projector output <small id="projRes">1280 × 720</small></h2>
-      <div class="proj-wrap">
-        <canvas id="proj" aria-label="Projector output: click a box to select it, drag to move it, scroll to rotate"></canvas>
-        <canvas id="projOverlay"></canvas>
+      <h2>Projector output <span class="row"><small id="projRes">1280 × 720</small><button class="btn mini" id="swapViews">Enlarge</button></span></h2>
+      <div class="slot" id="projSlot">
+        <div class="proj-wrap" id="projWrap">
+          <canvas id="proj" aria-label="Projector output and editing canvas"></canvas>
+          <canvas id="projOverlay"></canvas>
+        </div>
       </div>
-      <p class="note">This image is exactly what the projector emits. Click a box outline to select it, drag to slide it along the floor, scroll to rotate it.</p>
-      <label class="check"><input type="checkbox" id="showHandles" checked> Show box outlines on this preview (not projected)</label>
+      <p class="note" id="projNote"></p>
+      <label class="check"><input type="checkbox" id="showHandles" checked> Show outlines and handles on this preview (not projected)</label>
     </section>
 
     <section>
       <h2>Surface map</h2>
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" aria-label="Mapping method">
+        <button role="tab" id="tab3d" aria-selected="true">3D model</button>
+        <button role="tab" id="tab2d" aria-selected="false">2D surfaces</button>
+      </div>
+
+      <div id="pane3d" style="display:grid;gap:10px">
+      <div class="tabs" role="tablist" aria-label="3D model source">
         <button role="tab" id="tabManual" aria-selected="false">Manual boxes</button>
         <button role="tab" id="tabScan" aria-selected="true">Depth scan</button>
       </div>
@@ -148,6 +166,28 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
           <button class="btn" id="clearModel">Start empty</button>
         </div>
         <div class="sliders" id="boxSliders"></div>
+      </div>
+      </div>
+
+      <div id="pane2d" style="display:none;gap:10px">
+        <p class="note">No 3D model and no projector calibration. The preview above is a blank canvas covering the projector's whole frame. Add a shape, see where it lands in the room, then drag it and its corners onto a real flat surface.</p>
+        <div class="row"><span class="subhead">New surface</span>
+          <button class="btn" data-add="square">Square</button><button class="btn" data-add="circle">Circle</button><button class="btn" data-add="triangle">Triangle</button>
+        </div>
+        <div class="row"><span class="subhead">Handles</span>
+          <div class="tabs" role="tablist" aria-label="Handle mode" style="flex:1"><button role="tab" id="edWarp" aria-selected="true">Warp corners</button><button role="tab" id="edPoints" aria-selected="false">Edit points</button></div>
+        </div>
+        <div class="row"><span class="subhead">Combine</span>
+          <select id="partShape" class="btn" aria-label="Shape to combine"><option value="square">Square</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
+          <button class="btn" id="partAdd">Add to surface</button><button class="btn" id="partCut">Cut out</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="delPoint">Delete point</button><button class="btn" id="delSurface">Delete surface</button>
+          <button class="btn" id="from3d">Start from 3D boxes</button><button class="btn" id="clear2d">Clear all</button>
+        </div>
+        <label class="check"><input type="checkbox" id="snap" checked> Snap to nearby corners, so neighboring surfaces share edges</label>
+        <p class="note" id="hint2d"></p>
+        <pre class="stats" id="stats2d"></pre>
       </div>
     </section>
 
@@ -221,7 +261,14 @@ const state = {
   showHandles: true,
   paused: false,
   noise: 1,
-  effect: 'city',
+  method: '3d',
+  surfaces: [],
+  sel2: -1,
+  selPin: -1,
+  selVert: null,
+  edit2: 'warp',
+  snap: true,
+  seeded2d: false,
 };
 
 const DEFAULT_REAL = [
@@ -305,6 +352,20 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`;
 
+const COMMON_GLSL = /* glsl */`
+const float PI = 3.14159265;
+float hash1(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash1(i), hash1(i + vec3(1,0,0)), f.x), mix(hash1(i + vec3(0,1,0)), hash1(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash1(i + vec3(0,0,1)), hash1(i + vec3(1,0,1)), f.x), mix(hash1(i + vec3(0,1,1)), hash1(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p *= 2.02; a *= 0.5; } return s; }
+vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
+vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
+`;
+
 const SURF_HEAD = /* glsl */`
 precision highp float; precision highp int;
 uniform float uTime;
@@ -329,18 +390,7 @@ struct Surf {
   float edge;  // distance to the nearest edge of this face, meters
 };
 
-const float PI = 3.14159265;
-float hash1(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float noise(vec3 x) {
-  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(hash1(i), hash1(i + vec3(1,0,0)), f.x), mix(hash1(i + vec3(0,1,0)), hash1(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(hash1(i + vec3(0,0,1)), hash1(i + vec3(1,0,1)), f.x), mix(hash1(i + vec3(0,1,1)), hash1(i + vec3(1,1,1)), f.x), f.y), f.z);
-}
-float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p *= 2.02; a *= 0.5; } return s; }
-vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
-vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
-vec3 toLocal(vec3 v, float yaw) { float c = cos(yaw), s = sin(yaw); return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
+${COMMON_GLSL}vec3 toLocal(vec3 v, float yaw) { float c = cos(yaw), s = sin(yaw); return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
 // distance along the ray to box i, or -1.0 if missed
 float rayBox(vec3 ro, vec3 rd, int i) {
   vec4 A = uBoxA[i]; vec4 B = uBoxB[i];
@@ -481,6 +531,127 @@ const PRESETS = {
 }` },
 };
 
+// ---------- 2D surface shaders ----------
+const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_VERTS = 2048, EDGE_MARGIN = 64;
+
+const FLAT_VERT = /* glsl */`
+precision highp float;
+in vec3 position;
+void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const FLAT_HEAD = /* glsl */`
+precision highp float; precision highp int; precision highp sampler2D;
+uniform float uTime;
+uniform vec2 uRes;
+uniform sampler2D uPoly;
+uniform int uSurfCount;
+uniform mat3 uHinv[${MAX_SURF}];
+uniform vec4 uSurfInfo[${MAX_SURF}];
+uniform vec4 uPart[${MAX_PARTS}];
+uniform vec4 uPartBox[${MAX_PARTS}];
+out vec4 outColor;
+
+struct Surf2 {
+  vec2 uv;      // 0..1 between the surface's four corner pins (u right, v up); perspective-correct on a flat surface
+  vec2 px;      // projector pixel, (0,0) top-left, 1280 x 720
+  vec2 screen;  // 0..1 across the whole projector frame (x right, y up); continuous across neighboring surfaces
+  float id;     // surface number, 0 = first added
+  float count;  // number of surfaces
+  float edge;   // distance to the surface's outline in projector pixels (exact up to ${EDGE_MARGIN} px)
+  vec2 size;    // rough surface size in projector pixels (width, height of its corner-pin quad)
+};
+${COMMON_GLSL}
+`;
+
+const FLAT_MAIN = /* glsl */`
+float segDist(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0); return length(pa - ba * h); }
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec3 col = vec3(0.0);
+  for (int si = ${MAX_SURF - 1}; si >= 0; si--) {   // topmost surface wins
+    if (si >= uSurfCount) continue;
+    vec4 info = uSurfInfo[si];
+    int p0 = int(info.x), pc = int(info.y);
+    float D = ${EDGE_MARGIN}.0;                      // signed distance to the combined outline, negative inside
+    for (int j = 0; j < ${MAX_PARTS}; j++) {
+      if (j >= pc) break;
+      vec4 part = uPart[p0 + j]; vec4 bb = uPartBox[p0 + j];
+      float sd = ${EDGE_MARGIN}.0;
+      if (px.x >= bb.x && px.x <= bb.z && px.y >= bb.y && px.y <= bb.w) {
+        int v0 = int(part.x), vc = int(part.y);
+        bool pin = false; float md = 1e6;
+        vec2 a = texelFetch(uPoly, ivec2(v0 + vc - 1, 0), 0).xy;
+        for (int k = 0; k < ${MAX_PART_VERTS}; k++) {
+          if (k >= vc) break;
+          vec2 b = texelFetch(uPoly, ivec2(v0 + k, 0), 0).xy;
+          if ((b.y > px.y) != (a.y > px.y) && px.x < (a.x - b.x) * (px.y - b.y) / (a.y - b.y) + b.x) pin = !pin;
+          md = min(md, segDist(px, a, b));
+          a = b;
+        }
+        sd = pin ? -md : min(md, ${EDGE_MARGIN}.0);
+      }
+      D = j == 0 ? sd : (part.z > 0.0 ? min(D, sd) : max(D, -sd));   // add = union, cut = subtract
+    }
+    if (D < 0.5) {
+      Surf2 s;
+      vec3 h = uHinv[si] * vec3(px, 1.0);
+      s.uv = h.xy / h.z; s.px = px; s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
+      s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
+      col = clamp(effect2(s, uTime), 0.0, 1.0) * clamp(0.5 - D, 0.0, 1.0);
+      break;
+    }
+  }
+  outColor = vec4(col, 1.0);
+}`;
+
+const PRESETS2 = {
+  outline: { name: 'Alignment grid', code: `vec3 effect2(Surf2 s, float t) {
+  // checkerboard in the surface's own uv plus a bright outline; the dot marks the first corner
+  vec3 col = hsv(fract(s.id * 0.13), 0.7, 1.0);
+  vec2 g = floor(s.uv * 8.0);
+  vec3 c = col * (0.12 + 0.22 * mod(g.x + g.y, 2.0));
+  c += vec3(1.0) * smoothstep(3.0, 1.0, s.edge);
+  c += vec3(1.0, 0.8, 0.3) * smoothstep(0.07, 0.05, length(s.uv));
+  return c;
+}` },
+  sequence: { name: 'Beat sequence', code: `vec3 effect2(Surf2 s, float t) {
+  // the classic projection-mapping move: surfaces flash one after another on the beat
+  float beat = floor(t * 2.0);
+  float on = s.id == mod(beat, max(s.count, 1.0)) ? 1.0 : 0.0;
+  vec3 col = hsv(fract(s.id * 0.17 + beat * 0.03), 0.75, 1.0);
+  return col * (on * (1.0 - fract(t * 2.0)) * 0.9 + exp(-s.edge / 4.0) * 0.6);
+}` },
+  sweep: { name: 'Screen sweep', code: `vec3 effect2(Surf2 s, float t) {
+  // defined across the whole projector frame, so it crosses shared edges with no seam
+  float x = s.screen.x * 1.6 + s.screen.y * 0.6 - mod(t * 0.45, 2.8) + 0.3;
+  vec3 c = vec3(0.2, 0.9, 1.0) * exp(-abs(x) * 16.0) + vec3(0.02, 0.03, 0.05);
+  c += vec3(0.6) * exp(-s.edge / 2.5) * 0.5;
+  return c;
+}` },
+  tiles: { name: 'Tiles', code: `vec3 effect2(Surf2 s, float t) {
+  // tile count follows each surface's size, and tiles follow its perspective
+  vec2 n = max(floor(s.size / 40.0), 1.0);
+  vec2 g = s.uv * n; vec2 id = floor(g); vec2 f = fract(g);
+  float h = hash2(id + s.id * 17.0);
+  float on = step(0.5, fract(h + floor(t * 0.7 + h * 5.0) * 0.31));
+  float tile = step(0.1, f.x) * step(f.x, 0.9) * step(0.1, f.y) * step(f.y, 0.9);
+  return tile * mix(vec3(0.05), hsv(0.08 + h * 0.1, 0.6, 1.0), on);
+}` },
+  trace: { name: 'Outline trace', code: `vec3 effect2(Surf2 s, float t) {
+  float a = atan(s.uv.y - 0.5, s.uv.x - 0.5);
+  float run = fract(a / 6.2832 - t * 0.3 + s.id * 0.21);
+  float pulse = smoothstep(0.0, 0.03, run) * smoothstep(0.2, 0.03, run);
+  vec3 col = hsv(fract(s.id * 0.13 + t * 0.02), 0.7, 1.0);
+  return col * exp(-s.edge / 3.0) * (0.4 + 2.0 * pulse) + col * 0.03;
+}` },
+  plasma: { name: 'Plasma', code: `vec3 effect2(Surf2 s, float t) {
+  vec2 p = s.screen * vec2(16.0 / 9.0, 1.0) * 3.0;
+  float v = sin(p.x * 2.0 + t) + sin(p.y * 3.0 - t * 1.3) + sin((p.x + p.y) * 2.0 + t * 0.7) + sin(length(p - 2.0) * 4.0 - t * 2.0);
+  vec3 c = pal(v * 0.15 + t * 0.05, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0, 0.33, 0.67));
+  return c * (0.6 + 0.4 * exp(-s.edge / 6.0));
+}` },
+};
+
 const ROOM_VERT = /* glsl */`
 precision highp float;
 in vec3 position; in vec3 normal; in vec3 color;
@@ -578,7 +749,30 @@ const surfUniforms = {
   uBoxB: { value: Array.from({ length: MAX_BOXES }, () => new THREE.Vector4()) },
   uBoxCount: { value: 0 },
 };
-let contentMat = null;
+const fx = {
+  '3d': { key: 'city', code: '', label: '', mat: null },
+  '2d': { key: 'outline', code: '', label: '', mat: null },
+};
+
+const polyData = new Float32Array(MAX_VERTS * 4);
+const polyTex = new THREE.DataTexture(polyData, MAX_VERTS, 1, THREE.RGBAFormat, THREE.FloatType);
+polyTex.minFilter = polyTex.magFilter = THREE.NearestFilter;
+const flatUniforms = {
+  uTime: surfUniforms.uTime,
+  uRes: { value: new THREE.Vector2(PROJ_W, PROJ_H) },
+  uPoly: { value: polyTex },
+  uSurfCount: { value: 0 },
+  uHinv: { value: Array.from({ length: MAX_SURF }, () => new THREE.Matrix3()) },
+  uSurfInfo: { value: Array.from({ length: MAX_SURF }, () => new THREE.Vector4()) },
+  uPart: { value: Array.from({ length: MAX_PARTS }, () => new THREE.Vector4()) },
+  uPartBox: { value: Array.from({ length: MAX_PARTS }, () => new THREE.Vector4()) },
+};
+const flatScene = new THREE.Scene();
+const flatGeo = new THREE.BufferGeometry();
+flatGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+const flatMesh = new THREE.Mesh(flatGeo, null);
+flatMesh.frustumCulled = false;
+flatScene.add(flatMesh);
 
 const realAlbedo = {
   wall: [0.72, 0.71, 0.69], floor: [0.34, 0.32, 0.3],
@@ -651,7 +845,7 @@ function rebuildModel() {
 }
 
 // ---------- shader compile with readable errors ----------
-function checkCompile(fragSrc) {
+function checkCompile(vertSrc, fragSrc) {
   const gl = roomR.getContext();
   const make = (type, src) => {
     const sh = gl.createShader(type);
@@ -660,7 +854,7 @@ function checkCompile(fragSrc) {
     const log = ok ? '' : gl.getShaderInfoLog(sh);
     return { sh, ok, log };
   };
-  const v = make(gl.VERTEX_SHADER, SURF_VERT), f = make(gl.FRAGMENT_SHADER, fragSrc);
+  const v = make(gl.VERTEX_SHADER, vertSrc), f = make(gl.FRAGMENT_SHADER, fragSrc);
   let ok = v.ok && f.ok, log = v.log + f.log;
   if (ok) {
     const p = gl.createProgram(); gl.attachShader(p, v.sh); gl.attachShader(p, f.sh); gl.linkProgram(p);
@@ -672,25 +866,37 @@ function checkCompile(fragSrc) {
 }
 
 function fragFor(userCode) { return SURF_HEAD + '\n#line 1\n' + userCode + '\n' + SURF_MAIN; }
+function frag2For(userCode) { return FLAT_HEAD + '\n#line 1\n' + userCode + '\n' + FLAT_MAIN; }
 
-function applyEffect(code, label) {
-  const src = fragFor(code);
-  const res = checkCompile(src);
+function applyEffect(code, label, method = state.method) {
+  const M = method === '2d'
+    ? { vert: FLAT_VERT, src: frag2For(code), uniforms: flatUniforms, mesh: flatMesh }
+    : { vert: SURF_VERT, src: fragFor(code), uniforms: surfUniforms, mesh: modelMesh };
+  const res = checkCompile(M.vert, M.src);
   const status = $('codeStatus');
+  const visible = method === state.method;
   if (!res.ok) {
-    status.className = 'err';
-    status.textContent = 'Shader did not compile. Line numbers refer to the code above.\n' + res.log;
+    if (visible) {
+      status.className = 'err';
+      status.textContent = 'Shader did not compile. Line numbers refer to the code above.\n' + res.log;
+    }
     return res;
   }
-  const mat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: SURF_VERT, fragmentShader: src, uniforms: surfUniforms });
-  if (contentMat) contentMat.dispose();
-  contentMat = mat;
-  modelMesh.material = mat;
-  status.className = '';
-  status.textContent = 'Projecting: ' + label;
-  $('effectName').textContent = label;
-  $('code').value = code;
+  const mat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: M.vert, fragmentShader: M.src, uniforms: M.uniforms });
+  const slot = fx[method];
+  if (slot.mat) slot.mat.dispose();
+  Object.assign(slot, { mat, code, label });
+  M.mesh.material = mat;
+  if (visible) showEffect();
   return res;
+}
+function showEffect() {
+  const slot = fx[state.method];
+  const status = $('codeStatus');
+  status.className = '';
+  status.textContent = slot.label ? 'Projecting: ' + slot.label : '';
+  $('effectName').textContent = slot.label;
+  $('code').value = slot.code;
 }
 
 // ---------- depth scan + box fitting ----------
@@ -865,6 +1071,7 @@ function runScan() {
 
 // ---------- alignment metric ----------
 function updateAlignment() {
+  if (state.method === '2d') return;
   const el = $('alignReadout');
   if (!state.model.length) { el.textContent = 'No surfaces mapped yet'; return; }
   let total = 0, n = 0, matched = 0;
@@ -936,6 +1143,7 @@ function projNDC(e) {
 {
   let drag = null;
   projCanvas.addEventListener('pointerdown', (e) => {
+    if (state.method === '2d') { projCanvas.setPointerCapture(e.pointerId); pointerDown2D(e); return; }
     raycaster.setFromCamera(projNDC(e), modelProj);
     const hit = raycaster.intersectObjects(pickGroup.children, false)[0];
     if (!hit) { state.sel = -1; rebuildModel(); return; }
@@ -947,6 +1155,7 @@ function projNDC(e) {
     rebuildModel();
   });
   projCanvas.addEventListener('pointermove', (e) => {
+    if (state.method === '2d') { pointerMove2D(e); return; }
     if (!drag) return;
     raycaster.setFromCamera(projNDC(e), modelProj);
     const p = new THREE.Vector3();
@@ -955,10 +1164,10 @@ function projNDC(e) {
     b.x = drag.x + (p.x - drag.start.x); b.z = Math.max(0.05, drag.z + (p.z - drag.start.z));
     rebuildModel();
   });
-  const end = () => { drag = null; };
+  const end = () => { drag = null; drag2 = null; };
   projCanvas.addEventListener('pointerup', end); projCanvas.addEventListener('pointercancel', end);
   projCanvas.addEventListener('wheel', (e) => {
-    if (state.sel < 0) return;
+    if (state.method === '2d' || state.sel < 0) return;
     e.preventDefault();
     state.model[state.sel].yaw += Math.sign(e.deltaY) * 1.5 * D2R;
     rebuildModel();
@@ -972,6 +1181,7 @@ function drawOverlay() {
   octx.clearRect(0, 0, overlay.width, overlay.height);
   if (!state.showHandles) return;
   const W = overlay.width, H = overlay.height;
+  if (state.method === '2d') { drawOverlay2D(W, H, dpr); return; }
   state.model.forEach((b, i) => {
     const c = boxCorners(b).map((p) => { const v = p.clone().project(modelProj); return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H]; });
     octx.strokeStyle = i === state.sel ? '#ffb547' : 'rgba(255,255,255,0.28)';
@@ -981,6 +1191,357 @@ function drawOverlay() {
     octx.stroke();
   });
 }
+
+// ---------- 2D surfaces: shapes traced in projector space ----------
+// A surface has four corner pins in projector pixels. They define a homography from the unit square,
+// so anything drawn in the surface's uv space lands perspective-correct on a flat physical surface.
+// Its outline is one or more parts (polygons in that uv space), each added (union) or cut out.
+const SHAPES = {
+  square: () => [[0, 0], [1, 0], [1, 1], [0, 1]],
+  triangle: () => [[0, 0], [1, 0], [0.5, 1]],
+  circle: () => Array.from({ length: 48 }, (_, i) => [0.5 + 0.5 * Math.cos(i / 48 * 2 * Math.PI), 0.5 + 0.5 * Math.sin(i / 48 * 2 * Math.PI)]),
+};
+
+// Heckbert's square-to-quad: unit square corners (0,0),(1,0),(1,1),(0,1) -> q[0..3]. Row-major 3x3.
+function squareToQuad(q) {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dy1 = y1 - y2, dy2 = y3 - y2;
+  const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
+  let g = 0, h = 0;
+  const den = dx1 * dy2 - dx2 * dy1;
+  if (Math.abs(den) > 1e-9) { g = (sx * dy2 - dx2 * sy) / den; h = (dx1 * sy - sx * dy1) / den; }
+  return [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+}
+function inv3(m) {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C || 1e-12;
+  return [A / det, -(b * i - c * h) / det, (b * f - c * e) / det, B / det, (a * i - c * g) / det, -(a * f - c * d) / det, C / det, -(a * h - b * g) / det, (a * e - b * d) / det];
+}
+function hApply(H, x, y) { const w = H[6] * x + H[7] * y + H[8]; return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w]; }
+
+function pointInPoly(x, y, pts) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+let geom2 = [];
+function surfaceGeom(s) {
+  const H = squareToQuad(s.pins);
+  return { H, Hi: inv3(H), parts: s.parts.map((p) => ({ op: p.op, px: p.pts.map(([u, v]) => hApply(H, u, v)) })) };
+}
+function insideSurface(g, x, y) {
+  let inside = false;
+  g.parts.forEach((p, j) => { const pin = pointInPoly(x, y, p.px); inside = j === 0 ? pin : p.op > 0 ? inside || pin : inside && !pin; });
+  return inside;
+}
+function surfaceAt(x, y) { for (let i = geom2.length - 1; i >= 0; i--) if (insideSurface(geom2[i], x, y)) return i; return -1; }
+
+function sync2D() {
+  geom2 = state.surfaces.map(surfaceGeom);
+  let vi = 0, pi = 0;
+  const n = Math.min(geom2.length, MAX_SURF);
+  for (let si = 0; si < n; si++) {
+    const g = geom2[si], q = state.surfaces[si].pins, first = pi;
+    for (const part of g.parts) {
+      if (pi >= MAX_PARTS || vi + part.px.length > MAX_VERTS) break;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of part.px) {
+        polyData[vi * 4] = x; polyData[vi * 4 + 1] = y; vi++;
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      }
+      flatUniforms.uPart.value[pi].set(vi - part.px.length, part.px.length, part.op, 0);
+      flatUniforms.uPartBox.value[pi].set(x0 - EDGE_MARGIN, y0 - EDGE_MARGIN, x1 + EDGE_MARGIN, y1 + EDGE_MARGIN);
+      pi++;
+    }
+    flatUniforms.uHinv.value[si].set(...g.Hi);
+    const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    flatUniforms.uSurfInfo.value[si].set(first, pi - first, (d(q[0], q[1]) + d(q[3], q[2])) / 2, (d(q[0], q[3]) + d(q[1], q[2])) / 2);
+  }
+  flatUniforms.uSurfCount.value = n;
+  polyTex.needsUpdate = true;
+  render2DUI();
+  scheduleCoverage();
+}
+
+function newSurface(shape) {
+  if (state.surfaces.length >= MAX_SURF) return;
+  const k = state.surfaces.length % 5, cx = 640 + k * 36, cy = 360 + k * 24, r = 110;
+  state.surfaces.push({ pins: [[cx - r, cy + r], [cx + r, cy + r], [cx + r, cy - r], [cx - r, cy - r]], parts: [{ op: 1, pts: SHAPES[shape]() }] });
+  state.sel2 = state.surfaces.length - 1; state.selPin = -1; state.selVert = null;
+  sync2D();
+}
+function addPart(op) {
+  const s = state.surfaces[state.sel2];
+  if (!s || s.parts.length >= 8) return;
+  s.parts.push({ op, pts: SHAPES[$('partShape').value]().map(([u, v]) => [0.3 + 0.4 * u, 0.3 + 0.4 * v]) });
+  setEdit2('points');
+  sync2D();
+}
+
+// visible faces of the 3D boxes, projected through the app's projector, become 2D surfaces
+function surfacesFrom3D() {
+  const out = [];
+  const cam = modelProj.position;
+  for (const b of state.model) {
+    const { w, h, d } = b;
+    const defs = [
+      [[-w / 2, 0, d / 2], [w, 0, 0], [0, h, 0], [0, 0, 1]],
+      [[w / 2, 0, -d / 2], [-w, 0, 0], [0, h, 0], [0, 0, -1]],
+      [[w / 2, 0, d / 2], [0, 0, -d], [0, h, 0], [1, 0, 0]],
+      [[-w / 2, 0, -d / 2], [0, 0, d], [0, h, 0], [-1, 0, 0]],
+      [[-w / 2, h, d / 2], [w, 0, 0], [0, 0, -d], [0, 1, 0]],
+    ];
+    for (const [o, U, V, N] of defs) {
+      const O = new THREE.Vector3(...toWorld(b, ...o)), u = new THREE.Vector3(...rotDir(b.yaw, U)), v = new THREE.Vector3(...rotDir(b.yaw, V));
+      const n = new THREE.Vector3(...rotDir(b.yaw, N));
+      const corners = [O.clone(), O.clone().add(u), O.clone().add(u).add(v), O.clone().add(v)];
+      const center = O.clone().addScaledVector(u, 0.5).addScaledVector(v, 0.5);
+      if (n.dot(cam.clone().sub(center).normalize()) < 0.05) continue;
+      const pins = corners.map((c) => { const p = c.clone().project(modelProj); return [(p.x + 1) / 2 * PROJ_W, (1 - p.y) / 2 * PROJ_H]; });
+      out.push({ pins, parts: [{ op: 1, pts: SHAPES.square() }], dist: center.distanceTo(cam) });
+    }
+  }
+  out.sort((a, b) => b.dist - a.dist); // far faces first, so nearer ones draw on top
+  return out.slice(0, MAX_SURF).map(({ dist, ...s }) => s);
+}
+
+// ---- pointer editing on the projector canvas ----
+let drag2 = null;
+function toPx(e) { const r = projCanvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * PROJ_W, (e.clientY - r.top) / r.height * PROJ_H]; }
+function handleR() { return 13 * PROJ_W / projCanvas.getBoundingClientRect().width; }
+const near = (a, b, r) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= r;
+function snapPoint(p) {
+  if (!state.snap) return p;
+  let best = null, bd = handleR() * 0.9;
+  geom2.forEach((g, si) => {
+    if (si === state.sel2) return;
+    const cands = state.surfaces[si].pins.concat(...g.parts.map((pt) => pt.px));
+    for (const q of cands) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = q; } }
+  });
+  return best ? [best[0], best[1]] : p;
+}
+function pointerDown2D(e) {
+  const p = toPx(e), r = handleR();
+  const s = state.surfaces[state.sel2], g = geom2[state.sel2];
+  if (s && state.edit2 === 'warp') {
+    const k = s.pins.findIndex((q) => near(q, p, r));
+    if (k >= 0) { drag2 = { type: 'pin', k }; state.selPin = k; render2DUI(); return; }
+  }
+  if (s && state.edit2 === 'points') {
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      const k = g.parts[j].px.findIndex((q) => near(q, p, r));
+      if (k >= 0) { drag2 = { type: 'vert', j, k }; state.selVert = { j, k }; render2DUI(); return; }
+    }
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      const px = g.parts[j].px;
+      for (let k = 0; k < px.length; k++) {
+        const a = px[k], b = px[(k + 1) % px.length];
+        if (s.parts[j].pts.length < MAX_PART_VERTS && near([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], p, r * 0.8)) {
+          s.parts[j].pts.splice(k + 1, 0, hApply(g.Hi, ...p));
+          drag2 = { type: 'vert', j, k: k + 1 }; state.selVert = { j, k: k + 1 };
+          sync2D(); return;
+        }
+      }
+    }
+    for (let j = g.parts.length - 1; j >= 0; j--) {
+      if (pointInPoly(p[0], p[1], g.parts[j].px)) {
+        drag2 = { type: 'part', j, start: hApply(g.Hi, ...p), pts: s.parts[j].pts.map((q) => [...q]) };
+        return;
+      }
+    }
+  }
+  const hit = surfaceAt(...p);
+  if (hit >= 0) {
+    if (hit !== state.sel2) { state.sel2 = hit; state.selPin = -1; state.selVert = null; }
+    drag2 = { type: 'move', start: p, pins: state.surfaces[hit].pins.map((q) => [...q]) };
+  } else { state.sel2 = -1; state.selPin = -1; state.selVert = null; }
+  render2DUI();
+}
+function pointerMove2D(e) {
+  if (!drag2) return;
+  const p = toPx(e), s = state.surfaces[state.sel2], g = geom2[state.sel2];
+  if (!s) return;
+  if (drag2.type === 'pin') s.pins[drag2.k] = snapPoint(p);
+  else if (drag2.type === 'vert') s.parts[drag2.j].pts[drag2.k] = hApply(g.Hi, ...snapPoint(p));
+  else if (drag2.type === 'part') {
+    const [u, v] = hApply(g.Hi, ...p), du = u - drag2.start[0], dv = v - drag2.start[1];
+    s.parts[drag2.j].pts = drag2.pts.map(([a, b]) => [a + du, b + dv]);
+  } else if (drag2.type === 'move') {
+    const dx = p[0] - drag2.start[0], dy = p[1] - drag2.start[1];
+    s.pins = drag2.pins.map(([x, y]) => [x + dx, y + dy]);
+  }
+  sync2D();
+}
+function deletePoint() {
+  const s = state.surfaces[state.sel2], v = state.selVert;
+  if (!s || !v || !s.parts[v.j]) return;
+  if (s.parts[v.j].pts.length <= 3) { $('hint2d').textContent = 'A shape needs at least three points. Delete the surface instead.'; return; }
+  s.parts[v.j].pts.splice(v.k, 1); state.selVert = null; sync2D();
+}
+projCanvas.addEventListener('dblclick', (e) => {
+  if (state.method !== '2d' || state.edit2 !== 'points' || !state.surfaces[state.sel2]) return;
+  const p = toPx(e), g = geom2[state.sel2];
+  for (let j = 0; j < g.parts.length; j++) {
+    const k = g.parts[j].px.findIndex((q) => near(q, p, handleR()));
+    if (k >= 0) { state.selVert = { j, k }; deletePoint(); return; }
+  }
+});
+window.addEventListener('keydown', (e) => {
+  if (state.method !== '2d' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+  const s = state.surfaces[state.sel2];
+  if (!s) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { if (state.edit2 === 'points' && state.selVert) deletePoint(); e.preventDefault(); return; }
+  const step = e.shiftKey ? 10 : 1;
+  const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  if (state.edit2 === 'warp' && state.selPin >= 0) { const q = s.pins[state.selPin]; s.pins[state.selPin] = [q[0] + d[0], q[1] + d[1]]; }
+  else if (state.edit2 === 'points' && state.selVert) {
+    const g = geom2[state.sel2], q = g.parts[state.selVert.j].px[state.selVert.k];
+    s.parts[state.selVert.j].pts[state.selVert.k] = hApply(g.Hi, q[0] + d[0], q[1] + d[1]);
+  } else s.pins = s.pins.map(([x, y]) => [x + d[0], y + d[1]]);
+  sync2D();
+});
+
+function drawOverlay2D(W, H, dpr) {
+  const sx = W / PROJ_W, sy = H / PROJ_H;
+  const path = (pts, close = true) => { octx.beginPath(); pts.forEach(([x, y], k) => (k ? octx.lineTo(x * sx, y * sy) : octx.moveTo(x * sx, y * sy))); if (close) octx.closePath(); };
+  geom2.forEach((g, si) => {
+    const sel = si === state.sel2;
+    for (const part of g.parts) {
+      octx.setLineDash(part.op < 0 ? [5 * dpr, 4 * dpr] : []);
+      octx.strokeStyle = sel ? '#ffb547' : 'rgba(255,255,255,0.35)';
+      octx.lineWidth = (sel ? 1.5 : 1) * dpr;
+      path(part.px); octx.stroke();
+    }
+    octx.setLineDash([]);
+    if (!sel) return;
+    const s = state.surfaces[si];
+    if (state.edit2 === 'warp') {
+      octx.setLineDash([3 * dpr, 3 * dpr]); octx.strokeStyle = 'rgba(255,181,71,0.55)'; octx.lineWidth = dpr;
+      path(s.pins); octx.stroke(); octx.setLineDash([]);
+      s.pins.forEach(([x, y], k) => {
+        octx.beginPath(); octx.arc(x * sx, y * sy, 6 * dpr, 0, Math.PI * 2);
+        octx.fillStyle = k === state.selPin ? '#ffffff' : '#ffb547'; octx.fill();
+        octx.strokeStyle = '#0d1016'; octx.lineWidth = 1.5 * dpr; octx.stroke();
+      });
+    } else {
+      g.parts.forEach((part, j) => {
+        part.px.forEach(([x, y], k) => {
+          const a = part.px[(k + 1) % part.px.length];
+          octx.beginPath(); octx.arc((x + a[0]) / 2 * sx, (y + a[1]) / 2 * sy, 3 * dpr, 0, Math.PI * 2);
+          octx.strokeStyle = 'rgba(255,181,71,0.7)'; octx.lineWidth = dpr; octx.stroke();
+        });
+        part.px.forEach(([x, y], k) => {
+          const on = state.selVert && state.selVert.j === j && state.selVert.k === k;
+          octx.fillStyle = on ? '#ffffff' : '#ffb547';
+          octx.fillRect(x * sx - 4 * dpr, y * sy - 4 * dpr, 8 * dpr, 8 * dpr);
+        });
+      });
+    }
+  });
+}
+
+// ---- how well do the traced surfaces cover the real boxes? (sampled in projector space) ----
+const COV_W = 160, COV_H = 90;
+const covRT = new THREE.WebGLRenderTarget(COV_W, COV_H, { type: THREE.FloatType });
+let targetMask = null, covTimer = 0;
+function computeTargetMask() {
+  roomR.setRenderTarget(covRT); roomR.setClearColor(0x000000, 0); roomR.clear();
+  realScene.overrideMaterial = posMat; roomR.render(realScene, trueProj); realScene.overrideMaterial = null;
+  const buf = new Float32Array(COV_W * COV_H * 4);
+  roomR.readRenderTargetPixels(covRT, 0, 0, COV_W, COV_H, buf);
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1);
+  targetMask = new Uint8Array(COV_W * COV_H);
+  for (let i = 0; i < COV_W * COV_H; i++) targetMask[i] = buf[i * 4 + 3] > 0.5 && buf[i * 4 + 1] > 0.004 && buf[i * 4 + 2] > 0.004 ? 1 : 0;
+}
+function scheduleCoverage() { clearTimeout(covTimer); covTimer = setTimeout(updateCoverage, 120); }
+function updateCoverage() {
+  if (state.method !== '2d') return;
+  if (!targetMask) computeTargetMask();
+  let tgt = 0, hit = 0, lit = 0;
+  for (let row = 0; row < COV_H; row++) for (let x = 0; x < COV_W; x++) {
+    const t = targetMask[row * COV_W + x];
+    const on = surfaceAt((x + 0.5) / COV_W * PROJ_W, (COV_H - 1 - row + 0.5) / COV_H * PROJ_H) >= 0;
+    tgt += t; if (on) { lit++; if (t) hit++; }
+  }
+  const cover = tgt ? hit / tgt : 0, spill = lit ? (lit - hit) / lit : 0;
+  const grade = cover > 0.95 && spill < 0.05 ? 'ok' : cover > 0.85 && spill < 0.15 ? 'warn' : 'bad';
+  $('alignReadout').innerHTML = `${state.surfaces.length} surfaces · box faces covered <span class="pill ${grade}">${Math.round(cover * 100)}%</span> · light off the boxes ${Math.round(spill * 100)}%`;
+}
+
+// ---- 2D console ----
+function setEdit2(mode) {
+  state.edit2 = mode; state.selVert = null;
+  $('edWarp').setAttribute('aria-selected', String(mode === 'warp'));
+  $('edPoints').setAttribute('aria-selected', String(mode === 'points'));
+  render2DUI();
+}
+function render2DUI() {
+  const s = state.surfaces[state.sel2];
+  const nCut = s ? s.parts.filter((p) => p.op < 0).length : 0, nAdd = s ? s.parts.length - nCut : 0;
+  $('stats2d').innerHTML = `<b>${state.surfaces.length}</b> surface${state.surfaces.length === 1 ? '' : 's'}` +
+    (s ? ` · selected: <b>surface ${state.sel2 + 1}</b> (${nAdd} shape${nAdd > 1 ? 's' : ''}${nCut ? `, ${nCut} cut-out${nCut > 1 ? 's' : ''}` : ''})` : ' · tap a surface in the preview to select it');
+  $('hint2d').textContent = !s ? 'Add a shape to begin, or tap one in the preview.'
+    : state.edit2 === 'warp' ? 'Drag the four corner dots onto the real surface\'s corners. Drag inside to move it. Arrow keys nudge the selected corner by 1 px (Shift: 10 px).'
+    : 'Drag a square to move a point, drag a ring on an edge to add one, double-click a point to remove it. Drag inside a shape to move just that shape.';
+  ['partAdd', 'partCut', 'delSurface'].forEach((id) => { $(id).disabled = !s; });
+  $('delPoint').disabled = !(s && state.edit2 === 'points' && state.selVert);
+}
+document.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => newSurface(b.dataset.add); });
+$('edWarp').onclick = () => setEdit2('warp');
+$('edPoints').onclick = () => setEdit2('points');
+$('partAdd').onclick = () => addPart(1);
+$('partCut').onclick = () => addPart(-1);
+$('delPoint').onclick = deletePoint;
+$('delSurface').onclick = () => { if (state.sel2 < 0) return; state.surfaces.splice(state.sel2, 1); state.sel2 = -1; sync2D(); };
+$('clear2d').onclick = () => { state.surfaces = []; state.sel2 = -1; sync2D(); };
+$('from3d').onclick = () => { state.surfaces = surfacesFrom3D(); state.sel2 = -1; sync2D(); };
+
+// ---------- mapping method + content per method ----------
+const PROJ_NOTES = {
+  '3d': 'This image is exactly what the projector emits. Click a box outline to select it, drag to slide it along the floor, scroll to rotate it.',
+  '2d': 'Your blank canvas: the projector\'s whole frame, with no camera image. Whatever you draw here is projected, so you align shapes by watching the room.',
+};
+function setMethod(m) {
+  state.method = m;
+  $('tab3d').setAttribute('aria-selected', String(m === '3d'));
+  $('tab2d').setAttribute('aria-selected', String(m === '2d'));
+  $('pane3d').style.display = m === '3d' ? 'grid' : 'none';
+  $('pane2d').style.display = m === '2d' ? 'grid' : 'none';
+  modelWire.visible = m === '3d' && state.showModel;
+  if (cloud) cloud.visible = m === '3d' && state.showCloud;
+  $('projErr').disabled = m === '2d';
+  $('projNote').textContent = PROJ_NOTES[m];
+  projCanvas.classList.toggle('edit2d', m === '2d');
+  if (m === '2d' && !state.seeded2d) { state.seeded2d = true; state.surfaces = surfacesFrom3D(); }
+  renderPresets(); renderIdeas(); showEffect();
+  if (m === '2d') sync2D(); else updateAlignment();
+}
+$('tab3d').onclick = () => setMethod('3d');
+$('tab2d').onclick = () => setMethod('2d');
+
+// ---------- swap big / small view ----------
+let bigView = 'room';
+function placeViews() {
+  const stage = $('stage'), slot = $('projSlot'), room = $('roomWrap'), proj = $('projWrap');
+  if (bigView === 'proj') { stage.appendChild(proj); slot.appendChild(room); } else { stage.appendChild(room); slot.appendChild(proj); }
+  $('swapViews').textContent = bigView === 'proj' ? 'Shrink' : 'Enlarge';
+  fitProj();
+}
+function fitProj() {
+  const proj = $('projWrap');
+  if (proj.parentElement.id !== 'stage') { proj.style.width = ''; proj.style.height = ''; return; }
+  const r = $('stage').getBoundingClientRect();
+  const w = Math.min(r.width, r.height * 16 / 9);
+  proj.style.width = w + 'px'; proj.style.height = w * 9 / 16 + 'px';
+}
+$('swapViews').onclick = () => { bigView = bigView === 'room' ? 'proj' : 'room'; placeViews(); };
 
 // ---------- console UI ----------
 function selectTab(which) {
@@ -1045,7 +1606,7 @@ $('scramble').onclick = () => {
 };
 $('clearModel').onclick = () => { state.model = []; state.sel = -1; rebuildModel(); };
 $('runScan').onclick = () => runScan();
-$('newLayout').onclick = () => { state.real = randomLayout(); rebuildReal(); updateAlignment(); };
+$('newLayout').onclick = () => { state.real = randomLayout(); rebuildReal(); targetMask = null; updateAlignment(); scheduleCoverage(); };
 
 function randomLayout() {
   const out = [];
@@ -1072,43 +1633,87 @@ bindRange('lumens', 'lumens', (v) => Math.round(v * 100) + '%', () => { roomMat.
 bindRange('projErr', 'projErr', (v) => v.toFixed(1) + ' cm', () => { updateModelProjector(); updateAlignment(); });
 bindRange('noise', 'noise', (v) => v.toFixed(1) + '×');
 function bindCheck(id, key, after) { const el = $(id); el.checked = state[key]; el.addEventListener('change', () => { state[key] = el.checked; after && after(); }); }
-bindCheck('showModel', 'showModel', () => { modelWire.visible = state.showModel; });
+bindCheck('showModel', 'showModel', () => { modelWire.visible = state.method === '3d' && state.showModel; });
 bindCheck('showFrustum', 'showFrustum', () => { frustum.visible = state.showFrustum; });
-bindCheck('showCloud', 'showCloud', () => { if (cloud) cloud.visible = state.showCloud; });
+bindCheck('showCloud', 'showCloud', () => { if (cloud) cloud.visible = state.method === '3d' && state.showCloud; });
+bindCheck('snap', 'snap');
 bindCheck('showHandles', 'showHandles');
 bindCheck('paused', 'paused');
 
 // presets
 const presetRow = $('presets');
-for (const [key, p] of Object.entries(PRESETS)) {
-  const b = document.createElement('button');
-  b.className = 'chip'; b.textContent = p.name; b.dataset.preset = key;
-  b.onclick = () => { state.effect = key; applyEffect(p.code, p.name); markPreset(); };
-  presetRow.appendChild(b);
+function renderPresets() {
+  presetRow.innerHTML = '';
+  for (const [key, p] of Object.entries(state.method === '2d' ? PRESETS2 : PRESETS)) {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = p.name; b.dataset.preset = key;
+    b.onclick = () => { fx[state.method].key = key; applyEffect(p.code, p.name); markPreset(); };
+    presetRow.appendChild(b);
+  }
+  markPreset();
 }
-function markPreset() { presetRow.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.preset === state.effect))); }
-$('applyCode').onclick = () => { state.effect = 'custom'; markPreset(); applyEffect($('code').value, 'Custom'); };
+function markPreset() { presetRow.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.preset === fx[state.method].key))); }
+$('applyCode').onclick = () => { fx[state.method].key = 'custom'; markPreset(); applyEffect($('code').value, 'Custom'); };
 
 // ---------- AI in the loop ----------
-const IDEAS = [
-  ['Aquarium', 'Aquarium: each box is a tank at a different water level, fish swim along the wall'],
-  ['Searchlight', 'Wooden crates lit by a slow searchlight that casts shadows on the wall'],
-  ['Power-up', 'A neon city that powers up one box at a time, tallest last'],
-  ['Book pages', 'Each box is a stack of glowing book pages turning'],
-];
-IDEAS.forEach(([label, t]) => {
-  const b = document.createElement('button');
-  b.className = 'chip'; b.textContent = label;
-  b.title = t; b.onclick = () => { $('prompt').value = t; };
-  $('ideas').appendChild(b);
-});
+const IDEAS = {
+  '3d': [
+    ['Aquarium', 'Aquarium: each box is a tank at a different water level, fish swim along the wall'],
+    ['Searchlight', 'Wooden crates lit by a slow searchlight that casts shadows on the wall'],
+    ['Power-up', 'A neon city that powers up one box at a time, tallest last'],
+    ['Book pages', 'Each box is a stack of glowing book pages turning'],
+  ],
+  '2d': [
+    ['Stained glass', 'Each surface is a stained glass window that glows as a beam of sunlight sweeps across all of them'],
+    ['Equalizer', 'Surfaces pulse like a music equalizer, one bar per surface, on a beat every half second'],
+    ['Falling blocks', 'Blocks fall and stack up inside each surface, following its perspective'],
+    ['Aurora', 'A green and violet aurora drifts across all the surfaces as one continuous sky'],
+  ],
+};
+function renderIdeas() {
+  const row = $('ideas');
+  row.innerHTML = '';
+  IDEAS[state.method].forEach(([label, t]) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = label;
+    b.title = t; b.onclick = () => { $('prompt').value = t; };
+    row.appendChild(b);
+  });
+  $('prompt').placeholder = IDEAS[state.method][0][1];
+}
 
 function describeScene() {
   return state.model.map((b, i) =>
     `box ${i} (obj=${i + 2}): center x=${b.x.toFixed(2)} z=${b.z.toFixed(2)}, width ${b.w.toFixed(2)} m, height ${b.h.toFixed(2)} m, depth ${b.d.toFixed(2)} m, yaw ${(b.yaw / D2R).toFixed(0)}°`
   ).join('\n') || '(no boxes mapped)';
 }
+function describeSurfaces() {
+  return geom2.map((g, i) => {
+    const xs = g.parts[0].px.map((q) => q[0]), ys = g.parts[0].px.map((q) => q[1]);
+    const info = flatUniforms.uSurfInfo.value[i];
+    const cuts = g.parts.filter((p) => p.op < 0).length;
+    return `surface ${i}: roughly ${Math.round(info.z)} x ${Math.round(info.w)} px, centered near (${Math.round((Math.min(...xs) + Math.max(...xs)) / 2)}, ${Math.round((Math.min(...ys) + Math.max(...ys)) / 2)}) px` + (cuts ? `, ${cuts} cut-out${cuts > 1 ? 's' : ''}` : '');
+  }).join('\n') || '(no surfaces yet)';
+}
+function buildPrompt2D(request) {
+  return `You write GLSL ES 3.00 fragment-shader effects for a 2D projection-mapping app. There is no 3D model. The user has traced flat physical surfaces as shapes directly in the projector's 1280x720 image, and the app draws your effect inside each shape. Use s.uv for content that belongs to one surface and should follow its perspective (it is perspective-correct for a flat surface). Use s.screen for motion that should flow continuously across neighboring surfaces. Use s.edge for outlines and glows. Use s.id and s.count to give surfaces different roles or to sequence them.
+
+Already defined for you (do not redeclare any of it):
+${FLAT_HEAD.replace(/^precision.*$/gm, '').replace(/^uniform .*$/gm, '').replace(/^out .*$/gm, '').trim()}
+
+Surfaces (projector pixels, y down):
+${describeSurfaces()}
+
+Write the function
+vec3 effect2(Surf2 s, float t)
+where t is seconds. Return RGB in 0..1. Black means the projector emits nothing. Projected light reads best as bright accents on darkness. You may add helper functions above effect2() with unique names. Keep loops under 64 iterations, use no textures, and make it animate.
+
+The look to create: ${request}
+
+Reply with one \`\`\`glsl code block and nothing else.`;
+}
 function buildPrompt(request) {
+  if (state.method === '2d') return buildPrompt2D(request);
   return `You write GLSL ES 3.00 fragment-shader effects for a projection-mapping app. A projector lights a real wall, floor, and some boxes standing on the floor in front of the wall. The app knows the 3D geometry, so effects are written in world space and the app renders them from the projector's viewpoint, which makes them land correctly on every surface. Continuity across box edges comes for free when you use world-space coordinates (s.P); use per-face coordinates (s.uv * s.size, meters) for things that should sit on one face at true physical scale.
 
 Already defined for you (do not redeclare any of it):
@@ -1165,7 +1770,7 @@ $('generate').onclick = async () => {
       code = extractCode(fix.text);
       res = applyEffect(code, 'Claude: ' + req.slice(0, 32));
     }
-    if (res.ok) { state.effect = 'custom'; markPreset(); }
+    if (res.ok) { fx[state.method].key = 'custom'; markPreset(); }
   } catch (e) {
     status.className = 'err';
     status.textContent = AI_ERRORS[e && e.code] || ('Claude could not generate a shader: ' + ((e && e.message) || 'unknown error'));
@@ -1177,6 +1782,7 @@ $('stopGen').onclick = () => aiCtl && aiCtl.abort();
 
 // ---------- render loop ----------
 function resize() {
+  fitProj();
   const r = roomCanvas.getBoundingClientRect();
   const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
   if (roomCanvas.width !== Math.round(w * roomR.getPixelRatio()) || roomCanvas.height !== Math.round(h * roomR.getPixelRatio())) {
@@ -1199,15 +1805,17 @@ function frame(now) {
   realScene.overrideMaterial = depthOnly;
   roomR.setRenderTarget(depthRT); roomR.clear(); roomR.render(realScene, trueProj);
   realScene.overrideMaterial = null;
-  // 2. the content, rendered from where the app thinks the projector is
-  if (contentMat) { roomR.setRenderTarget(contentRT); roomR.setClearColor(0x000000, 1); roomR.clear(); roomR.render(modelScene, modelProj); }
+  // 2. the content: 3D mode renders the model from where the app thinks the projector is;
+  //    2D mode draws the traced shapes straight into projector pixels
+  const content = state.method === '2d' ? { scene: flatScene, mat: fx['2d'].mat } : { scene: modelScene, mat: fx['3d'].mat };
+  if (content.mat) { roomR.setRenderTarget(contentRT); roomR.setClearColor(0x000000, 1); roomR.clear(); roomR.render(content.scene, modelProj); }
   // 3. the room as an audience member sees it
   roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1); roomR.clear();
   roomR.render(realScene, roomCam);
   roomR.autoClear = false; roomR.render(overlayScene, roomCam); roomR.autoClear = true;
 
   // projector output preview (its own WebGL context)
-  if (contentMat) projR.render(modelScene, modelProj);
+  if (content.mat) projR.render(content.scene, modelProj);
   drawOverlay();
   requestAnimationFrame(frame);
 }
@@ -1217,11 +1825,14 @@ rebuildReal();
 rebuildFrustum();
 updateModelProjector();
 setView('audience');
-applyEffect(PRESETS.city.code, PRESETS.city.name); markPreset();
+applyEffect(PRESETS2.outline.code, PRESETS2.outline.name, '2d');
+applyEffect(PRESETS.city.code, PRESETS.city.name, '3d');
 resize();
 runScan();
+setMethod('3d');
+setEdit2('warp');
 requestAnimationFrame(frame);
-window.__sandbox = { state, runScan, applyEffect, PRESETS, checkCompile, fragFor };
+window.__sandbox = { state, runScan, applyEffect, PRESETS, PRESETS2, checkCompile, fragFor, frag2For, setMethod, sync2D, squareToQuad, hApply, inv3, FLAT_VERT, SURF_VERT, updateCoverage, surfacesFrom3D };
 </script>
 </body>
 </html>

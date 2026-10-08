@@ -132,6 +132,67 @@ WebGL runs these shaders at 60 fps on any recent laptop. Any projector works;
 brightness and contrast matter more than resolution because the room is never
 fully dark. A short-throw projector reduces the shadows people cast.
 
+## Alternative: 2D surface mapping (no 3D model)
+
+Most commercial mapping tools (MadMapper, Resolume Arena, HeavyM) work this way.
+The phone or laptop screen *is* the projector's frame, shown as a blank canvas
+with no camera image. You add a shape, the projector shows it, and you drag it
+and its corners until it sits on a real surface. Repeat per surface. Shapes can
+be combined (union) or cut out of each other, and individual points can be
+added, moved and removed for custom outlines.
+
+**Why it works.** The user's eyes close the loop. Whatever is drawn at a
+projector pixel lands wherever that pixel's light lands, so no projector
+calibration, no 3D model and no camera are needed. Moving the projector even a
+little breaks it, but the same is true of the 3D approach.
+
+**Why four corners are enough for flat surfaces.** A flat surface seen from the
+projector is related to a flat rectangle by a *homography* (a perspective
+transform with 8 degrees of freedom), which is fully determined by four point
+pairs. Pinning a shape's four corners to the four corners of a real flat
+surface makes anything drawn in that shape's own coordinates
+perspective-correct on the surface. A circle pinned this way becomes the
+correct ellipse for a round tabletop seen at an angle. One detail matters:
+the mapping has to be a true homography per pixel. Splitting the quad into two
+affine triangles, which is what naive texture mapping does, leaves a visible
+crease along the diagonal.
+
+**What you give up compared with a 3D model:**
+
+| Capability | 3D model | 2D surfaces |
+|---|---|---|
+| Needs projector calibration | Yes | No |
+| Curved or odd-shaped outlines | Needs a mesh | Yes (custom points) |
+| Content continuous across a shared edge | Yes | Yes, if defined in projector-screen space |
+| True physical scale (9 cm windows on every box) | Yes | No; only projector-pixel size |
+| Virtual lighting and cast shadows (normals, depth) | Yes | No |
+| Effects that travel through 3D space | Yes | No |
+| Setup effort for a few boxes | Low with a scan | Low; a few minutes of dragging |
+
+Continuity across neighboring surfaces is mostly preserved: two surfaces that
+share an edge share the same projector pixels along it, so anything defined in
+projector-screen coordinates flows across the seam with no break. What's lost
+is physical consistency. A wave moves at a different physical speed on a
+foreshortened face, and the app can't know which face is "up".
+
+**Recommendation: 2D-first, with 3D as an upgrade.** 2D surfaces should be the
+default authoring workflow because they need nothing but the projector and
+work on any flat surface. Two bridges between the approaches are worth
+building:
+
+- **3D to 2D**: project a 3D model's visible faces into starting surfaces, then
+  refine by dragging. The sandbox's *Start from 3D boxes* button does this.
+- **2D to 3D**: if surfaces are welded at shared corners (the sandbox snaps
+  corners together) and assumed to be rectangles meeting at right angles, the
+  aligned corners are enough to solve for the projector's focal length and pose
+  and the boxes' 3D shape. The user's alignment work becomes the calibration,
+  and 3D-only effects (lighting, physical scale) unlock without a separate
+  calibration step.
+
+In the sandbox, the *2D surfaces* tab starts from the 3D scan's faces at about
+98% coverage of the real box faces. *Clear all* gives the true blank-canvas
+experience: build surfaces by hand, judging only by the room view.
+
 ## Limits and risks
 
 - **Surface color and texture.** Dark or glossy surfaces reflect poorly. White
@@ -157,11 +218,12 @@ fully dark. A short-throw projector reduces the shadows people cast.
 1. **Sandbox (done).** A virtual room, projector, boxes, mapping tools and
    effects, to prove the rendering approach and the AI loop. See
    [`sim/index.html`](../sim/index.html).
-2. **Real-projector MVP.** Same app with a second-window projector output:
-   manual boxes plus a tape-measured projector pose, refined by nudging. This
-   gets you real shows on boxy sets.
-3. **Click-to-calibrate.** Solve the projector matrix from 6+ clicked corners
-   (DLT), removing the tape measure.
+2. **Real-projector MVP, 2D-first.** Phone or laptop as the editing canvas,
+   projector as the output, 2D surfaces as the mapping method. This works on
+   any flat surfaces with no calibration and gets you real shows quickly.
+3. **2D to 3D upgrade.** Solve the projector pose and box shapes from welded
+   2D surfaces, unlocking the 3D-only effects without a separate calibration
+   step.
 4. **Camera-assisted capture.** A phone or webcam with Gray-code structured
    light for automatic calibration and scanning, with box fitting on top.
 5. **Content library + AI authoring.** Saved effects, timelines and audio
