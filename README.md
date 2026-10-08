@@ -5,7 +5,10 @@ written onto a 3D model of the scenery and rendered from the projector's
 viewpoint, so they come out pre-warped and continuous across edges.
 
 - [`docs/feasibility.md`](docs/feasibility.md): how feasible the whole pipeline
-  is, stage by stage, and a suggested build order.
+  is, stage by stage, measured results from the sandbox, and a suggested build
+  order.
+- [`docs/prior-art.md`](docs/prior-art.md): what MadMapper, Resolume, HeavyM,
+  Lightform, disguise and the open-source tools teach us.
 - [`sim/index.html`](sim/index.html): the **Projection Mapping Sandbox**, a
   browser simulation of a room, a projector and a few boxes. Open it directly
   in a browser (it loads three.js from jsDelivr).
@@ -27,6 +30,11 @@ viewpoint, so they come out pre-warped and continuous across edges.
     editable points. No calibration needed. A coverage score shows how much of
     the real boxes the surfaces cover. *Enlarge* makes the projector canvas
     the big view for editing.
+  - *Find surfaces with a camera*: a virtual camera near the projector
+    photographs Gray-code stripe patterns; decoding plus RANSAC homography
+    fitting turns each flat surface into a 2D surface automatically.
+  - *Upgrade to a 3D model*: solves the projector's aim and lens and a box per
+    group of welded surfaces, from two tape measurements and the lens offset.
 - **Content**: procedural shader effects for each method (eight in 3D, six in 2D),
   an editable GLSL panel, and (when opened as a published Claude artifact)
   "Generate with Claude", which writes a new shader from a text prompt using

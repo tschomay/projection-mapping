@@ -182,16 +182,114 @@ building:
 
 - **3D to 2D**: project a 3D model's visible faces into starting surfaces, then
   refine by dragging. The sandbox's *Start from 3D boxes* button does this.
-- **2D to 3D**: if surfaces are welded at shared corners (the sandbox snaps
-  corners together) and assumed to be rectangles meeting at right angles, the
-  aligned corners are enough to solve for the projector's focal length and pose
-  and the boxes' 3D shape. The user's alignment work becomes the calibration,
-  and 3D-only effects (lighting, physical scale) unlock without a separate
-  calibration step.
+- **2D to 3D**: surfaces welded at shared corners are treated as the visible
+  faces of boxes standing on the floor, and the aligned corners are enough to
+  solve for the projector's aim and lens and each box's 3D shape. The user's
+  alignment work becomes the calibration, and 3D-only effects (lighting,
+  physical scale) unlock without a separate calibration step. Built; see
+  below.
 
 In the sandbox, the *2D surfaces* tab starts from the 3D scan's faces at about
 98% coverage of the real box faces. *Clear all* gives the true blank-canvas
 experience: build surfaces by hand, judging only by the room view.
+
+### 2D to 3D: how the solve works and what it needs
+
+Each group of surfaces that share an edge (two corners) is assumed to be one
+box standing on the floor in front of the wall. Unknowns are the projector's
+yaw, pitch, roll and field of view, plus position, width, height, depth and
+rotation for each box. A Levenberg-Marquardt least-squares fit minimizes the
+distance between the projected box corners and the surface corners. It works
+out which box face each surface is and which corner is which as it goes, and
+starts from 20 guesses of aim and lens. Three inputs make it well-posed:
+
+- **Two tape measurements: projector lens height, and distance to the wall.**
+  A single viewpoint can't tell a big far scene from a small near one.
+- **Lens offset from the spec sheet.** "Aimed lower" and "image shifted up by
+  the lens" produce nearly the same corners. Leaving the offset free gave
+  answers that fit the corners to 1–2 px but were 10–16° wrong.
+- **Assumption: the projector faces the wall squarely.** Without the wall in
+  view, turning the whole scene about the projector changes nothing in the
+  image.
+
+It also handles occlusion and the frame edge:
+
+- A corner lying partway along another surface's edge is a T-junction, where
+  one object hides another. It isn't a real corner, so it gets little weight.
+- A corner cut off by the frame edge only says the face continues past the
+  edge, so it becomes a one-sided constraint.
+- Corner errors past 6 px count linearly rather than squared (a Huber loss),
+  so one bad surface can't drag the whole solve.
+
+Measured in the sandbox:
+
+| Input surfaces | Projector aim | Lens (field of view) | Box corners |
+|---|---|---|---|
+| Perfect (true faces) | 0.00° | 0.00° | 0.0 cm |
+| Hand-traced quality (±3 px), 8 random scenes | 0.0–1.6° | within 0.1–2.8° | 2–14 cm* |
+| From the camera scan, default scene (5 runs) | 0.4–3.5° | within 0.4–6.4° | 8–21 cm*; 3–4 of 4 boxes found |
+| From the camera scan, random scenes | unreliable | unreliable | unreliable |
+
+\*Includes the never-lit back corners and boxes partly outside the frame.
+
+Two takeaways. First, the projected image stays aligned even when the 3D
+boxes are noticeably off, because the solved projector and the solved boxes
+err together and the errors cancel in the image. Lighting and shadow
+directions are only approximately right, which is fine for effects like the
+moving sun. Second, raw camera-scan surfaces on cluttered scenes still need a
+tidy-up (delete floor fragments, fix corners hidden by other objects) before
+the solve is trustworthy. The practical flow is: capture, tidy, then solve.
+
+## Finding surfaces from photos
+
+A camera near the projector, at any spot, can find the flat surfaces
+automatically, with no calibration of either device.
+
+**How it works.** The projector shows a short sequence of black-and-white
+stripe patterns (Gray code). Each projector pixel blinks a unique on/off
+sequence, so decoding the photos tells, for every camera pixel, which projector
+pixel lit it. For points on one flat surface, that projector-to-camera mapping
+is a single homography. Sequential RANSAC finds the planes, and each plane's
+region, in projector coordinates, becomes a 2D surface. The same data also
+tells creases (two faces of one box, where the mapping is continuous across
+the boundary) from occlusions (where it jumps because of parallax). That gives
+grouping into objects for free.
+
+**What the camera position needs.** The exact spot doesn't matter, but it must
+be *off to one side* of the projector, by roughly 30 cm to 1 m. Parallax
+between the two viewpoints is the entire signal. A camera at the projector's
+exact position sees every surface as one plane. The sandbox detects this case
+and warns.
+
+**Measured in the sandbox** (480×360 camera, 36 photos, 4 px projector cells):
+
+- Default scene: 87–96% of box faces covered, 1–2% of light spilled off the
+  boxes, about 0.5 s of analysis.
+- Random scenes: usually 83–97% covered. Spill is higher, 0–17%, from floor
+  fragments between boxes; one run in six did badly.
+
+**Practical capture.** Gray code needs about 20–40 frames with the camera
+held still, so the phone goes on a tripod or is propped against something, and
+the app drives the projector and the camera together. That takes a few seconds.
+Alternatives:
+
+- **One photo, handheld:** project a single grid of uniquely coded markers
+  (ArUco/AprilTag-style). Each photo gives a few hundred sparse
+  correspondences. That's enough to fit homographies and find planes, but the
+  outlines are coarser.
+- **Several spots, guided (AR-style).** Capture from a few positions, with an
+  on-screen dot telling the user where to step next, like phone panorama and
+  3D-photo apps. This helps in three ways:
+  - Faces hidden from one viewpoint are seen from another.
+  - Separate measurements of the same plane average out noise.
+  - With the phone's AR tracking (ARCore/ARKit), each photo comes with a
+    metric camera pose, which removes the tape measurements and makes real
+    3D triangulation possible.
+
+  The guidance must ask the user to *step sideways*. A 360 panorama is shot
+  by rotating in place, which gives zero parallax, the one case where this
+  method fails. Coded markers suit multi-spot capture best, because each
+  photo stands alone and the phone can move freely.
 
 ## Limits and risks
 
@@ -221,10 +319,13 @@ experience: build surfaces by hand, judging only by the room view.
 2. **Real-projector MVP, 2D-first.** Phone or laptop as the editing canvas,
    projector as the output, 2D surfaces as the mapping method. This works on
    any flat surfaces with no calibration and gets you real shows quickly.
-3. **2D to 3D upgrade.** Solve the projector pose and box shapes from welded
-   2D surfaces, unlocking the 3D-only effects without a separate calibration
-   step.
-4. **Camera-assisted capture.** A phone or webcam with Gray-code structured
-   light for automatic calibration and scanning, with box fitting on top.
-5. **Content library + AI authoring.** Saved effects, timelines and audio
-   reactivity.
+3. **Camera-assisted capture (prototyped in the sandbox).** Gray-code capture
+   with the phone on a stand to create 2D surfaces automatically. Then
+   AR-guided multi-spot capture with coded markers, using the phone's tracked
+   pose for metric 3D.
+4. **2D to 3D upgrade (prototyped).** Solve the projector and boxes from welded
+   surfaces, with tape measurements and the lens offset as inputs, after a
+   tidy-up pass.
+5. **Content library + AI authoring.** Saved effects, cues and timelines, and
+   audio reactivity. See [`prior-art.md`](prior-art.md) for what the
+   commercial tools treat as table stakes.
