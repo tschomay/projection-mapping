@@ -9,6 +9,10 @@ viewpoint, so they come out pre-warped and continuous across edges.
   order.
 - [`docs/prior-art.md`](docs/prior-art.md): what MadMapper, Resolume, HeavyM,
   Lightform, disguise and the open-source tools teach us.
+- [`app/`](app/README.md): **Surface Mapper**, the phone-first app. Trace
+  surfaces on the projector frame, fill them with effects, video and images,
+  and drive them with sound. Static files; deploys to Vercel as-is (see
+  `vercel.json`).
 - [`sim/index.html`](sim/index.html): the **Projection Mapping Sandbox**, a
   browser simulation of a room, a projector and a few boxes. Open it directly
   in a browser (it loads three.js from jsDelivr).

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Surface Mapper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* Layout: the whole screen is the projector frame; controls float over it in Edit mode and vanish in Show mode. */
+:root {
+  --bg: #000;              /* the frame itself: projector black */
+  --panel: #12161ef2;
+  --raise: #1d2430;
+  --line: #2c3544;
+  --fg: #e3e8ef;
+  --muted: #8d98aa;
+  --lamp: #ffb547;         /* projector-lamp amber */
+  --lamp-dim: #ffb5472e;
+  --ok: #59d39a;
+  --bad: #ff6b6b;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--sans); overflow: hidden; overscroll-behavior: none; }
+button, input, select { font: inherit; color: inherit; }
+#stage { position: fixed; inset: 0; background: #000; touch-action: none; }
+#box { position: absolute; }
+#box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#overlay { touch-action: none; }
+body.show #overlay, body.show .ui { display: none !important; }
+body.show #stage { cursor: none; }
+
+.ui { position: fixed; z-index: 2; }
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: #3d4859; }
+.btn:focus-visible, .chip:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
+.btn.primary { background: var(--lamp); color: #1a1205; border-color: var(--lamp); font-weight: 600; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn svg { width: 16px; height: 16px; }
+#toolbar { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); display: flex; gap: 6px; flex-wrap: wrap; }
+#toolbar .btn { background: #12161ecc; backdrop-filter: blur(6px); }
+#toolbar .btn.primary { background: var(--lamp); }
+
+#drawer { top: 0; right: 0; bottom: 0; width: min(380px, 92vw); background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); }
+#drawer header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; flex: 1; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.tabs button { flex: 1; background: transparent; border: 0; padding: 7px 4px; cursor: pointer; color: var(--muted); min-height: 36px; }
+.tabs button[aria-selected="true"] { background: var(--raise); color: var(--fg); box-shadow: inset 0 -2px 0 var(--lamp); }
+.pane { overflow-y: auto; padding: 12px; display: grid; gap: 12px; align-content: start; flex: 1; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+.group { display: grid; gap: 7px; }
+.group > h3 { margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 34px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip[aria-pressed="true"] { background: var(--lamp-dim); border-color: var(--lamp); }
+.note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.note.warn { color: var(--lamp); }
+select, input[type=text] { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; min-height: 38px; max-width: 100%; }
+input[type=range] { accent-color: var(--lamp); width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; cursor: pointer; min-height: 30px; }
+.check input { accent-color: var(--lamp); width: 18px; height: 18px; }
+.file { position: relative; overflow: hidden; }
+.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; background: transparent; border: 0; padding: 6px 8px; color: var(--muted); cursor: pointer; min-height: 34px; }
+.seg button[aria-pressed="true"] { background: var(--raise); color: var(--fg); box-shadow: inset 0 -2px 0 var(--lamp); }
+.meter { display: grid; grid-template-columns: repeat(3, 1fr) 26px; gap: 6px; align-items: end; height: 44px; }
+.meter div { background: var(--raise); border-radius: 3px; height: 100%; position: relative; overflow: hidden; }
+.meter div i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--lamp); height: 0%; }
+.meter span { width: 22px; height: 22px; border-radius: 50%; background: var(--raise); align-self: center; }
+.meter-labels { display: grid; grid-template-columns: repeat(3, 1fr) 26px; gap: 6px; font: 11px var(--mono); color: var(--muted); text-align: center; }
+.mono { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+#nudge { left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: auto repeat(3, 44px); gap: 4px; background: #12161ecc; backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+#nudge .label { grid-column: 1 / -1; font: 11px var(--mono); color: var(--muted); text-align: center; }
+#nudge button { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; padding: 0; display: grid; place-items: center; }
+#nudge button svg { width: 18px; height: 18px; }
+#nudgeStep { font: 11px var(--mono); }
+#toast { left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #12161ef0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; max-width: min(90vw, 460px); text-align: center; pointer-events: none; transition: opacity .3s; z-index: 5; }
+body.show #toast:not([hidden]) { display: block !important; }
+#gate { position: fixed; inset: 0; display: grid; place-items: center; background: #000c; z-index: 6; text-align: center; padding: 24px; }
+#gate .btn { min-height: 48px; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="box">
+    <canvas id="gl"></canvas>
+    <canvas id="overlay" aria-label="Projector frame: drag surfaces and their corners onto real objects"></canvas>
+  </div>
+</div>
+
+<div id="toolbar" class="ui" role="toolbar" aria-label="Main controls">
+  <button class="btn" id="toolsBtn" aria-expanded="false" aria-controls="drawer">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h12"/></svg>Tools</button>
+  <button class="btn" id="playBtn" hidden>
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg><span>Play</span></button>
+  <button class="btn primary" id="showBtn">Show</button>
+</div>
+
+<aside id="drawer" class="ui" hidden aria-label="Tools">
+  <header>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
+      <button role="tab" data-tab="content" aria-selected="false">Content</button>
+      <button role="tab" data-tab="sound" aria-selected="false">Sound</button>
+      <button role="tab" data-tab="project" aria-selected="false">Project</button>
+    </div>
+    <button class="btn" id="closeDrawer" aria-label="Close tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </header>
+
+  <section class="pane" data-pane="surfaces">
+    <div class="group">
+      <h3>Add a surface</h3>
+      <div class="row"><button class="btn" data-add="square">Square</button><button class="btn" data-add="circle">Circle</button><button class="btn" data-add="triangle">Triangle</button></div>
+      <p class="note">It appears in the middle of the projector frame. Drag it onto a real flat surface, then drag its corners onto the surface's corners.</p>
+    </div>
+    <div class="group">
+      <h3>Surfaces</h3>
+      <div class="row" id="surfaceList"></div>
+    </div>
+    <div class="group">
+      <h3>Handles</h3>
+      <div class="seg" id="modeSeg"><button data-mode="warp" aria-pressed="true">Warp corners</button><button data-mode="points" aria-pressed="false">Edit points</button></div>
+      <p class="note" id="modeHint"></p>
+    </div>
+    <div class="group">
+      <h3>Combine</h3>
+      <div class="row">
+        <select id="partShape" aria-label="Shape to combine"><option value="square">Square</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
+        <button class="btn" id="partAdd">Add to surface</button><button class="btn" id="partCut">Cut out</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="row"><button class="btn" id="delPoint">Delete point</button><button class="btn" id="dupSurface">Duplicate</button><button class="btn" id="delSurface">Delete surface</button></div>
+      <label class="check"><input type="checkbox" id="snap" checked> Snap corners together so neighbouring surfaces share edges</label>
+    </div>
+  </section>
+
+  <section class="pane" data-pane="content" hidden>
+    <p class="note" id="contentTarget"></p>
+    <div class="group">
+      <h3>Effects</h3>
+      <div class="row" id="effectList"></div>
+    </div>
+    <div class="group">
+      <h3>Your videos and images</h3>
+      <div class="row" id="mediaList"></div>
+      <div class="row"><label class="btn file">Add video or image<input type="file" id="addMedia" accept="video/*,image/*" multiple></label></div>
+    </div>
+    <div class="group" id="mediaOpts" hidden>
+      <h3>Media on this surface</h3>
+      <div class="seg" id="fitSeg"><button data-fit="fill" aria-pressed="true">Fill</button><button data-fit="fit" aria-pressed="false">Fit</button><button data-fit="stretch" aria-pressed="false">Stretch</button></div>
+      <div class="seg" id="spaceSeg"><button data-space="surface" aria-pressed="true">Own copy</button><button data-space="frame" aria-pressed="false">One image across all</button></div>
+      <p class="note">"One image across all" lays the media over the whole frame, so it runs continuously across surfaces that share it.</p>
+    </div>
+    <div class="row"><button class="btn" id="applyAll">Use on every surface</button></div>
+  </section>
+
+  <section class="pane" data-pane="sound" hidden>
+    <div class="group">
+      <h3>Soundtrack</h3>
+      <select id="soundtrack" aria-label="Soundtrack"></select>
+      <div class="row"><label class="btn file">Add audio file<input type="file" id="addAudio" accept="audio/*"></label></div>
+      <p class="note">Plays from this device: phone speaker, Bluetooth, or HDMI to the projector, wherever your phone sends sound.</p>
+    </div>
+    <div class="group">
+      <h3>Playback</h3>
+      <div class="row"><button class="btn" id="playBtn2">Play</button><button class="btn" id="restartBtn">Restart</button>
+        <label class="check"><input type="checkbox" id="loop" checked> Loop</label></div>
+    </div>
+    <div class="group">
+      <h3>Audio reactivity</h3>
+      <label class="check"><input type="checkbox" id="micToggle"> React to the microphone instead</label>
+      <label class="note" for="sens">Sensitivity</label>
+      <input type="range" id="sens" min="0.3" max="3" step="0.05" value="1">
+      <div class="meter" aria-hidden="true"><div><i id="mBass"></i></div><div><i id="mMid"></i></div><div><i id="mTreble"></i></div><span id="mBeat"></span></div>
+      <div class="meter-labels"><span>bass</span><span>mid</span><span>treble</span><span>beat</span></div>
+      <p class="note">"Beat sequence", "Pulse to music" and "Tiles" follow the beat when sound is playing.</p>
+    </div>
+  </section>
+
+  <section class="pane" data-pane="project" hidden>
+    <div class="group">
+      <h3>This project</h3>
+      <input type="text" id="projName" aria-label="Project name">
+      <p class="mono" id="saveState">Saved on this device</p>
+      <p class="note warn" id="missingMedia" hidden></p>
+    </div>
+    <div class="group">
+      <h3>All projects</h3>
+      <select id="projList" aria-label="Open project"></select>
+      <div class="row"><button class="btn" id="newProj">New</button><button class="btn" id="delProj">Delete</button></div>
+    </div>
+    <div class="group">
+      <h3>Move between devices</h3>
+      <div class="row"><button class="btn" id="exportProj">Export file</button><label class="btn file">Import file<input type="file" id="importProj" accept="application/json,.json"></label></div>
+      <p class="note">The file holds the mapping and media names. Videos and images stay on each device; re-add them after importing.</p>
+    </div>
+    <div class="group">
+      <h3>Connect the projector</h3>
+      <p class="note"><b>Phone:</b> connect with a USB-C to HDMI adapter (or Lightning AV adapter), or cast or AirPlay the screen. The phone screen becomes the projector frame, so map with this app full screen in landscape. Wired is best: no lag, and sound goes over HDMI.</p>
+      <p class="note"><b>Laptop with the projector as a second display:</b> open the output window, drag it onto the projector and click it once to go full screen. Keep editing here.</p>
+      <div class="row"><button class="btn" id="openOutput">Open output window</button><span class="mono" id="outputState"></span></div>
+    </div>
+  </section>
+</aside>
+
+<div id="nudge" class="ui" hidden aria-label="Nudge selection">
+  <span class="label" id="nudgeLabel">Nudge</span>
+  <span></span><button data-nudge="0,-1" aria-label="Nudge up"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 3l5 7H3z"/></svg></button><span></span>
+  <button data-nudge="-1,0" aria-label="Nudge left"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 8l7-5v10z"/></svg></button>
+  <button id="nudgeStep" aria-label="Nudge step size">1px</button>
+  <button data-nudge="1,0" aria-label="Nudge right"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 8L6 3v10z"/></svg></button>
+  <span></span><button data-nudge="0,1" aria-label="Nudge down"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13l5-7H3z"/></svg></button><span></span>
+</div>
+
+<div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
+<div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
