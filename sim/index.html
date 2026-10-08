@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Projection Mapping Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* Layout: a darkened projection booth. Room view fills the stage; the operator's console runs down the right. */
+:root {
+  --bg: #0d1016;          /* booth: blue-black */
+  --panel: #151a23;
+  --raise: #1d2430;
+  --line: #2a3342;
+  --fg: #dde3ec;
+  --muted: #8b96a8;
+  --lamp: #ffb547;        /* projector-lamp amber, the one accent */
+  --lamp-dim: #ffb54733;
+  --ok: #59d39a;
+  --warn: #ffcf5a;
+  --bad: #ff6b6b;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+header h1 span { color: var(--lamp); }
+header p { margin: 0; color: var(--muted); font-size: 13px; min-width: 0; }
+.stage { position: relative; min-height: 0; min-width: 0; background: #07090d; }
+#room { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#room:active { cursor: grabbing; }
+.hud { position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; right: 12px; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud-bottom { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; pointer-events: none; font: 12px var(--mono); color: var(--muted); }
+.hud-bottom > * { background: #07090dcc; padding: 4px 8px; border-radius: 4px; }
+.console { overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); min-height: 0; }
+section { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+h2 { margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+h2 small { font: 11px var(--mono); text-transform: none; letter-spacing: 0; }
+.proj-wrap { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.proj-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#projOverlay { pointer-events: none; }
+#proj { touch-action: none; cursor: crosshair; }
+.note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 13px; line-height: 1.3; }
+.btn:hover { border-color: #3c4759; }
+.btn:focus-visible, .chip:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
+.btn.primary { background: var(--lamp); color: #1a1205; border-color: var(--lamp); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+.chip[aria-pressed="true"] { background: var(--lamp-dim); border-color: var(--lamp); color: var(--fg); }
+.tabs { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.tabs button { flex: 1; background: transparent; border: 0; padding: 6px; cursor: pointer; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--raise); color: var(--fg); box-shadow: inset 0 -2px 0 var(--lamp); }
+.sliders { display: grid; grid-template-columns: auto minmax(0, 1fr) 62px; gap: 4px 10px; align-items: center; font-size: 12.5px; }
+.sliders label { color: var(--muted); }
+.sliders output { font: 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--lamp); }
+.check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--lamp); }
+.stats { font: 12px/1.6 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; margin: 0; white-space: pre-wrap; }
+.stats b { color: var(--fg); font-weight: 500; }
+.pill { font: 11px var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; resize: vertical; }
+#code { font: 12px/1.5 var(--mono); min-height: 220px; tab-size: 2; white-space: pre; overflow-x: auto; }
+#prompt { min-height: 58px; }
+#codeStatus { font: 12px var(--mono); white-space: pre-wrap; margin: 0; color: var(--muted); }
+#codeStatus.err { color: var(--bad); }
+details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.boxes { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; height: auto; }
+  .stage { aspect-ratio: 4 / 3; max-width: 100%; }
+  .console { border-left: 0; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Projection Mapping <span>Sandbox</span></h1>
+    <p>A virtual room, a virtual projector, and graphics written onto the 3D surfaces so the projector image comes out pre-warped.</p>
+  </header>
+
+  <div class="stage">
+    <canvas id="room" aria-label="Room view: drag to orbit, scroll or pinch to zoom"></canvas>
+    <div class="hud" role="toolbar" aria-label="Room camera">
+      <button class="chip" data-view="audience" aria-pressed="true">Audience</button>
+      <button class="chip" data-view="side" aria-pressed="false">Side</button>
+      <button class="chip" data-view="top" aria-pressed="false">Top</button>
+      <button class="chip" data-view="projector" aria-pressed="false">From projector</button>
+    </div>
+    <div class="hud-bottom">
+      <span id="fps">Room view · drag to orbit</span>
+      <span id="alignReadout">Alignment …</span>
+    </div>
+  </div>
+
+  <aside class="console">
+    <section>
+      <h2>Projector output <small id="projRes">1280 × 720</small></h2>
+      <div class="proj-wrap">
+        <canvas id="proj" aria-label="Projector output: click a box to select it, drag to move it, scroll to rotate"></canvas>
+        <canvas id="projOverlay"></canvas>
+      </div>
+      <p class="note">This image is exactly what the projector emits. Click a box outline to select it, drag to slide it along the floor, scroll to rotate it.</p>
+      <label class="check"><input type="checkbox" id="showHandles" checked> Show box outlines on this preview (not projected)</label>
+    </section>
+
+    <section>
+      <h2>Surface map</h2>
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tabManual" aria-selected="false">Manual boxes</button>
+        <button role="tab" id="tabScan" aria-selected="true">Depth scan</button>
+      </div>
+
+      <div id="paneScan" class="grid" style="display:grid;gap:10px">
+        <p class="note">Simulates a depth sensor mounted next to the projector (think phone LiDAR). Fits planes to the wall and floor with RANSAC, clusters what's left, and fits a rotated box to each cluster.</p>
+        <div class="sliders">
+          <label for="noise">Sensor noise</label><input type="range" id="noise" min="0" max="3" step="0.1" value="1"><output id="noiseOut">1.0×</output>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="runScan">Run depth scan</button>
+          <label class="check"><input type="checkbox" id="showCloud"> Show point cloud</label>
+        </div>
+        <pre class="stats" id="scanStats">No scan yet.</pre>
+      </div>
+
+      <div id="paneManual" style="display:none;gap:10px">
+        <p class="note">Add a box per real object, then drag and size it until its outline sits on the real edges in the room view. In a real setup you'd watch the physical object while you do this.</p>
+        <div class="boxes" id="boxList"></div>
+        <div class="row">
+          <button class="btn" id="addBox">Add box</button>
+          <button class="btn" id="delBox">Delete selected</button>
+          <button class="btn" id="scramble">Knock out of alignment</button>
+          <button class="btn" id="clearModel">Start empty</button>
+        </div>
+        <div class="sliders" id="boxSliders"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Content <small id="effectName"></small></h2>
+      <div class="row" id="presets"></div>
+      <div id="aiBlock" style="display:grid;gap:8px">
+        <label for="prompt" class="note">Describe a look and Claude writes a shader that knows this scene's geometry.</label>
+        <textarea id="prompt" placeholder="An aquarium: water fills each box to a different level, fish swim along the wall"></textarea>
+        <div class="row" id="ideas"></div>
+        <div class="row">
+          <button class="btn primary" id="generate">Generate with Claude</button>
+          <button class="btn" id="stopGen" hidden>Stop</button>
+        </div>
+      </div>
+      <p class="note" id="aiOff" hidden>AI generation is available when this page is opened as a published Claude artifact. You can still edit the shader below.</p>
+      <details id="codeDetails">
+        <summary>Shader code (GLSL, editable)</summary>
+        <div style="display:grid;gap:8px;margin-top:8px">
+          <textarea id="code" spellcheck="false"></textarea>
+          <div class="row"><button class="btn" id="applyCode">Compile and project</button></div>
+        </div>
+      </details>
+      <pre id="codeStatus"></pre>
+    </section>
+
+    <section>
+      <h2>Room and projector</h2>
+      <div class="sliders">
+        <label for="ambient">Room lights</label><input type="range" id="ambient" min="0" max="0.6" step="0.01" value="0.06"><output id="ambientOut"></output>
+        <label for="lumens">Projector brightness</label><input type="range" id="lumens" min="0.2" max="2" step="0.05" value="1"><output id="lumensOut"></output>
+        <label for="projErr">Projector pose error</label><input type="range" id="projErr" min="0" max="15" step="0.5" value="0"><output id="projErrOut"></output>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="showModel" checked> Model wireframe</label>
+        <label class="check"><input type="checkbox" id="showFrustum" checked> Projector frustum</label>
+        <label class="check"><input type="checkbox" id="paused"> Pause</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="newLayout">New real-world layout</button>
+      </div>
+      <p class="note">"Projector pose error" shifts and turns the app's idea of where the projector is, the way an imperfect calibration would. Watch how far a few centimeters throws the edges off.</p>
+    </section>
+  </aside>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+// ---------- constants ----------
+const PROJ_W = 1280, PROJ_H = 720;
+const MAX_BOXES = 8;
+const PROJ_POS = new THREE.Vector3(0, 1.55, 3.3);
+const PROJ_TARGET = new THREE.Vector3(0, 0.75, 0.3);
+const PROJ_FOV = 36;
+const D2R = Math.PI / 180;
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- state ----------
+const state = {
+  real: [],
+  model: [],
+  sel: -1,
+  ambient: 0.06,
+  lumens: 1,
+  projErr: 0,
+  showModel: true,
+  showFrustum: true,
+  showCloud: false,
+  showHandles: true,
+  paused: false,
+  noise: 1,
+  effect: 'city',
+};
+
+const DEFAULT_REAL = [
+  { x: -0.95, z: 0.32, w: 0.6, h: 0.95, d: 0.5, yaw: 0 },
+  { x: 0.05, z: 0.42, w: 0.85, h: 0.5, d: 0.6, yaw: 12 * D2R },
+  { x: 0.95, z: 0.29, w: 0.42, h: 1.35, d: 0.42, yaw: -18 * D2R },
+  { x: -0.25, z: 1.15, w: 0.36, h: 0.36, d: 0.36, yaw: 38 * D2R },
+];
+state.real = DEFAULT_REAL.map((b) => ({ ...b }));
+
+// ---------- geometry ----------
+// yaw convention matches three.js rotation.y: world = (c*lx + s*lz, ly, -s*lx + c*lz)
+function toWorld(b, lx, ly, lz) {
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  return [b.x + c * lx + s * lz, ly, b.z - s * lx + c * lz];
+}
+function rotDir(yaw, v) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
+}
+
+function buildSurfaceGeometry(boxes, albedo) {
+  const pos = [], nor = [], uv = [], size = [], info = [], center = [], dims = [], col = [];
+  function quad(o, U, V, N, sx, sy, obj, face, cen, dim, yaw, color) {
+    const P = [o, [o[0] + U[0], o[1] + U[1], o[2] + U[2]], [o[0] + U[0] + V[0], o[1] + U[1] + V[1], o[2] + U[2] + V[2]], [o[0] + V[0], o[1] + V[1], o[2] + V[2]]];
+    const T = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      pos.push(...P[i]); nor.push(...N); uv.push(...T[i]); size.push(sx, sy);
+      info.push(obj, face, yaw, 0); center.push(...cen); dims.push(...dim); col.push(...color);
+    }
+  }
+  quad([-3, 0, 0], [6, 0, 0], [0, 3, 0], [0, 0, 1], 6, 3, 0, 6, [0, 1.5, 0], [6, 3, 0], 0, albedo.wall);
+  quad([-3, 0, 4], [6, 0, 0], [0, 0, -4], [0, 1, 0], 6, 4, 1, 7, [0, 0, 2], [6, 0, 4], 0, albedo.floor);
+  boxes.forEach((b, i) => {
+    const { w, h, d } = b;
+    const cen = [b.x, h / 2, b.z];
+    const faces = [
+      // origin (local), U, V, normal, sizeU, sizeV, faceId
+      [[-w / 2, 0, d / 2], [w, 0, 0], [0, h, 0], [0, 0, 1], w, h, 0],
+      [[w / 2, 0, -d / 2], [-w, 0, 0], [0, h, 0], [0, 0, -1], w, h, 1],
+      [[w / 2, 0, d / 2], [0, 0, -d], [0, h, 0], [1, 0, 0], d, h, 2],
+      [[-w / 2, 0, -d / 2], [0, 0, d], [0, h, 0], [-1, 0, 0], d, h, 3],
+      [[-w / 2, h, d / 2], [w, 0, 0], [0, 0, -d], [0, 1, 0], w, d, 4],
+    ];
+    const tint = albedo.box(i);
+    for (const [o, U, V, N, su, sv, f] of faces) {
+      quad(toWorld(b, ...o), rotDir(b.yaw, U), rotDir(b.yaw, V), rotDir(b.yaw, N), su, sv, 2 + i, f, cen, [w, h, d], b.yaw, tint);
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('aSize', new THREE.Float32BufferAttribute(size, 2));
+  g.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 4));
+  g.setAttribute('aCenter', new THREE.Float32BufferAttribute(center, 3));
+  g.setAttribute('aDims', new THREE.Float32BufferAttribute(dims, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
+function boxCorners(b) {
+  const out = [];
+  for (const sy of [0, 1]) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    out.push(new THREE.Vector3(...toWorld(b, sx * b.w / 2, sy * b.h, sz * b.d / 2)));
+  }
+  return out;
+}
+const BOX_EDGES = [];
+for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) { const x = i ^ j; if (x === 1 || x === 2 || x === 4) BOX_EDGES.push([i, j]); }
+
+// ---------- shaders ----------
+const SURF_VERT = /* glsl */`
+precision highp float;
+in vec3 position; in vec3 normal; in vec2 uv; in vec2 aSize; in vec4 aInfo; in vec3 aCenter; in vec3 aDims;
+uniform mat4 modelMatrix; uniform mat4 viewMatrix; uniform mat4 projectionMatrix;
+out vec3 vP; out vec3 vN; out vec2 vUV; out vec2 vSize; out vec4 vInfo; out vec3 vCenter; out vec3 vDims;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vP = wp.xyz; vN = mat3(modelMatrix) * normal; vUV = uv; vSize = aSize; vInfo = aInfo; vCenter = aCenter; vDims = aDims;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+
+const SURF_HEAD = /* glsl */`
+precision highp float; precision highp int;
+uniform float uTime;
+uniform vec4 uBoxA[${MAX_BOXES}];
+uniform vec4 uBoxB[${MAX_BOXES}];
+uniform int uBoxCount;
+in vec3 vP; in vec3 vN; in vec2 vUV; in vec2 vSize; in vec4 vInfo; in vec3 vCenter; in vec3 vDims;
+out vec4 outColor;
+
+struct Surf {
+  vec3 P;      // world position, meters. Wall is the z=0 plane, floor is y=0, +z points at the audience
+  vec3 N;      // world normal
+  vec2 uv;     // 0..1 across this face (v=0 at the bottom edge of side faces, at the front edge of top faces)
+  vec2 size;   // face size in meters
+  float obj;   // 0 = wall, 1 = floor, 2+ = box index + 2
+  float face;  // boxes: 0 front, 1 back, 2 right, 3 left, 4 top; 6 = wall, 7 = floor
+  float isBox; // 1.0 on boxes
+  vec3 center; // box center (wall/floor: plane center)
+  vec3 dims;   // box width, height, depth in meters
+  vec3 L;      // position in the box's own frame, relative to its center (unrotated)
+  float yaw;   // box rotation about y, radians
+  float edge;  // distance to the nearest edge of this face, meters
+};
+
+const float PI = 3.14159265;
+float hash1(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash1(i), hash1(i + vec3(1,0,0)), f.x), mix(hash1(i + vec3(0,1,0)), hash1(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash1(i + vec3(0,0,1)), hash1(i + vec3(1,0,1)), f.x), mix(hash1(i + vec3(0,1,1)), hash1(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p *= 2.02; a *= 0.5; } return s; }
+vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
+vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
+vec3 toLocal(vec3 v, float yaw) { float c = cos(yaw), s = sin(yaw); return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
+// distance along the ray to box i, or -1.0 if missed
+float rayBox(vec3 ro, vec3 rd, int i) {
+  vec4 A = uBoxA[i]; vec4 B = uBoxB[i];
+  vec3 o = toLocal(ro - A.xyz, A.w); vec3 d = toLocal(rd, A.w);
+  d = mix(d, vec3(1e-5), step(abs(d), vec3(1e-5)));
+  vec3 hs = B.xyz * 0.5; vec3 inv = 1.0 / d;
+  vec3 t0 = (-hs - o) * inv, t1 = (hs - o) * inv;
+  vec3 tmn = min(t0, t1), tmx = max(t0, t1);
+  float tn = max(max(tmn.x, tmn.y), tmn.z), tf = min(min(tmx.x, tmx.y), tmx.z);
+  return tf > max(tn, 0.0) ? max(tn, 0.0) : -1.0;
+}
+// 0.0 if any box blocks the path from P toward direction Ldir
+float shadow(vec3 P, vec3 Ldir) {
+  for (int i = 0; i < ${MAX_BOXES}; i++) { if (i >= uBoxCount) break; if (rayBox(P + Ldir * 0.004, Ldir, i) > 0.0) return 0.0; }
+  return 1.0;
+}
+`;
+
+const SURF_MAIN = /* glsl */`
+void main() {
+  Surf s;
+  s.P = vP; s.N = normalize(vN); s.uv = vUV; s.size = vSize;
+  s.obj = floor(vInfo.x + 0.5); s.face = floor(vInfo.y + 0.5); s.yaw = vInfo.z;
+  s.isBox = step(1.5, s.obj); s.center = vCenter; s.dims = vDims;
+  s.L = toLocal(vP - vCenter, s.yaw);
+  vec2 m = vUV * vSize;
+  s.edge = min(min(m.x, m.y), min(vSize.x - m.x, vSize.y - m.y));
+  vec3 c = effect(s, uTime);
+  outColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+const API_DOC = `// Write: vec3 effect(Surf s, float t)  — return 0..1 RGB; black = projector dark.
+// Surf fields: P (world m; wall z=0, floor y=0, +z toward audience), N, uv (0..1 on face),
+//   size (face m), obj (0 wall, 1 floor, 2+ boxes), face (0 front,1 back,2 right,3 left,4 top,6 wall,7 floor),
+//   isBox, center, dims (w,h,d m), L (box-local pos), yaw, edge (m to nearest face edge).
+// Helpers: hash1(vec3) hash2(vec2) noise(vec3) fbm(vec3) hsv(h,s,v) pal(t,a,b,c,d) toLocal(v,yaw)
+//   rayBox(ro,rd,i) shadow(P,lightDir)  uniforms: uBoxCount, uBoxA[i]=(cx,cy,cz,yaw), uBoxB[i]=(w,h,d,0)
+`;
+
+const PRESETS = {
+  calib: { name: 'Alignment grid', code: `vec3 effect(Surf s, float t) {
+  // 5 cm checkerboard per face plus bright edges: the pattern you align boxes against
+  vec2 m = s.uv * s.size;
+  vec2 ch = floor(m / 0.05);
+  float k = mod(ch.x + ch.y, 2.0);
+  vec3 col = s.isBox > 0.5 ? hsv(hash1(vec3(s.obj)) * 0.8, 0.7, 1.0) : vec3(0.5);
+  vec3 c = col * (0.12 + 0.25 * k);
+  c += vec3(1.0) * smoothstep(0.012, 0.004, s.edge);
+  if (s.isBox < 0.5) c *= 0.35;
+  return c;
+}` },
+  city: { name: 'Night city', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) {
+    if (s.obj > 0.5) return vec3(0.0);                      // floor stays dark
+    vec3 c = mix(vec3(0.0, 0.01, 0.05), vec3(0.06, 0.02, 0.12), s.P.y / 3.0);
+    vec2 g = s.P.xy * 40.0; vec2 id = floor(g); float h = hash2(id);
+    c += step(0.985, h) * smoothstep(0.35, 0.0, length(fract(g) - 0.5)) * (0.6 + 0.4 * sin(t * 3.0 + h * 50.0));
+    float m = length(s.P.xy - vec2(1.45, 2.05));
+    c += vec3(1.0, 0.95, 0.8) * smoothstep(0.13, 0.12, m) + vec3(0.25, 0.25, 0.35) * exp(-m * 3.0) * 0.5;
+    return c;
+  }
+  if (s.face == 4.0) {                                       // roofs with a blinking beacon
+    float blink = step(0.85, fract(t * 0.5 + hash1(vec3(s.obj))));
+    return vec3(0.03, 0.03, 0.05) + vec3(1.0, 0.1, 0.1) * blink * smoothstep(0.035, 0.02, length(s.L.xz));
+  }
+  // windows at a fixed real-world pitch, so every box gets the same window size
+  vec2 m = s.uv * s.size; vec2 pitch = vec2(0.09, 0.12);
+  vec2 cell = floor(m / pitch); vec2 f = fract(m / pitch);
+  float inside = step(0.04, m.x) * step(0.04, s.size.x - m.x) * step(0.05, m.y) * step(0.06, s.size.y - m.y);
+  float win = step(0.22, f.x) * step(f.x, 0.78) * step(0.2, f.y) * step(f.y, 0.8) * inside;
+  float h = hash1(vec3(cell, s.obj * 13.0 + s.face));
+  float on = step(0.45, fract(h + floor(t * 0.25 + h * 7.0) * 0.37));
+  vec3 lit = mix(vec3(1.0, 0.78, 0.42), vec3(0.6, 0.8, 1.0), step(0.8, h));
+  return vec3(0.04, 0.04, 0.06) + win * (on * lit * 0.9 + (1.0 - on) * vec3(0.02, 0.03, 0.05));
+}` },
+  sun: { name: 'Moving sun', code: `vec3 effect(Surf s, float t) {
+  // a virtual light orbits the set; faces shade by their real normals and boxes cast shadows on the wall
+  float a = t * 0.35;
+  vec3 Ld = normalize(vec3(cos(a) * 1.3, 1.0 + 0.4 * sin(a * 0.7), 0.9));
+  vec3 base = s.isBox > 0.5 ? hsv(0.07 + hash1(vec3(s.obj)) * 0.08, 0.3, 0.95)
+            : (s.obj < 0.5 ? vec3(0.42, 0.45, 0.58) : vec3(0.3, 0.27, 0.24));
+  float diff = max(dot(s.N, Ld), 0.0);
+  float sh = diff > 0.0 ? shadow(s.P, Ld) : 0.0;
+  vec3 sky = vec3(0.12, 0.16, 0.3) * (0.6 + 0.4 * s.N.y);
+  return base * (sky + vec3(1.0, 0.86, 0.62) * diff * sh * 1.15);
+}` },
+  liquid: { name: 'Liquid fill', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) return vec3(0.0, 0.015, 0.04);
+  float h = hash1(vec3(s.obj * 7.1));
+  float level = s.dims.y * (0.2 + 0.65 * (0.5 + 0.5 * sin(t * 0.35 + h * 6.28)));
+  float wave = 0.025 * sin(s.L.x * 9.0 + t * 2.3) + 0.02 * sin(s.L.z * 11.0 - t * 1.7);
+  float yb = s.L.y + s.dims.y * 0.5;                         // height above the box's base
+  float d = yb - (level + wave);                             // same world level on every face
+  vec3 liquid = mix(vec3(0.0, 0.3, 0.9), vec3(0.0, 0.9, 0.75), clamp(yb / s.dims.y, 0.0, 1.0));
+  float bub = smoothstep(0.8, 0.95, noise(vec3(s.P.x * 30.0, s.P.y * 30.0 - t * 4.0, s.P.z * 30.0)));
+  vec3 c = d < 0.0 ? liquid * (0.55 + 0.45 * fbm(s.P * 8.0 + vec3(0.0, -t, 0.0))) + bub * 0.5 : vec3(0.01);
+  c += vec3(0.6, 1.0, 1.0) * exp(-abs(d) / 0.006);           // meniscus wraps around corners
+  c += vec3(0.7) * exp(-s.edge / 0.004) * 0.25;
+  return c;
+}` },
+  edges: { name: 'Edge pulse', code: `vec3 effect(Surf s, float t) {
+  if (s.isBox < 0.5) return vec3(0.0);
+  float h = hash1(vec3(s.obj));
+  vec3 col = hsv(fract(h + t * 0.03), 0.7, 1.0);
+  float glow = exp(-s.edge / 0.01) + 0.3 * exp(-s.edge / 0.06);
+  // pulse phase is a world-space coordinate, so it flows continuously from face to face
+  float run = fract(s.P.y * 1.5 + s.P.x + s.P.z - t * 0.6 + h);
+  float pulse = smoothstep(0.0, 0.05, run) * smoothstep(0.25, 0.05, run);
+  return col * glow * (0.3 + 1.6 * pulse) + col * (0.04 + 0.04 * sin(t * 1.3 + s.obj));
+}` },
+  ripple: { name: 'Ripple', code: `vec3 effect(Surf s, float t) {
+  // spherical waves expanding from a point on the wall, measured in 3D, so they climb over the boxes
+  vec3 src = vec3(-0.4, 1.7, 0.0);
+  float r = length(s.P - src);
+  float ring = smoothstep(0.75, 1.0, sin(r * 14.0 - t * 4.0));
+  vec3 c = hsv(fract(r * 0.15 - t * 0.05), 0.6, 1.0) * ring * (0.25 + exp(-r * 0.6));
+  if (s.isBox > 0.5) c += vec3(0.9) * exp(-s.edge / 0.006) * 0.4;
+  return c;
+}` },
+  lava: { name: 'Lava flow', code: `vec3 effect(Surf s, float t) {
+  vec3 p = s.P * 3.0; p.y += t * 0.5;
+  float n = fbm(p + fbm(p * 1.7 - vec3(0.0, t * 0.3, 0.0)) * 1.5);
+  vec3 c = pal(n * 1.3, vec3(0.5, 0.2, 0.05), vec3(0.5, 0.3, 0.1), vec3(1.0, 1.0, 0.5), vec3(0.0, 0.1, 0.2));
+  c *= smoothstep(0.3, 0.7, n);
+  if (s.isBox < 0.5) c *= 0.12;
+  return c * 1.3;
+}` },
+  scan: { name: 'Laser sweep', code: `vec3 effect(Surf s, float t) {
+  // a plane of light sweeps out from the wall toward the audience; a second sweeps upward
+  float z = mod(t * 0.5, 2.0) - 0.2;
+  float d = abs(s.P.z - z);
+  vec3 c = vec3(0.0, 1.0, 0.6) * exp(-d / 0.008) + vec3(0.0, 0.4, 0.3) * exp(-d / 0.08) * 0.4;
+  c += vec3(1.0, 0.2, 0.6) * exp(-abs(s.P.y - mod(t * 0.37, 2.8)) / 0.008);
+  vec3 g = smoothstep(0.46, 0.5, abs(fract(s.P * 10.0) - 0.5)) * (1.0 - abs(s.N));
+  c += vec3(0.1, 0.15, 0.2) * max(g.x, max(g.y, g.z)) * 0.6;
+  if (s.isBox > 0.5) c += vec3(0.8) * exp(-s.edge / 0.004) * 0.4;
+  return c;
+}` },
+};
+
+const ROOM_VERT = /* glsl */`
+precision highp float;
+in vec3 position; in vec3 normal; in vec3 color;
+uniform mat4 modelMatrix; uniform mat4 viewMatrix; uniform mat4 projectionMatrix;
+out vec3 vP; out vec3 vN; out vec3 vC;
+void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vP = wp.xyz; vN = mat3(modelMatrix) * normal; vC = color; gl_Position = projectionMatrix * viewMatrix * wp; }`;
+
+const ROOM_FRAG = /* glsl */`
+precision highp float;
+uniform sampler2D uContent; uniform sampler2D uDepth;
+uniform mat4 uProjVP; uniform vec3 uProjPos; uniform float uAmbient; uniform float uLumens; uniform vec2 uTexel;
+in vec3 vP; in vec3 vN; in vec3 vC;
+out vec4 outColor;
+void main() {
+  vec3 N = normalize(vN);
+  vec3 light = vec3(0.0);
+  vec4 clip = uProjVP * vec4(vP, 1.0);
+  if (clip.w > 0.0) {
+    vec3 ndc = clip.xyz / clip.w;
+    if (abs(ndc.x) < 1.0 && abs(ndc.y) < 1.0) {
+      vec2 tuv = ndc.xy * 0.5 + 0.5;
+      float z = ndc.z * 0.5 + 0.5;
+      float vis = 0.0;
+      for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+        vis += (z - 0.0006 < texture(uDepth, tuv + vec2(i, j) * uTexel).r) ? 1.0 : 0.0;
+      }
+      vis /= 9.0;
+      vec3 Ld = uProjPos - vP; float dist = length(Ld);
+      float cosT = max(dot(N, Ld / dist), 0.0);
+      vec3 emitted = texture(uContent, tuv).rgb + 0.018;    // projectors can't emit true black
+      light = emitted * vis * cosT * uLumens * 11.0 / (dist * dist);
+    }
+  }
+  vec3 amb = vec3(1.0, 0.96, 0.9) * uAmbient * (0.65 + 0.35 * N.y);
+  vec3 col = vC * (amb + light);
+  outColor = vec4(pow(col, vec3(1.0 / 1.5)), 1.0);
+}`;
+
+const POS_FRAG = /* glsl */`
+precision highp float;
+in vec3 vP; in vec3 vN; in vec3 vC;
+out vec4 outColor;
+void main() { outColor = vec4(vP, 1.0); }`;
+
+// ---------- renderers ----------
+const roomCanvas = $('room');
+const projCanvas = $('proj');
+const overlay = $('projOverlay');
+const octx = overlay.getContext('2d');
+
+const roomR = new THREE.WebGLRenderer({ canvas: roomCanvas, antialias: true });
+roomR.outputColorSpace = THREE.LinearSRGBColorSpace;
+roomR.setPixelRatio(Math.min(devicePixelRatio, 2));
+const projR = new THREE.WebGLRenderer({ canvas: projCanvas, antialias: true });
+projR.outputColorSpace = THREE.LinearSRGBColorSpace;
+projR.setPixelRatio(1);
+projR.setSize(PROJ_W, PROJ_H, false);
+
+const contentRT = new THREE.WebGLRenderTarget(PROJ_W, PROJ_H, { colorSpace: THREE.NoColorSpace });
+contentRT.texture.minFilter = THREE.LinearFilter;
+const depthRT = new THREE.WebGLRenderTarget(1024, 576);
+depthRT.depthTexture = new THREE.DepthTexture(1024, 576);
+depthRT.depthTexture.type = THREE.UnsignedIntType;
+
+// projectors: the true one lights the room, the model one is the app's belief
+const trueProj = new THREE.PerspectiveCamera(PROJ_FOV, PROJ_W / PROJ_H, 0.5, 12);
+trueProj.position.copy(PROJ_POS); trueProj.lookAt(PROJ_TARGET); trueProj.updateMatrixWorld();
+const modelProj = trueProj.clone();
+function updateModelProjector() {
+  const e = state.projErr / 100; // cm -> m
+  modelProj.position.copy(PROJ_POS).add(new THREE.Vector3(e * 0.8, -e * 0.5, e * 0.3));
+  modelProj.lookAt(PROJ_TARGET.clone().add(new THREE.Vector3(-e * 0.6, e * 0.4, 0)));
+  modelProj.updateMatrixWorld(); modelProj.updateProjectionMatrix();
+}
+
+// scenes
+const realScene = new THREE.Scene();
+const modelScene = new THREE.Scene();
+const overlayScene = new THREE.Scene();
+
+const roomMat = new THREE.RawShaderMaterial({
+  glslVersion: THREE.GLSL3, vertexShader: ROOM_VERT, fragmentShader: ROOM_FRAG,
+  uniforms: {
+    uContent: { value: contentRT.texture }, uDepth: { value: depthRT.depthTexture },
+    uProjVP: { value: new THREE.Matrix4() }, uProjPos: { value: PROJ_POS.clone() },
+    uAmbient: { value: state.ambient }, uLumens: { value: state.lumens }, uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 576) },
+  },
+});
+const posMat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: ROOM_VERT, fragmentShader: POS_FRAG });
+const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+
+const surfUniforms = {
+  uTime: { value: 0 },
+  uBoxA: { value: Array.from({ length: MAX_BOXES }, () => new THREE.Vector4()) },
+  uBoxB: { value: Array.from({ length: MAX_BOXES }, () => new THREE.Vector4()) },
+  uBoxCount: { value: 0 },
+};
+let contentMat = null;
+
+const realAlbedo = {
+  wall: [0.72, 0.71, 0.69], floor: [0.34, 0.32, 0.3],
+  box: (i) => [[0.88, 0.86, 0.82], [0.84, 0.85, 0.86], [0.9, 0.88, 0.84], [0.86, 0.84, 0.8]][i % 4],
+};
+const modelAlbedo = { wall: [1, 1, 1], floor: [1, 1, 1], box: () => [1, 1, 1] };
+
+const realMesh = new THREE.Mesh(new THREE.BufferGeometry(), roomMat);
+realScene.add(realMesh);
+const modelMesh = new THREE.Mesh(new THREE.BufferGeometry(), null);
+modelMesh.frustumCulled = false;
+modelScene.add(modelMesh);
+
+function rebuildReal() {
+  realMesh.geometry.dispose();
+  realMesh.geometry = buildSurfaceGeometry(state.real, realAlbedo);
+}
+
+// overlays: model wireframe, projector frustum, point cloud
+const wireMat = new THREE.LineBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.7 });
+const wireSelMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const modelWire = new THREE.Group(); overlayScene.add(modelWire);
+const frustum = new THREE.Group(); overlayScene.add(frustum);
+let cloud = null;
+
+function rebuildFrustum() {
+  frustum.clear();
+  const cam = trueProj;
+  const far = 3.6;
+  const h = Math.tan(cam.fov * D2R / 2) * far, w = h * cam.aspect;
+  const pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, -far).applyMatrix4(cam.matrixWorld));
+  const o = cam.position.clone();
+  const v = [];
+  for (let i = 0; i < 4; i++) { v.push(o, pts[i], pts[i], pts[(i + 1) % 4]); }
+  const g = new THREE.BufferGeometry().setFromPoints(v);
+  frustum.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.18 })));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.25), new THREE.MeshBasicMaterial({ color: 0x2a3342 }));
+  body.position.copy(cam.position).add(new THREE.Vector3(0, 0, 0.12));
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.035, 20), new THREE.MeshBasicMaterial({ color: 0xffb547 }));
+  lens.position.copy(cam.position); lens.lookAt(PROJ_TARGET);
+  frustum.add(body, lens);
+}
+
+// raycast proxies for picking boxes in the projector view
+const pickGroup = new THREE.Group();
+
+function rebuildModel() {
+  modelMesh.geometry.dispose();
+  modelMesh.geometry = buildSurfaceGeometry(state.model, modelAlbedo);
+  const n = Math.min(state.model.length, MAX_BOXES);
+  surfUniforms.uBoxCount.value = n;
+  state.model.slice(0, MAX_BOXES).forEach((b, i) => {
+    surfUniforms.uBoxA.value[i].set(b.x, b.h / 2, b.z, b.yaw);
+    surfUniforms.uBoxB.value[i].set(b.w, b.h, b.d, 0);
+  });
+  modelWire.clear();
+  pickGroup.clear();
+  state.model.forEach((b, i) => {
+    const c = boxCorners(b);
+    const pts = [];
+    for (const [a, z] of BOX_EDGES) pts.push(c[a], c[z]);
+    modelWire.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), i === state.sel ? wireSelMat : wireMat));
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d));
+    m.position.set(b.x, b.h / 2, b.z); m.rotation.y = b.yaw; m.updateMatrixWorld(); m.userData.i = i;
+    pickGroup.add(m);
+  });
+  pickGroup.updateMatrixWorld(true);
+  renderBoxUI();
+  updateAlignment();
+}
+
+// ---------- shader compile with readable errors ----------
+function checkCompile(fragSrc) {
+  const gl = roomR.getContext();
+  const make = (type, src) => {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, '#version 300 es\n' + src); gl.compileShader(sh);
+    const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS);
+    const log = ok ? '' : gl.getShaderInfoLog(sh);
+    return { sh, ok, log };
+  };
+  const v = make(gl.VERTEX_SHADER, SURF_VERT), f = make(gl.FRAGMENT_SHADER, fragSrc);
+  let ok = v.ok && f.ok, log = v.log + f.log;
+  if (ok) {
+    const p = gl.createProgram(); gl.attachShader(p, v.sh); gl.attachShader(p, f.sh); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { ok = false; log = gl.getProgramInfoLog(p); }
+    gl.deleteProgram(p);
+  }
+  gl.deleteShader(v.sh); gl.deleteShader(f.sh);
+  return { ok, log: (log || '').replace(/\0/g, '').trim() };
+}
+
+function fragFor(userCode) { return SURF_HEAD + '\n#line 1\n' + userCode + '\n' + SURF_MAIN; }
+
+function applyEffect(code, label) {
+  const src = fragFor(code);
+  const res = checkCompile(src);
+  const status = $('codeStatus');
+  if (!res.ok) {
+    status.className = 'err';
+    status.textContent = 'Shader did not compile. Line numbers refer to the code above.\n' + res.log;
+    return res;
+  }
+  const mat = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: SURF_VERT, fragmentShader: src, uniforms: surfUniforms });
+  if (contentMat) contentMat.dispose();
+  contentMat = mat;
+  modelMesh.material = mat;
+  status.className = '';
+  status.textContent = 'Projecting: ' + label;
+  $('effectName').textContent = label;
+  $('code').value = code;
+  return res;
+}
+
+// ---------- depth scan + box fitting ----------
+const SCAN_W = 192, SCAN_H = 108;
+const scanRT = new THREE.WebGLRenderTarget(SCAN_W, SCAN_H, { type: THREE.FloatType, format: THREE.RGBAFormat });
+const scanCam = new THREE.PerspectiveCamera(52, SCAN_W / SCAN_H, 0.2, 12);
+scanCam.position.copy(PROJ_POS).add(new THREE.Vector3(0.14, 0.06, 0));
+scanCam.lookAt(PROJ_TARGET); scanCam.updateMatrixWorld();
+
+let rngSeed = 7;
+function rand() { rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0; return rngSeed / 4294967296; }
+function gauss() { let u = 0, v = 0; while (u === 0) u = rand(); v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const sigmaAt = (d) => (0.002 + 0.0012 * d * d) * state.noise;
+
+function percentile(arr, p) {
+  const a = Float32Array.from(arr).sort();
+  return a[Math.min(a.length - 1, Math.max(0, Math.floor(p * (a.length - 1))))];
+}
+
+function runScan() {
+  const t0 = performance.now();
+  rngSeed = (Math.random() * 1e9) >>> 0;
+  // 1. capture: render world positions from the sensor, then add range noise and dropouts
+  const prevClear = roomR.getClearAlpha();
+  roomR.setRenderTarget(scanRT); roomR.setClearColor(0x000000, 0); roomR.clear();
+  realScene.overrideMaterial = posMat; roomR.render(realScene, scanCam); realScene.overrideMaterial = null;
+  const buf = new Float32Array(SCAN_W * SCAN_H * 4);
+  roomR.readRenderTargetPixels(scanRT, 0, 0, SCAN_W, SCAN_H, buf);
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, prevClear || 1);
+
+  const N = SCAN_W * SCAN_H;
+  const P = new Float32Array(N * 3), valid = new Uint8Array(N), range = new Float32Array(N);
+  const o = scanCam.position;
+  let nValid = 0;
+  for (let i = 0; i < N; i++) {
+    if (buf[i * 4 + 3] < 0.5 || rand() < 0.015) continue;
+    let x = buf[i * 4] - o.x, y = buf[i * 4 + 1] - o.y, z = buf[i * 4 + 2] - o.z;
+    const d = Math.hypot(x, y, z);
+    const dn = d + gauss() * sigmaAt(d);
+    x = x / d * dn; y = y / d * dn; z = z / d * dn;
+    P[i * 3] = o.x + x; P[i * 3 + 1] = o.y + y; P[i * 3 + 2] = o.z + z;
+    valid[i] = 1; range[i] = d; nValid++;
+  }
+
+  const localNormal = (i) => {
+    const x = i % SCAN_W, y = (i / SCAN_W) | 0, k = 3;
+    if (x < k || y < k || x >= SCAN_W - k || y >= SCAN_H - k) return null;
+    const a = i - k, b = i + k, c = i - k * SCAN_W, d = i + k * SCAN_W;
+    if (!valid[a] || !valid[b] || !valid[c] || !valid[d]) return null;
+    const u = new THREE.Vector3(P[b * 3] - P[a * 3], P[b * 3 + 1] - P[a * 3 + 1], P[b * 3 + 2] - P[a * 3 + 2]);
+    const v = new THREE.Vector3(P[d * 3] - P[c * 3], P[d * 3 + 1] - P[c * 3 + 1], P[d * 3 + 2] - P[c * 3 + 2]);
+    if (u.length() > 0.25 || v.length() > 0.25) return null; // straddles a depth edge
+    const n = u.cross(v); const l = n.length();
+    return l > 1e-8 ? n.divideScalar(l) : null;
+  };
+
+  // 2. RANSAC: find and remove the two dominant planes (wall and floor)
+  const bg = new Uint8Array(N);
+  const planes = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const idx = [];
+    for (let i = 0; i < N; i++) if (valid[i] && !bg[i]) idx.push(i);
+    const sample = [];
+    for (let k = 0; k < 1500; k++) sample.push(idx[(rand() * idx.length) | 0]);
+    let best = null, bestCount = -1;
+    for (let it = 0; it < 250; it++) {
+      const a = idx[(rand() * idx.length) | 0], b = idx[(rand() * idx.length) | 0], c = idx[(rand() * idx.length) | 0];
+      const A = new THREE.Vector3(P[a * 3], P[a * 3 + 1], P[a * 3 + 2]);
+      const B = new THREE.Vector3(P[b * 3], P[b * 3 + 1], P[b * 3 + 2]).sub(A);
+      const C = new THREE.Vector3(P[c * 3], P[c * 3 + 1], P[c * 3 + 2]).sub(A);
+      const n = B.cross(C); if (n.length() < 1e-6) continue; n.normalize();
+      const off = -n.dot(A);
+      let count = 0;
+      for (const s of sample) if (Math.abs(n.x * P[s * 3] + n.y * P[s * 3 + 1] + n.z * P[s * 3 + 2] + off) < 2.5 * sigmaAt(range[s]) + 0.004) count++;
+      if (count > bestCount) { bestCount = count; best = { n, off }; }
+    }
+    // a point joins the plane only if it is close to it AND its local surface faces the same way,
+    // so the top of a box pushed against the wall isn't swallowed by the wall
+    let inl = 0;
+    for (const i of idx) {
+      if (Math.abs(best.n.x * P[i * 3] + best.n.y * P[i * 3 + 1] + best.n.z * P[i * 3 + 2] + best.off) >= 3 * sigmaAt(range[i]) + 0.006) continue;
+      const nl = localNormal(i);
+      if (nl && Math.abs(nl.dot(best.n)) < 0.35) continue;
+      bg[i] = 1; inl++;
+    }
+    planes.push({ n: best.n, inliers: inl });
+  }
+
+  // 3. cluster the remaining points: 4-connected on the sensor grid, joined if close in 3D
+  const label = new Int32Array(N).fill(-1);
+  const clusters = [];
+  for (let i = 0; i < N; i++) {
+    if (!valid[i] || bg[i] || label[i] >= 0) continue;
+    const members = [i]; label[i] = clusters.length;
+    for (let q = 0; q < members.length; q++) {
+      const j = members[q], x = j % SCAN_W, y = (j / SCAN_W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= SCAN_W || ny >= SCAN_H) continue;
+        const k = ny * SCAN_W + nx;
+        if (!valid[k] || bg[k] || label[k] >= 0) continue;
+        const dist = Math.hypot(P[j * 3] - P[k * 3], P[j * 3 + 1] - P[k * 3 + 1], P[j * 3 + 2] - P[k * 3 + 2]);
+        if (dist < 0.06 + 3 * sigmaAt(range[j])) { label[k] = clusters.length; members.push(k); }
+      }
+    }
+    clusters.push(members);
+  }
+  const kept = clusters.filter((m) => m.length >= 40);
+
+  // 4. fit an oriented box to each cluster
+  const boxes = [];
+  for (const m of kept) {
+    const xs = [], ys = [], zs = [], sig = [];
+    for (const i of m) { xs.push(P[i * 3]); ys.push(P[i * 3 + 1]); zs.push(P[i * 3 + 2]); sig.push(sigmaAt(range[i])); }
+    const sMed = percentile(sig, 0.5);
+    const yTop = percentile(ys, 0.99);
+    const topY = ys.filter((y) => y > yTop - 4 * sMed - 0.01);
+    const h = percentile(topY, 0.5);
+    let best = null;
+    for (let deg = -45; deg < 45; deg += 1) {
+      const a = deg * D2R, c = Math.cos(a), s = Math.sin(a);
+      const lx = [], lz = [];
+      for (let k = 0; k < xs.length; k++) { lx.push(c * xs[k] - s * zs[k]); lz.push(s * xs[k] + c * zs[k]); }
+      const x0 = percentile(lx, 0.005), x1 = percentile(lx, 0.995), z0 = percentile(lz, 0.005), z1 = percentile(lz, 0.995);
+      const area = (x1 - x0) * (z1 - z0);
+      if (!best || area < best.area) best = { area, a, x0, x1, z0, z1 };
+    }
+    const c = Math.cos(best.a), s = Math.sin(best.a);
+    // only the front face was seen (no top or side): the depth is unknown, so assume the box runs back to the wall
+    let inferred = false;
+    if (best.z1 - best.z0 < 0.12) {
+      const zWall = (0.015 + Math.max(s * best.x0, s * best.x1)) / c;
+      if (zWall < best.z0) { best.z0 = zWall; inferred = true; }
+    }
+    const shrink = sMed;
+    const w = Math.max(0.05, best.x1 - best.x0), d = Math.max(0.05, best.z1 - best.z0 - (inferred ? 1 : 2) * shrink);
+    const lcx = (best.x0 + best.x1) / 2, lcz = (best.z0 + best.z1) / 2;
+    boxes.push({ x: c * lcx + s * lcz, z: -s * lcx + c * lcz, w, h, d, yaw: best.a, n: m.length, inferred });
+  }
+  boxes.sort((a, b) => a.x - b.x);
+
+  // point cloud overlay, colored by cluster
+  if (cloud) { overlayScene.remove(cloud); cloud.geometry.dispose(); }
+  const cp = [], cc = [];
+  kept.forEach((m, ci) => {
+    const col = new THREE.Color().setHSL((ci * 0.17) % 1, 0.8, 0.6);
+    for (const i of m) { cp.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); cc.push(col.r, col.g, col.b); }
+  });
+  for (let i = 0; i < N; i += 3) if (valid[i] && bg[i]) { cp.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); cc.push(0.16, 0.19, 0.24); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+  cloud = new THREE.Points(g, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true }));
+  cloud.visible = state.showCloud;
+  overlayScene.add(cloud);
+
+  state.model = boxes.slice(0, MAX_BOXES).map(({ n, inferred, ...b }) => b);
+  const nInferred = boxes.filter((b) => b.inferred).length;
+  state.sel = -1;
+  rebuildModel();
+
+  const ms = performance.now() - t0;
+  const ang = (n, axis) => (Math.acos(Math.min(1, Math.abs(n.dot(axis)))) / D2R).toFixed(1);
+  const pl = planes.map((p) => (Math.abs(p.n.y) > Math.abs(p.n.z) ? `floor (tilt ${ang(p.n, new THREE.Vector3(0, 1, 0))}°)` : `wall (tilt ${ang(p.n, new THREE.Vector3(0, 0, 1))}°)`));
+  $('scanStats').innerHTML =
+    `<b>${nValid.toLocaleString()}</b> depth points · noise at 3 m ≈ <b>${(sigmaAt(3) * 100).toFixed(1)} cm</b>\n` +
+    `Planes removed: <b>${pl.join(', ')}</b>\n` +
+    `Clusters: <b>${kept.length}</b> objects (${clusters.length - kept.length} specks dropped)\n` +
+    `Boxes fitted: <b>${boxes.length}</b> in <b>${ms.toFixed(0)} ms</b>` +
+    (nInferred ? `\n${nInferred} box${nInferred > 1 ? 'es' : ''} showed only a front face; depth assumed to reach the wall` : '');
+}
+
+// ---------- alignment metric ----------
+function updateAlignment() {
+  const el = $('alignReadout');
+  if (!state.model.length) { el.textContent = 'No surfaces mapped yet'; return; }
+  let total = 0, n = 0, matched = 0;
+  for (const r of state.real) {
+    let best = null, bd = Infinity;
+    for (const m of state.model) { const d = Math.hypot(m.x - r.x, m.z - r.z, (m.h - r.h) / 2); if (d < bd) { bd = d; best = m; } }
+    if (!best || bd > 0.4) continue;
+    matched++;
+    const rc = boxCorners(r), mc = boxCorners(best);
+    for (const p of rc) { let md = Infinity; for (const q of mc) md = Math.min(md, p.distanceTo(q)); total += md; n++; }
+  }
+  const cm = n ? (total / n) * 100 : 0;
+  const extra = Math.max(0, state.model.length - matched);
+  const grade = !n ? 'bad' : cm < 1.5 ? 'ok' : cm < 4 ? 'warn' : 'bad';
+  el.innerHTML = `Mapped ${matched}/${state.real.length} objects · mean corner error <span class="pill ${grade}">${n ? cm.toFixed(1) + ' cm' : '—'}</span>` +
+    (extra ? ` · ${extra} extra` : '') + (state.projErr ? ` · projector off by ${state.projErr} cm` : '');
+}
+
+// ---------- room camera (simple orbit) ----------
+const roomCam = new THREE.PerspectiveCamera(45, 1, 0.05, 50);
+const orbit = { target: new THREE.Vector3(0, 0.7, 0.6), az: 0, el: 0, r: 4 };
+const VIEWS = {
+  audience: { pos: [-1.6, 1.35, 4.6], target: [0, 0.75, 0.5] },
+  side: { pos: [3.4, 1.6, 2.4], target: [0, 0.7, 0.5] },
+  top: { pos: [0.01, 5.2, 2.2], target: [0, 0, 1.0] },
+  projector: { pos: PROJ_POS.toArray(), target: PROJ_TARGET.toArray(), fov: PROJ_FOV },
+};
+function setView(name) {
+  const v = VIEWS[name];
+  orbit.target.set(...v.target);
+  const d = new THREE.Vector3(...v.pos).sub(orbit.target);
+  orbit.r = d.length(); orbit.el = Math.asin(d.y / orbit.r); orbit.az = Math.atan2(d.x, d.z);
+  roomCam.fov = v.fov || 45; roomCam.updateProjectionMatrix();
+  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+}
+function applyOrbit() {
+  const { az, el, r, target } = orbit;
+  roomCam.position.set(target.x + r * Math.cos(el) * Math.sin(az), target.y + r * Math.sin(el), target.z + r * Math.cos(el) * Math.cos(az));
+  roomCam.lookAt(target);
+}
+{
+  const ptrs = new Map(); let pinch0 = 0, r0 = 0;
+  roomCanvas.addEventListener('pointerdown', (e) => { roomCanvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); r0 = orbit.r; } });
+  roomCanvas.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 1) {
+      orbit.az -= (e.clientX - prev[0]) * 0.006;
+      orbit.el = Math.max(-0.1, Math.min(1.5, orbit.el + (e.clientY - prev[1]) * 0.006));
+      if (roomCam.fov !== 45) { roomCam.fov = 45; roomCam.updateProjectionMatrix(); }
+      document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    } else if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch0) orbit.r = Math.max(1, Math.min(10, r0 * pinch0 / d));
+    }
+  });
+  const up = (e) => { ptrs.delete(e.pointerId); pinch0 = 0; };
+  roomCanvas.addEventListener('pointerup', up); roomCanvas.addEventListener('pointercancel', up);
+  roomCanvas.addEventListener('wheel', (e) => { e.preventDefault(); orbit.r = Math.max(1, Math.min(10, orbit.r * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+}
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+
+// ---------- projector view interaction ----------
+const raycaster = new THREE.Raycaster();
+function projNDC(e) {
+  const r = projCanvas.getBoundingClientRect();
+  return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+}
+{
+  let drag = null;
+  projCanvas.addEventListener('pointerdown', (e) => {
+    raycaster.setFromCamera(projNDC(e), modelProj);
+    const hit = raycaster.intersectObjects(pickGroup.children, false)[0];
+    if (!hit) { state.sel = -1; rebuildModel(); return; }
+    state.sel = hit.object.userData.i;
+    const b = state.model[state.sel];
+    drag = { plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y), start: hit.point.clone(), x: b.x, z: b.z };
+    projCanvas.setPointerCapture(e.pointerId);
+    selectTab('manual');
+    rebuildModel();
+  });
+  projCanvas.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    raycaster.setFromCamera(projNDC(e), modelProj);
+    const p = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(drag.plane, p)) return;
+    const b = state.model[state.sel];
+    b.x = drag.x + (p.x - drag.start.x); b.z = Math.max(0.05, drag.z + (p.z - drag.start.z));
+    rebuildModel();
+  });
+  const end = () => { drag = null; };
+  projCanvas.addEventListener('pointerup', end); projCanvas.addEventListener('pointercancel', end);
+  projCanvas.addEventListener('wheel', (e) => {
+    if (state.sel < 0) return;
+    e.preventDefault();
+    state.model[state.sel].yaw += Math.sign(e.deltaY) * 1.5 * D2R;
+    rebuildModel();
+  }, { passive: false });
+}
+
+function drawOverlay() {
+  const r = overlay.getBoundingClientRect();
+  const dpr = Math.min(devicePixelRatio, 2);
+  if (overlay.width !== Math.round(r.width * dpr)) { overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr); }
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!state.showHandles) return;
+  const W = overlay.width, H = overlay.height;
+  state.model.forEach((b, i) => {
+    const c = boxCorners(b).map((p) => { const v = p.clone().project(modelProj); return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H]; });
+    octx.strokeStyle = i === state.sel ? '#ffb547' : 'rgba(255,255,255,0.28)';
+    octx.lineWidth = (i === state.sel ? 2 : 1) * dpr;
+    octx.beginPath();
+    for (const [a, z] of BOX_EDGES) { octx.moveTo(...c[a]); octx.lineTo(...c[z]); }
+    octx.stroke();
+  });
+}
+
+// ---------- console UI ----------
+function selectTab(which) {
+  const manual = which === 'manual';
+  $('tabManual').setAttribute('aria-selected', String(manual));
+  $('tabScan').setAttribute('aria-selected', String(!manual));
+  $('paneManual').style.display = manual ? 'grid' : 'none';
+  $('paneScan').style.display = manual ? 'none' : 'grid';
+}
+$('tabManual').onclick = () => selectTab('manual');
+$('tabScan').onclick = () => selectTab('scan');
+
+const BOX_FIELDS = [
+  ['x', 'Left / right', -2.2, 2.2, 0.005, 'm'], ['z', 'Out from wall', 0.05, 2.5, 0.005, 'm'],
+  ['w', 'Width', 0.05, 1.6, 0.005, 'm'], ['h', 'Height', 0.05, 2.2, 0.005, 'm'], ['d', 'Depth', 0.05, 1.6, 0.005, 'm'],
+  ['yaw', 'Rotation', -90, 90, 0.5, 'deg'],
+];
+function renderBoxUI() {
+  const list = $('boxList');
+  list.innerHTML = '';
+  state.model.forEach((b, i) => {
+    const el = document.createElement('button');
+    el.className = 'chip'; el.textContent = 'Box ' + (i + 1);
+    el.setAttribute('aria-pressed', String(i === state.sel));
+    el.onclick = () => { state.sel = i; rebuildModel(); };
+    list.appendChild(el);
+  });
+  if (!state.model.length) list.innerHTML = '<span class="note">No boxes yet. Add one, or run a depth scan.</span>';
+  const sl = $('boxSliders');
+  const b = state.model[state.sel];
+  if (!b) { sl.innerHTML = state.model.length ? '<span class="note" style="grid-column:1/-1">Select a box to size it.</span>' : ''; return; }
+  if (sl.dataset.sel !== String(state.sel) || !sl.children.length || sl.children.length < 3) {
+    sl.innerHTML = '';
+    for (const [k, label, min, max, step] of BOX_FIELDS) {
+      const id = 'f_' + k;
+      sl.insertAdjacentHTML('beforeend', `<label for="${id}">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}"><output id="${id}o"></output>`);
+      $(id).addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        state.model[state.sel][k] = k === 'yaw' ? v * D2R : v;
+        rebuildModel();
+      });
+    }
+    sl.dataset.sel = String(state.sel);
+  }
+  for (const [k, , , , , unit] of BOX_FIELDS) {
+    const v = k === 'yaw' ? b.yaw / D2R : b[k];
+    const inp = $('f_' + k);
+    if (document.activeElement !== inp) inp.value = v;
+    $('f_' + k + 'o').textContent = unit === 'deg' ? v.toFixed(1) + '°' : (v * 100).toFixed(1) + ' cm';
+  }
+}
+$('addBox').onclick = () => {
+  if (state.model.length >= MAX_BOXES) return;
+  state.model.push({ x: 0, z: 0.7, w: 0.4, h: 0.4, d: 0.4, yaw: 0 });
+  state.sel = state.model.length - 1; rebuildModel();
+};
+$('delBox').onclick = () => { if (state.sel < 0) return; state.model.splice(state.sel, 1); state.sel = -1; rebuildModel(); };
+$('scramble').onclick = () => {
+  const j = (s) => (Math.random() * 2 - 1) * s;
+  state.model.forEach((b) => { b.x += j(0.08); b.z = Math.max(0.05, b.z + j(0.06)); b.w *= 1 + j(0.1); b.h *= 1 + j(0.1); b.d *= 1 + j(0.1); b.yaw += j(8) * D2R; });
+  rebuildModel();
+};
+$('clearModel').onclick = () => { state.model = []; state.sel = -1; rebuildModel(); };
+$('runScan').onclick = () => runScan();
+$('newLayout').onclick = () => { state.real = randomLayout(); rebuildReal(); updateAlignment(); };
+
+function randomLayout() {
+  const out = [];
+  let tries = 0;
+  const n = 3 + Math.floor(Math.random() * 3);
+  while (out.length < n && tries++ < 400) {
+    const w = 0.3 + Math.random() * 0.6, d = 0.3 + Math.random() * 0.4, h = 0.3 + Math.random() * 1.1;
+    const b = { x: -1.5 + Math.random() * 3, z: d / 2 + 0.03 + Math.random() * 0.9, w, h, d, yaw: (Math.random() * 2 - 1) * 35 * D2R };
+    const rad = Math.hypot(w, d) / 2;
+    b.z = Math.max(b.z, rad + 0.03);
+    if (out.every((o) => Math.hypot(o.x - b.x, o.z - b.z) > rad + Math.hypot(o.w, o.d) / 2 + 0.06)) out.push(b);
+  }
+  return out;
+}
+
+function bindRange(id, key, fmt, after) {
+  const el = $(id), out = $(id + 'Out');
+  const show = () => { out.textContent = fmt(state[key]); };
+  el.addEventListener('input', () => { state[key] = parseFloat(el.value); show(); after && after(); });
+  el.value = state[key]; show();
+}
+bindRange('ambient', 'ambient', (v) => Math.round(v * 100 / 0.6) + '%', () => { roomMat.uniforms.uAmbient.value = state.ambient; });
+bindRange('lumens', 'lumens', (v) => Math.round(v * 100) + '%', () => { roomMat.uniforms.uLumens.value = state.lumens; });
+bindRange('projErr', 'projErr', (v) => v.toFixed(1) + ' cm', () => { updateModelProjector(); updateAlignment(); });
+bindRange('noise', 'noise', (v) => v.toFixed(1) + '×');
+function bindCheck(id, key, after) { const el = $(id); el.checked = state[key]; el.addEventListener('change', () => { state[key] = el.checked; after && after(); }); }
+bindCheck('showModel', 'showModel', () => { modelWire.visible = state.showModel; });
+bindCheck('showFrustum', 'showFrustum', () => { frustum.visible = state.showFrustum; });
+bindCheck('showCloud', 'showCloud', () => { if (cloud) cloud.visible = state.showCloud; });
+bindCheck('showHandles', 'showHandles');
+bindCheck('paused', 'paused');
+
+// presets
+const presetRow = $('presets');
+for (const [key, p] of Object.entries(PRESETS)) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = p.name; b.dataset.preset = key;
+  b.onclick = () => { state.effect = key; applyEffect(p.code, p.name); markPreset(); };
+  presetRow.appendChild(b);
+}
+function markPreset() { presetRow.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.preset === state.effect))); }
+$('applyCode').onclick = () => { state.effect = 'custom'; markPreset(); applyEffect($('code').value, 'Custom'); };
+
+// ---------- AI in the loop ----------
+const IDEAS = [
+  ['Aquarium', 'Aquarium: each box is a tank at a different water level, fish swim along the wall'],
+  ['Searchlight', 'Wooden crates lit by a slow searchlight that casts shadows on the wall'],
+  ['Power-up', 'A neon city that powers up one box at a time, tallest last'],
+  ['Book pages', 'Each box is a stack of glowing book pages turning'],
+];
+IDEAS.forEach(([label, t]) => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = label;
+  b.title = t; b.onclick = () => { $('prompt').value = t; };
+  $('ideas').appendChild(b);
+});
+
+function describeScene() {
+  return state.model.map((b, i) =>
+    `box ${i} (obj=${i + 2}): center x=${b.x.toFixed(2)} z=${b.z.toFixed(2)}, width ${b.w.toFixed(2)} m, height ${b.h.toFixed(2)} m, depth ${b.d.toFixed(2)} m, yaw ${(b.yaw / D2R).toFixed(0)}°`
+  ).join('\n') || '(no boxes mapped)';
+}
+function buildPrompt(request) {
+  return `You write GLSL ES 3.00 fragment-shader effects for a projection-mapping app. A projector lights a real wall, floor, and some boxes standing on the floor in front of the wall. The app knows the 3D geometry, so effects are written in world space and the app renders them from the projector's viewpoint, which makes them land correctly on every surface. Continuity across box edges comes for free when you use world-space coordinates (s.P); use per-face coordinates (s.uv * s.size, meters) for things that should sit on one face at true physical scale.
+
+Already defined for you (do not redeclare any of it):
+${SURF_HEAD.replace(/^precision.*$/gm, '').replace(/^in .*$/gm, '').replace(/^out .*$/gm, '').trim()}
+
+Scene (meters; wall is z=0, floor is y=0, +z points toward the audience and projector, +y up, +x to the audience's right):
+${describeScene()}
+
+Write the function
+vec3 effect(Surf s, float t)
+where t is seconds. Return RGB in 0..1. Black means the projector emits nothing there; projected light reads best as bright accents on darkness, and the boxes are the stars, so keep the wall and floor mostly dark unless the idea needs them. You may add helper functions above effect() with unique names. Keep loops under 64 iterations, use no textures, and make it animate.
+
+The look to create: ${request}
+
+Reply with one \`\`\`glsl code block and nothing else.`;
+}
+function extractCode(text) {
+  const m = text.match(/```(?:glsl)?\s*\n([\s\S]*?)```/);
+  return (m ? m[1] : text).trim();
+}
+
+let sampleFn = null, aiCtl = null;
+(async () => {
+  if (!window.claude || typeof window.claude.use !== 'function') { $('aiBlock').hidden = true; $('aiOff').hidden = false; return; }
+  try { sampleFn = await window.claude.use('sample'); } catch { sampleFn = null; }
+  if (!sampleFn) { $('aiBlock').hidden = true; $('aiOff').hidden = false; }
+})();
+
+const AI_ERRORS = {
+  not_granted: 'Claude access was declined for this page. Shader editing still works.',
+  rate_limited: 'Too many requests right now. Wait a minute and try again.',
+  cancelled: 'Stopped.',
+};
+$('generate').onclick = async () => {
+  const req = $('prompt').value.trim() || $('prompt').placeholder;
+  if (!sampleFn) return;
+  const gen = $('generate'), stop = $('stopGen'), status = $('codeStatus');
+  gen.disabled = true; stop.hidden = false; status.className = ''; status.textContent = 'Thinking…';
+  $('codeDetails').open = true;
+  aiCtl = new AbortController();
+  try {
+    const prompt = buildPrompt(req);
+    const { text } = await sampleFn(prompt, { signal: aiCtl.signal, onText: ({ text }) => { status.textContent = 'Writing shader…'; $('code').value = extractCode(text); } });
+    let code = extractCode(text);
+    let res = applyEffect(code, 'Claude: ' + req.slice(0, 32));
+    if (!res.ok) {
+      // one repair round with the compiler log
+      status.className = ''; status.textContent = 'Fixing a compile error…';
+      const fix = await sampleFn([
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: '```glsl\n' + code + '\n```' },
+        { role: 'user', content: 'That failed to compile with:\n' + res.log + '\nReturn the corrected function in one ```glsl block.' },
+      ], { signal: aiCtl.signal });
+      code = extractCode(fix.text);
+      res = applyEffect(code, 'Claude: ' + req.slice(0, 32));
+    }
+    if (res.ok) { state.effect = 'custom'; markPreset(); }
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = AI_ERRORS[e && e.code] || ('Claude could not generate a shader: ' + ((e && e.message) || 'unknown error'));
+  } finally {
+    gen.disabled = false; stop.hidden = true; aiCtl = null;
+  }
+};
+$('stopGen').onclick = () => aiCtl && aiCtl.abort();
+
+// ---------- render loop ----------
+function resize() {
+  const r = roomCanvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (roomCanvas.width !== Math.round(w * roomR.getPixelRatio()) || roomCanvas.height !== Math.round(h * roomR.getPixelRatio())) {
+    roomR.setSize(w, h, false); roomCam.aspect = w / h; roomCam.updateProjectionMatrix();
+  }
+}
+
+let last = performance.now(), simT = 0, frames = 0, fpsT = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!state.paused) simT += dt;
+  surfUniforms.uTime.value = simT;
+  frames++; fpsT += dt;
+  if (fpsT > 1) { $('fps').textContent = `Room view · ${Math.round(frames / fpsT)} fps · drag to orbit`; frames = 0; fpsT = 0; }
+
+  resize(); applyOrbit();
+  roomMat.uniforms.uProjVP.value.multiplyMatrices(trueProj.projectionMatrix, trueProj.matrixWorldInverse);
+
+  // 1. depth of the real room from the real projector (for projector shadows)
+  realScene.overrideMaterial = depthOnly;
+  roomR.setRenderTarget(depthRT); roomR.clear(); roomR.render(realScene, trueProj);
+  realScene.overrideMaterial = null;
+  // 2. the content, rendered from where the app thinks the projector is
+  if (contentMat) { roomR.setRenderTarget(contentRT); roomR.setClearColor(0x000000, 1); roomR.clear(); roomR.render(modelScene, modelProj); }
+  // 3. the room as an audience member sees it
+  roomR.setRenderTarget(null); roomR.setClearColor(0x07090d, 1); roomR.clear();
+  roomR.render(realScene, roomCam);
+  roomR.autoClear = false; roomR.render(overlayScene, roomCam); roomR.autoClear = true;
+
+  // projector output preview (its own WebGL context)
+  if (contentMat) projR.render(modelScene, modelProj);
+  drawOverlay();
+  requestAnimationFrame(frame);
+}
+
+// ---------- boot ----------
+rebuildReal();
+rebuildFrustum();
+updateModelProjector();
+setView('audience');
+applyEffect(PRESETS.city.code, PRESETS.city.name); markPreset();
+resize();
+runScan();
+requestAnimationFrame(frame);
+window.__sandbox = { state, runScan, applyEffect, PRESETS, checkCompile, fragFor };
+</script>
+</body>
+</html>
