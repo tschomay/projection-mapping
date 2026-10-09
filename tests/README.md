@@ -8,13 +8,14 @@ cd tests
 npm install          # once: Playwright
 npx playwright install chromium   # once, if you don't have its browser yet
 npm test             # everything (the camera test takes a few minutes)
-npm run test:quick   # just the pipeline checks, about two seconds
+npm run test:quick   # the Node checks only, a few seconds
 ```
 
 | File | What it checks |
 |---|---|
 | `sw.test.mjs` | The offline cache list and version in `app/sw.js` match the app's files. If it fails, run `node tools/sw.mjs`. |
 | `capture.test.mjs` | The surface-capture pipeline (`app/src/capture.js`) on a synthetic room: a projector, a camera beside it, a wall, a floor and a box. The box faces must come back as three surfaces with the right corners. Node only. |
+| `transfer.test.mjs` | Second-screen file transfer in Node with a slow fake connection: 5 MB arrives intact, never more than 32 chunks in flight, progress reported. |
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
 | `show.e2e.mjs` | Cues and timeline: three cues in sync with a generated 120 bpm song, jumping back, a tap in Show mode, and a cue that follows four beats. |

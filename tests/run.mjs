@@ -1,6 +1,6 @@
 // Runs every check. `--quick` skips the slow browser tests.
 const quick = process.argv.includes('--quick');
-const suites = ['./sw.test.mjs', './capture.test.mjs', ...(quick ? [] : ['./check.e2e.mjs', './link.e2e.mjs', './show.e2e.mjs', './ai.e2e.mjs', './mesh.e2e.mjs', './limits.e2e.mjs', './photo.e2e.mjs', './scan.e2e.mjs'])];
+const suites = ['./sw.test.mjs', './capture.test.mjs', './transfer.test.mjs', ...(quick ? [] : ['./check.e2e.mjs', './link.e2e.mjs', './show.e2e.mjs', './ai.e2e.mjs', './mesh.e2e.mjs', './limits.e2e.mjs', './photo.e2e.mjs', './scan.e2e.mjs'])];
 let failed = 0;
 for (const s of suites) {
   const t0 = Date.now();

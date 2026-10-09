@@ -357,9 +357,12 @@ class App {
       if (data.type === 'need') {
         const m = this.media.get(data.id);
         if (!m || !m.file) return;
-        this.toast(`Sending ${m.name} to the screen…`);
+        this.toast(`Sending ${m.name} to the screen…`, 8000);
         port.sendFile(m.id, { blob: m.file, name: m.name, type: m.file.type });
       }
+    };
+    port.onprogress = ({ name, sent, total }) => {
+      this.toast(sent >= total ? `${name} is on the screen.` : `Sending ${name} to the screen: ${Math.floor(sent / total * 100)}%`, sent >= total ? 3200 : 8000);
     };
     port.onclose = () => {
       this.ports.delete(port);
