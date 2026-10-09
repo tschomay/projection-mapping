@@ -1,0 +1,13 @@
+{
+  "name": "surface-mapper-tests",
+  "private": true,
+  "type": "module",
+  "description": "Checks for the Surface Mapper app (app/). Run `npm install` once, then `npm test`.",
+  "scripts": {
+    "test": "node run.mjs",
+    "test:quick": "node run.mjs --quick"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

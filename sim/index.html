@@ -215,11 +215,12 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
         <pre class="stats" id="stats2d"></pre>
         <div class="subpanel">
           <h3>Upgrade to a 3D model</h3>
-          <p class="note">Treats each group of welded surfaces as a box standing on the floor, then solves for the projector's aim and lens and each box's size and position from the corners. One viewpoint can't tell absolute size, so the solve needs two tape measurements. The lens offset comes from the projector's spec sheet: 0% means the image is centred on the lens, 100% means it sits entirely above it. Aiming lower and shifting the image up look almost the same in the corners, so the solve can't work this out on its own.</p>
+          <p class="note">Treats each group of welded surfaces as a box standing on the floor, then solves for the projector's aim and lens and each box's size and position from the corners. One viewpoint can't tell absolute size, so the solve needs two tape measurements. The lens offset comes from the projector's spec sheet: 0% means the image is centred on the lens, 100% means it sits entirely above it. Aiming lower and shifting the image up look almost the same in the corners, so the solve can't work this out on its own. The throw ratio (distance divided by image width, such as 1.20 : 1) is optional but helps a lot: from one viewpoint, a wider lens aimed flatter can fit the corners almost as well as the real one. This simulated projector's is 0.87. After a camera scan, the line where the wall meets the floor is used too.</p>
           <div class="sliders">
             <label for="mHeight">Projector lens height</label><input type="number" id="mHeight" min="0.2" max="5" step="0.01" value="1.55"><output>m</output>
             <label for="mDist">Projector to wall</label><input type="number" id="mDist" min="0.5" max="15" step="0.01" value="3.30"><output>m</output>
             <label for="mOffset">Lens offset (spec sheet)</label><input type="number" id="mOffset" min="-150" max="150" step="1" value="0"><output>%</output>
+            <label for="mThrow">Throw ratio (spec sheet)</label><input type="number" id="mThrow" min="0.2" max="4" step="0.01" value="0.87" placeholder="optional"><output>: 1</output>
           </div>
           <div class="row"><button class="btn primary" id="solve3d">Solve 3D from surfaces</button></div>
           <pre class="stats" id="solveMsg"></pre>
@@ -1865,9 +1866,13 @@ function decodeAndSegment(shots) {
     const mates = pieces.filter((_, j) => gfind(j) === gfind(i));
     const size = mates.reduce((a, m) => a + m.cells.length, 0);
     for (const c of pc.cells) plabel[c] = out.length;
-    // wall and floor run the full width of the frame (counting every fragment); box faces almost never do
-    const spans = mates.some((m) => touchesX(m.cells, 0)) && mates.some((m) => touchesX(m.cells, GW - 1));
-    out.push({ cells: pc.cells, H: pc.H, background: spans || size > GW * GH * 0.25 });
+    // wall and floor run the full width of the frame (counting every fragment); box faces almost never do. A camera
+    // beside the projector may miss the far edges, so most of the width counts too. And floor seen between boxes
+    // comes in several separate pieces of one plane, while a box face is one piece (two when something stands in front)
+    let x0 = GW, x1 = 0;
+    for (const m of mates) for (const c of m.cells) { const x = c % GW; if (x < x0) x0 = x; if (x > x1) x1 = x; }
+    const spans = (mates.some((m) => touchesX(m.cells, 0)) && mates.some((m) => touchesX(m.cells, GW - 1))) || x1 - x0 > GW * 0.75;
+    out.push({ cells: pc.cells, H: pc.H, background: spans || size > GW * GH * 0.25 || mates.length >= 3 });
   });
   // Where two planes meet at a crease (two faces of one box) the projector->camera mapping is continuous, so
   // each plane's homography also predicts the cells just across the boundary. Where one object hides another
@@ -2103,6 +2108,8 @@ for (let r = 0; r < 4; r++) for (const dir of [1, -1]) PERMS.push([0, 1, 2, 3].m
 function solve3D() {
   const msg = $('solveMsg');
   const H = parseFloat($('mHeight').value), D = parseFloat($('mDist').value), shift0 = -(parseFloat($('mOffset').value) || 0) / 100;
+  // throw ratio = distance / image width, so it fixes the horizontal and hence the vertical field of view
+  const tr = parseFloat($('mThrow').value), fov0 = tr > 0 ? 2 * Math.atan(1 / (2 * tr) * PROJ_H / PROJ_W) : null;
   if (!(H > 0) || !(D > 0)) { msg.textContent = 'Enter the projector height and distance to the wall in meters.'; return; }
   const t0 = performance.now();
   // very large surfaces are wall or floor, not box faces
@@ -2132,9 +2139,10 @@ function solve3D() {
   groups = groups.slice(0, MAX_BOXES);
   if (!groups.length) { msg.textContent = 'No surfaces to solve from. Map some box faces first.'; return; }
 
+  const crease = wallFloorLine(lastScan);
   let result = null;
   for (let round = 0; round < 2; round++) {
-    result = solveGroups(groups, H, D, shift0);
+    result = solveGroups(groups, H, D, shift0, fov0, crease);
     const bad = result.groupRms.map((r, g) => (r > 12 ? g : -1)).filter((g) => g >= 0);
     if (!bad.length || bad.length === groups.length) break;
     groups = groups.filter((_, g) => !bad.includes(g));  // these don't look like box faces; leave them 2D-only
@@ -2154,6 +2162,7 @@ function solve3D() {
     `Corner reprojection error: <b>${rms.toFixed(1)} px</b> RMS\n` +
     `Projector vs. truth: aim ${(Math.hypot(cam.pitch - tPitch, cam.yaw) / D2R).toFixed(2)}° off, lens ${((cam.fov / D2R) - PROJ_FOV).toFixed(2)}° wider than it really is\n` +
     (used < state.surfaces.length ? `${state.surfaces.length - used} surfaces didn't fit a box (or touch the frame edge) and stay 2D-only.\n` : '') +
+    (crease ? `Used the wall-floor line from the camera scan (${crease.length} points).\n` : '') + (fov0 ? '' : 'No throw ratio given: the lens angle is a guess, so the aim can be off by several degrees.\n') +
     `Try "Moving sun": lighting and shadows need the 3D model.`;
   msg.textContent = `Solved. Switched to the 3D model view. Reprojection error ${rms.toFixed(1)} px.`;
   fx['3d'].key = 'sun';
@@ -2161,7 +2170,43 @@ function solve3D() {
   setMethod('3d');
 }
 
-function solveGroups(groups, H, D, shift0 = 0) {
+// The line where the wall meets the floor, from the last camera scan: projector pixels where two wall/floor planes
+// meet at a crease. Its world position is known (y = 0, z = 0), so it pins the projector's pitch and roll.
+function wallFloorLine(res) {
+  if (!res) return null;
+  const pts = [], bg = res.regions.map((r) => r.background);
+  const at = (c) => [(c % GW) * CELL + CELL / 2, ((c / GW) | 0) * CELL + CELL / 2];
+  for (let c = 0; c < GW * GH; c++) {
+    const a = res.plabel[c]; if (a < 0 || !bg[a]) continue;
+    for (const n of [c % GW < GW - 1 ? c + 1 : -1, c + GW < GW * GH ? c + GW : -1]) {
+      if (n < 0) continue;
+      const b = res.plabel[n]; if (b < 0 || b === a || !bg[b]) continue;
+      const rel = res.rel(a, b);
+      if (rel && rel.crease) { const p = at(c), q = at(n); pts.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]); }
+    }
+  }
+  // other wall/floor-like planes meet the floor too (the bottom of a big box face). Those edges are in front of the
+  // wall, so lower in the projector's image: keep the highest point in each column, then the one straight line
+  // through most of them (it's a straight line in the room, so it's straight in the image)
+  const top = new Map();
+  for (const p of pts) { const k = Math.round(p[0] / 8); if (!top.has(k) || p[1] < top.get(k)[1]) top.set(k, p); }
+  const cand = [...top.values()];
+  if (cand.length < 8) return null;
+  let best = [];
+  for (let it = 0; it < 200; it++) {
+    const a = cand[(Math.random() * cand.length) | 0], b = cand[(Math.random() * cand.length) | 0];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 40) continue;
+    const inl = cand.filter((p) => Math.abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / len < 5);
+    if (inl.length > best.length) best = inl;
+  }
+  // enough of it, spread wide enough to say something about roll (cells are 4 px, so points jitter by a few px)
+  if (best.length < 8 || Math.max(...best.map((p) => p[0])) - Math.min(...best.map((p) => p[0])) < 300) return null;
+  best.sort((a, b) => a[0] - b[0]);
+  const step = Math.max(1, Math.floor(best.length / 40));
+  return best.filter((_, i) => i % step === 0);
+}
+
+function solveGroups(groups, H, D, shift0 = 0, fov0 = null, crease = null) {
   const nb = groups.length;
   const camOf = (p) => ({ x: 0, y: H, z: D, yaw: p[0], pitch: p[1], roll: p[2], fov: p[3], shift: p[4] });
   const boxOf = (p, j) => ({ x: p[5 + 6 * j], z: p[6 + 6 * j], w: Math.abs(p[7 + 6 * j]), h: Math.abs(p[8 + 6 * j]), d: Math.abs(p[9 + 6 * j]), yaw: p[10 + 6 * j] });
@@ -2204,7 +2249,18 @@ function solveGroups(groups, H, D, shift0 = 0) {
     // turning the whole scene about the projector changes nothing in the image, so this picks one answer)
     // Huber: past 6 px a corner's pull grows linearly, so one surface that isn't a box face can't drag the solve
     for (let k = 0; k < flat.length * 8; k++) { const a = Math.abs(r[k]); if (a > 6) r[k] = Math.sign(r[k]) * Math.sqrt(12 * a - 36); }
-    r.push((p[4] - shift0) * 3000, p[2] * 50, p[0] * 30);   // the offset is known from the spec sheet
+    // yaw: from the corners alone, turning the projector and every box together about the vertical changes nothing,
+    // so the projector is assumed square to the wall unless the boxes clearly say otherwise (5 per degree)
+    r.push((p[4] - shift0) * 3000, p[2] * 300, p[0] * 300);   // the offset is known from the spec sheet; projectors sit level
+    if (crease) {
+      // each point of the wall-floor line, cast onto the floor, should land at the wall (z = 0): 1 cm counts as 1 px
+      for (const q of crease) {
+        const { o, d } = camRay(cam, ...q);
+        const e = d[1] < -1e-4 ? (o[2] + d[2] * (-o[1] / d[1])) * 100 : 300, ae = Math.abs(e);
+        r.push(ae > 6 ? Math.sign(e) * Math.sqrt(12 * ae - 36) : e);   // Huber, as for corners
+      }
+    }
+    if (fov0) r.push((p[3] - fov0) * 1500);                 // so is the throw ratio, when given (within a few percent)
     for (let j = 0; j < nb; j++) {
       const b = boxOf(p, j);
       for (const v of [b.w, b.h, b.d]) r.push(v < 0.05 ? (0.05 - v) * 2000 : 0);
@@ -2258,7 +2314,7 @@ function solveGroups(groups, H, D, shift0 = 0) {
   }
   // a few starting guesses for aim and lens, keep the best
   let best = null;
-  for (const pitch of [-5, -12, -20, -28, -36]) for (const fov of [24, 32, 40, 50]) {
+  for (const pitch of [-5, -12, -20, -28, -36]) for (const fov of fov0 ? [fov0 / D2R] : [24, 32, 40, 50]) {
     const cam0 = [0, pitch * D2R, 0, fov * D2R, shift0];
     const p0 = cam0.concat(initBoxes(camOf(cam0)));
     const r = lm(p0, 10);
@@ -2567,7 +2623,7 @@ placePhotoCam();
 setMethod('3d');
 setEdit2('warp');
 requestAnimationFrame(frame);
-window.__sandbox = { lastScan: () => lastScan, solveGroups, runCapture, solve3D, camProject, solveLinear, fitHomography, state, runScan, applyEffect, PRESETS, PRESETS2, checkCompile, fragFor, frag2For, setMethod, sync2D, squareToQuad, hApply, inv3, FLAT_VERT, SURF_VERT, updateCoverage, surfacesFrom3D };
+window.__sandbox = { lastScan: () => lastScan, wallFloorLine, camRay, solveGroups, runCapture, solve3D, camProject, solveLinear, fitHomography, state, runScan, applyEffect, PRESETS, PRESETS2, checkCompile, fragFor, frag2For, setMethod, sync2D, squareToQuad, hApply, inv3, FLAT_VERT, SURF_VERT, updateCoverage, surfacesFrom3D };
 </script>
 </body>
 </html>

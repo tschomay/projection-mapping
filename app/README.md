@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9; bending for #6).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -14,7 +14,9 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
 3. **Map.** In *Tools → Surfaces*, add a square, circle or triangle. It's
    projected too, so drag it onto a real flat surface, then drag its four
    corners onto the surface's corners. Use the nudge pad for the last pixel.
-   *Edit points* adds, moves and removes outline points. *Combine* adds shapes
+   *Points* adds, moves and removes outline points. *Bend* puts a grid on the
+   surface whose points you drag onto a curved or bowed object; *Soft edge*
+   feathers the outline. *Combine* adds shapes
    to a surface or cuts holes in it.
    **Or let the camera find them:** *Tools → Surfaces → Find surfaces with
    the camera*. Prop the phone 30 cm to 1 m to the side of the projector,
@@ -23,13 +25,29 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    minute or so; tap to cancel), then every flat face becomes a surface.
    Check the corners afterwards; *Undo* brings back what you had.
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
-   the phone. Media follows the surface's perspective. *One image across all*
+   the phone. Or *Describe a look* and Claude writes a new effect for
+   your surfaces (it needs your own Anthropic API key, stored only on the
+   device). Media follows the surface's perspective. *One image across all*
    runs one video continuously across several surfaces.
 5. **Sound.** In *Tools → Sound*, pick a soundtrack: a video's own sound or an
    audio file. "Beat sequence", "Pulse to music" and "Tiles" follow the beat.
    You can react to the microphone instead.
-6. **Show.** Tap *Show* to hide everything but the content. Double-tap or
-   long-press to go back to editing.
+6. **Cues.** In *Tools → Show*, *Add cue from the current look* remembers
+   what every surface shows. Change the surfaces and add the next cue. Each
+   cue starts on a tap, some seconds or beats after the previous one, or at a
+   time in the soundtrack (*Now* takes the current time), and arrives with a
+   crossfade, a cut or a wipe across the frame. The timeline shows the timed
+   cues against the song; tap it to jump.
+7. **Show.** Tap *Show* to hide everything but the content. With cues, a single
+   tap (or Space) runs the next one. Double-tap or long-press to go back to
+   editing.
+
+**No projector yet?** *Project → Design on a photo*: pick a photo of the set,
+taken from where the projector will stand. Trace surfaces on it and try
+effects, media and cues; the content shows as light on the photo. On the day,
+nudge the corners onto the real objects. *Project → Check this device* shows
+what your phone supports, and [`docs/connecting.md`](../docs/connecting.md)
+explains rehearsing with a TV.
 
 Projects save automatically on the device, with media kept in IndexedDB.
 *Project → Export file* moves a mapping to another device; re-add the media
@@ -77,5 +95,8 @@ IP as secure.
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
 | `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
+| `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the Claude API call, one compile-repair round |
+| `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |
+| `src/diagnostics.js` | *Check this device*: what the phone supports, and a camera test |
 | `src/link.js` | Links to a second screen (Presentation API), including sending media files |
 | `sw.js`, `manifest.webmanifest` | Installable, and works offline once loaded |

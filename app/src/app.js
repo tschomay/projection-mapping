@@ -3,8 +3,8 @@
 // window placed on the projector display. Surfaces are traced on that frame, filled with effects or media, and
 // driven by sound.
 import { Renderer, MAX_MEDIA } from './renderer.js';
-import { EFFECTS, effectIndex } from './effects.js';
-import { surfaceGeom, newSurface } from './geometry.js';
+import { EFFECTS } from './effects.js';
+import { surfaceGeom, newSurface, flatMesh, meshEvaluator } from './geometry.js';
 import { Editor } from './editor.js';
 import { AudioEngine } from './audio.js';
 import { MediaLibrary } from './media.js';
@@ -12,6 +12,9 @@ import * as store from './store.js';
 import { ConnectionPort, presentationSupported, presentationReceiver } from './link.js';
 import { drawPattern, surfacesFromShots } from './capture.js';
 import { Camera, CaptureError, listCameras, runCapture } from './camera.js';
+import { deviceReport, cameraReport, reportText } from './diagnostics.js';
+import { ShowRunner, newCue, fmtTime, parseTime } from './show.js';
+import { generateEffect, describeSurfaces, getKey, setKey, namespaced } from './ai.js';
 
 const $ = (id) => document.getElementById(id);
 const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
@@ -35,6 +38,8 @@ class App {
     this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('pm-sync') : null;
     this.ports = new Set();   // second screens started through the Presentation API
     this.t0 = performance.now();
+    this.show = new ShowRunner(this);
+    this.remoteBeats = 0;     // beats heard by a connected output, which plays the sound
     this.media.onchange = () => { this.dirty = true; if (!IS_OUTPUT) this.renderMediaUI(); };
 
     if (IS_OUTPUT) this.initOutput(); else this.initEditor();
@@ -73,33 +78,51 @@ class App {
 
   sync() {
     const [W, H] = this.frame;
+    // the project's own effects join the built-in ones (recompiles only when they change)
+    const err = this.renderer.setEffects((this.project.effects || []).map((e) => ({ id: e.id, code: namespaced(e.id, e.code) })));
+    if (err && !IS_OUTPUT) this.toast('One of this project\'s own effects no longer compiles here.');
     this.geoms = this.project.surfaces.map((s) => surfaceGeom(s, W, H));
     // media used by surfaces get the four texture slots, in order of first use
     const slots = [];
-    for (const s of this.project.surfaces) {
-      const c = s.content;
+    const looks = this.project.surfaces.map((s) => s.content);
+    if (this.show.fade) looks.push(...Object.values(this.show.fade.from));
+    for (const c of looks) {
       if (c && c.kind === 'media' && this.media.get(c.mediaId) && !slots.includes(c.mediaId) && slots.length < MAX_MEDIA) slots.push(c.mediaId);
     }
     this.slots = slots;
     for (let i = 0; i < MAX_MEDIA; i++) this.renderer.setMedia(i, slots[i] ? this.media.get(slots[i]).el : null);
-    const fx = this.project.surfaces.map((s) => {
-      const c = s.content || { kind: 'effect', effect: 'outline' };
+    const fxOf = (c) => {
+      c = c || { kind: 'effect', effect: 'outline' };
       if (c.kind === 'media') {
         const slot = slots.indexOf(c.mediaId);
-        return slot < 0 ? [effectIndex('off'), 0, 0, 0] : [-1, slot, c.space === 'frame' ? 1 : 0, FIT_CODE[c.fit || 'fill']];
+        return slot < 0 ? [this.renderer.effectIndex('off'), 0, 0, 0] : [-1, slot, c.space === 'frame' ? 1 : 0, FIT_CODE[c.fit || 'fill']];
       }
-      return [effectIndex(c.effect), 0, 0, 0];
-    });
-    this.renderer.setSurfaces(this.geoms, fx);
+      return [this.renderer.effectIndex(c.effect), 0, 0, 0];
+    };
+    const fx = this.project.surfaces.map((s) => fxOf(s.content));
+    // during a cue transition, the previous look too
+    const from = this.show.fade && this.show.fade.from;
+    this.renderer.setSurfaces(this.geoms, fx, from ? this.project.surfaces.map((s) => fxOf(from[s.id] || s.content)) : fx);
     this.dirty = false;
   }
 
   frameLoop(now) {
+    const dt = now - (this.lastNow || now); this.lastNow = now;
+    if (dt > 0 && dt < 5000) this.fps = this.fps ? this.fps * 0.95 + 50 / dt : 1000 / dt;   // smoothed frame rate; long gaps (a hidden tab) are skipped
     if (this.dirty) this.sync();
     const sounding = this.playing && !!this.soundtrackEl() && !(this.output.connected && !IS_OUTPUT);
     const a = this.audio.update(now, sounding);
-    this.renderer.render((now - this.t0) / 1000, a);
     if (!IS_OUTPUT) {
+      // cues that start by themselves; with an output connected, it plays the sound and reports the beats
+      const beats = this.output.connected ? { active: true, beats: this.remoteBeats } : a;
+      this.show.tick(now, beats, this.soundtrackEl() ? this.currentTime() : null, this.playing);
+    } else if (a.beats !== this.lastBeats) { this.lastBeats = a.beats; if (a.active) this.post({ type: 'beat' }); }
+    const mix = this.show.mix(now);
+    if (mix === null && this.wasMixing) this.sync();   // the transition just ended
+    this.wasMixing = mix !== null;
+    this.renderer.render((now - this.t0) / 1000, a, mix);
+    if (!IS_OUTPUT) {
+      this.drawTimeline();
       if (!document.body.classList.contains('show')) this.editor.draw();
       this.drawMeter(a);
       if (this.output.connected && now - this.output.lastSeen > 6000) { this.output.connected = false; this.applyMute(); this.layout(); this.renderOutputState(); }
@@ -183,11 +206,17 @@ class App {
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
   }
-  isUsed(id) { return this.project.soundtrack === id || this.project.surfaces.some((s) => s.content && s.content.mediaId === id); }
+  // media worth keeping with the project: on a surface now, in any cue's look, the soundtrack, or the design photo
+  isUsed(id) {
+    const p = this.project;
+    return p.soundtrack === id || p.backdrop?.mediaId === id || p.surfaces.some((s) => s.content && s.content.mediaId === id) ||
+      (p.cues || []).some((c) => Object.values(c.looks).some((l) => l && l.mediaId === id));
+  }
 
   async openProject(p) {
     this.pause();
     this.project = p;
+    this.show.index = -1; this.show.fade = null;
     p.settings = { snap: true, sensitivity: 1, loop: true, ...(p.settings || {}) };
     this.editor.select(-1);
     this.editor.snap = p.settings.snap;
@@ -210,7 +239,7 @@ class App {
   broadcast(transportOnly = false) {
     if (IS_OUTPUT || !this.output.connected) return;
     const msg = { type: 'state', playing: this.playing, time: this.currentTime() };
-    if (!transportOnly) { msg.project = this.project; msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
+    if (!transportOnly) { msg.project = this.project; msg.fade = this.show.snapshot(performance.now()); msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
     this.post(msg);
   }
 
@@ -261,6 +290,7 @@ class App {
     if (data.type !== 'state') return;
     if (data.project) {
       this.project = data.project;
+      this.show.restore(data.fade, performance.now());
       for (const m of data.media || []) {
         if (this.media.get(m.id)) continue;
         const item = this.media.addUrl(m);
@@ -312,6 +342,7 @@ class App {
     const port = new ConnectionPort(conn);
     port.onmessage = (data) => {
       if (data.type === 'hello') this.onHello(data);
+      if (data.type === 'beat') this.remoteBeats++;
       if (data.type === 'need') {
         const m = this.media.get(data.id);
         if (!m || !m.file) return;
@@ -329,6 +360,226 @@ class App {
     // the connection may open after it's handed over; say hello once it does
     if (conn.state === 'connected') this.broadcast(); else conn.addEventListener('connect', () => this.broadcast(), { once: true });
     this.renderOutputState();
+  }
+
+  // ---------- effects, including AI-written ones ----------
+  renderEffectList() {
+    const own = this.project.effects || [];
+    const esc = (t) => String(t).replace(/[<&"]/g, '');
+    $('effectList').innerHTML = EFFECTS.map((e) => `<button class="chip" data-effect="${e.id}">${e.name}</button>`).join('') +
+      own.map((e) => `<span class="chip own" data-effect="${e.id}" role="button" tabindex="0" title="${esc(e.prompt || '')}">✦ ${esc(e.name)}<button data-del aria-label="Delete ${esc(e.name)}">×</button></span>`).join('');
+    this.renderContentUI();
+  }
+
+  deleteEffect(id) {
+    this.project.effects = (this.project.effects || []).filter((e) => e.id !== id);
+    for (const s of this.project.surfaces) if (s.content?.effect === id) s.content = { kind: 'effect', effect: 'outline' };
+    this.changed(); this.renderEffectList();
+  }
+
+  initAI() {
+    const status = $('aiStatus');
+    const showKey = () => { const has = !!getKey(); $('aiKeyRow').hidden = has; $('aiKeyForget').hidden = !has; $('aiGo').disabled = !has; };
+    $('aiKeySave').onclick = () => {
+      const k = $('aiKey').value.trim();
+      if (!/^sk-ant-/.test(k)) { status.textContent = 'That doesn\'t look like an Anthropic API key (they start with sk-ant-).'; return; }
+      setKey(k); $('aiKey').value = ''; showKey(); status.textContent = 'Key saved on this device.';
+    };
+    $('aiKeyForget').onclick = () => { setKey(''); showKey(); status.textContent = 'Key removed from this device.'; };
+    $('aiGo').onclick = () => this.runAI();
+    $('aiCancel').onclick = () => this.aiAbort?.abort();
+    showKey();
+  }
+
+  async runAI() {
+    const request = $('aiPrompt').value.trim(), status = $('aiStatus');
+    if (!request) { status.textContent = 'Describe the look first, for example "slow blue waves that flash on the beat".'; return; }
+    if (!this.project.surfaces.length) { status.textContent = 'Add a surface first.'; return; }
+    const id = 'u' + Math.random().toString(36).slice(2, 8);
+    this.aiAbort = new AbortController();
+    $('aiGo').disabled = true; $('aiCancel').hidden = false;
+    try {
+      const res = await generateEffect({
+        apiKey: getKey(), request, signal: this.aiAbort.signal,
+        context: describeSurfaces(this.project.surfaces, this.geoms, this.frame),
+        compile: (code) => this.renderer.tryEffect(id, namespaced(id, code)),
+        progress: (t) => { status.textContent = t; },
+      });
+      const name = request.length > 28 ? request.slice(0, 27).trim() + '…' : request;
+      (this.project.effects ||= []).push({ id, name, prompt: request, code: res.code });
+      // show it on the selected surface, or on all of them
+      const targets = this.editor.sel >= 0 ? [this.project.surfaces[this.editor.sel]] : this.project.surfaces;
+      const before = targets.map((s) => s.content);
+      for (const s of targets) s.content = { kind: 'effect', effect: id };
+      this.changed(); this.renderEffectList();
+      status.textContent = (res.note || 'Done.') + (res.repaired ? ' (Fixed a compile error on the way.)' : '');
+      this.watchFrameRate(() => { targets.forEach((s, i) => { s.content = before[i]; }); this.changed(); }, name);
+    } catch (err) {
+      status.textContent = err.message;
+    } finally {
+      $('aiGo').disabled = !getKey(); $('aiCancel').hidden = true;
+    }
+  }
+
+  // guardrail: if a new effect makes the frame rate collapse, put the previous look back
+  watchFrameRate(revert, name) {
+    const before = this.fps || 60;
+    setTimeout(() => {
+      if (this.fps < 20 && before > 35) { revert(); this.toast(`"${name}" was too heavy for this device, so the previous look is back. It stays in the effect list.`, 5000); }
+    }, 3000);
+  }
+
+  // ---------- cues and timeline ----------
+  onCue() {
+    this.changed();
+    this.renderShowUI();
+  }
+
+  initShowUI() {
+    const list = $('cueList');
+    $('cueAdd').onclick = () => {
+      if (!this.project.surfaces.length) { this.toast('Add surfaces first: a cue remembers what each one shows.'); return; }
+      const cues = this.show.cues;
+      cues.push(newCue(this.project.surfaces, cues.length + 1));
+      this.show.index = cues.length - 1;
+      this.scheduleSave(); this.renderShowUI();
+      this.toast('Cue saved. Change what the surfaces show, then add the next cue.');
+    };
+    $('cueGo').onclick = () => { if (this.show.index < 0) this.show.go(0); else this.show.next(); };
+    $('cueFirst').onclick = () => { this.show.go(0, { transition: false }); if (this.soundtrackEl()) this.restart(); };
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const i = +b.closest('[data-i]').dataset.i, cues = this.show.cues, c = cues[i];
+      const act = b.dataset.act;
+      if (act === 'go') this.show.go(i);
+      if (act === 'save') { Object.assign(c, { looks: newCue(this.project.surfaces, 0).looks }); this.toast(`${c.name} now has the current look.`); }
+      if (act === 'up' && i > 0) [cues[i - 1], cues[i]] = [cues[i], cues[i - 1]];
+      if (act === 'down' && i < cues.length - 1) [cues[i + 1], cues[i]] = [cues[i], cues[i + 1]];
+      if (act === 'del') { cues.splice(i, 1); if (this.show.index >= cues.length) this.show.index = cues.length - 1; }
+      if (act === 'now') { c.start.value = Math.round(this.currentTime() * 10) / 10; }
+      this.scheduleSave(); this.renderShowUI();
+    });
+    list.addEventListener('change', (e) => {
+      const el = e.target, i = +el.closest('[data-i]').dataset.i, c = this.show.cues[i];
+      if (el.dataset.f === 'name') c.name = el.value.trim() || c.name;
+      if (el.dataset.f === 'mode') { c.start.mode = el.value; c.start.value = el.value === 'after' ? 5 : el.value === 'beats' ? 8 : el.value === 'at' ? Math.round(this.currentTime() * 10) / 10 : 0; }
+      if (el.dataset.f === 'value') {
+        const v = c.start.mode === 'at' ? parseTime(el.value) : parseFloat(el.value);
+        if (v != null && v >= 0) c.start.value = v;
+      }
+      if (el.dataset.f === 'type') c.transition.type = el.value;
+      if (el.dataset.f === 'dur') { const v = parseFloat(el.value); if (v >= 0) c.transition.dur = v; }
+      this.scheduleSave(); this.renderShowUI();
+    });
+    $('timeline').addEventListener('pointerdown', (e) => {
+      const st = this.soundtrackEl(); if (!st || !st.duration) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * st.duration;
+      for (const el of this.playingEls()) el.currentTime = t;
+      this.broadcast(true);
+    });
+    this.renderShowUI();
+  }
+
+  renderShowUI() {
+    const cues = this.show.cues, list = $('cueList');
+    const esc = (t) => String(t).replace(/[<&"]/g, '');
+    const opt = (v, label, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`;
+    list.innerHTML = cues.map((c, i) => {
+      const m = c.start.mode;
+      const val = m === 'tap' ? '' : `<input type="text" inputmode="decimal" data-f="value" aria-label="${m === 'at' ? 'Time in the soundtrack' : m === 'after' ? 'Seconds' : 'Beats'}" value="${m === 'at' ? fmtTime(c.start.value) : c.start.value}">${m === 'at' ? '<button class="btn" data-act="now" title="Use the soundtrack\'s current time">Now</button>' : `<span class="note">${m === 'after' ? 's' : 'beats'}</span>`}`;
+      return `<div class="cue${i === this.show.index ? ' live' : ''}" data-i="${i}">
+        <div class="row"><input type="text" data-f="name" aria-label="Cue name" value="${esc(c.name)}"><button class="btn${i === this.show.index ? ' primary' : ''}" data-act="go">Go</button></div>
+        <div class="row"><select data-f="mode" aria-label="How it starts">${opt('tap', 'On a tap', m)}${opt('after', 'After the previous, by', m)}${opt('beats', 'After the previous, beats', m)}${opt('at', 'At a time in the song', m)}</select>${val}</div>
+        <div class="row"><select data-f="type" aria-label="Transition">${opt('fade', 'Crossfade', c.transition.type)}${opt('cut', 'Cut', c.transition.type)}${opt('wipe', 'Wipe across', c.transition.type)}</select>
+          ${c.transition.type === 'cut' ? '' : `<input type="text" inputmode="decimal" data-f="dur" aria-label="Transition seconds" value="${c.transition.dur}"><span class="note">s</span>`}</div>
+        <div class="row"><button class="btn" data-act="save">Save current look</button><button class="btn" data-act="up" aria-label="Move up"${i ? '' : ' disabled'}>↑</button><button class="btn" data-act="down" aria-label="Move down"${i < cues.length - 1 ? '' : ' disabled'}>↓</button><button class="btn" data-act="del">Delete</button></div>
+      </div>`;
+    }).join('') || '<p class="note">No cues yet. Set up a look on the surfaces, then add it as a cue.</p>';
+    const cur = cues[this.show.index];
+    $('cueState').textContent = cur ? `On stage: ${cur.name} (${this.show.index + 1} of ${cues.length})` : cues.length ? 'No cue running yet: tap Go.' : '';
+    $('cueGo').textContent = this.show.index < 0 ? 'Go: first cue' : 'Go: next cue';
+    $('cueGo').disabled = !cues.length || this.show.index >= cues.length - 1;
+    $('cueFirst').disabled = !cues.length;
+    $('timelineGroup').hidden = !cues.some((c) => c.start.mode === 'at');
+    this.timelineKey = '';
+  }
+
+  // the soundtrack as a strip, with a marker per timed cue and the playhead
+  drawTimeline() {
+    const tl = $('timeline');
+    if ($('drawer').hidden || $('timelineGroup').hidden || tl.offsetParent === null) return;
+    const st = this.soundtrackEl(), dur = st && st.duration && isFinite(st.duration) ? st.duration : 0;
+    const key = dur + '|' + this.show.cues.map((c) => c.start.mode + c.start.value).join() + '|' + this.show.index;
+    if (key !== this.timelineKey) {
+      this.timelineKey = key;
+      tl.innerHTML = dur ? '<i class="playhead"></i>' + this.show.cues.map((c, i) => c.start.mode === 'at' ? `<b class="${i === this.show.index ? 'live' : ''}" style="left:${Math.min(100, c.start.value / dur * 100)}%"><span>${i + 1}</span></b>` : '').join('') : '<span class="note">Pick a soundtrack in Sound to place cues in time.</span>';
+    }
+    const ph = tl.querySelector('.playhead');
+    if (ph) ph.style.left = dur ? (st.currentTime / dur * 100) + '%' : '0';
+  }
+
+  // ---------- designing on a photo of the set (no projector needed) ----------
+  initBackdrop() {
+    $('addBackdrop').onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      try {
+        const m = await this.media.add(f);
+        if (m.kind !== 'image') { this.media.remove(m.id); throw new Error('Pick a photo (an image file).'); }
+        const old = this.project.backdrop;
+        this.project.backdrop = { mediaId: m.id, show: true, dim: old?.dim ?? 0.6 };
+        if (old && old.mediaId !== m.id && !this.isUsed(old.mediaId)) this.media.remove(old.mediaId);
+        this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
+        this.toast('Content now shows as projected light on the photo. Take the photo from where the projector will stand.', 4500);
+      } catch (err) { this.toast(err.message); }
+    };
+    $('backdropShow').onchange = (e) => { if (this.project.backdrop) { this.project.backdrop.show = e.target.checked; this.scheduleSave(); this.renderBackdrop(); } };
+    $('backdropDim').oninput = (e) => { if (this.project.backdrop) { this.project.backdrop.dim = +e.target.value; this.scheduleSave(); this.renderBackdrop(); } };
+    $('removeBackdrop').onclick = () => {
+      const b = this.project.backdrop; if (!b) return;
+      this.project.backdrop = null;
+      if (!this.isUsed(b.mediaId)) this.media.remove(b.mediaId);
+      this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
+    };
+  }
+
+  renderBackdrop() {
+    const b = this.project.backdrop, m = b && this.media.get(b.mediaId), img = $('backdrop');
+    const on = !!(m && b.show);
+    if (on && img.getAttribute('src') !== m.url) img.src = m.url;
+    img.hidden = !on;
+    img.style.filter = `brightness(${b ? b.dim : 0.6})`;
+    document.body.classList.toggle('photo', on);
+    $('backdropOpts').hidden = !b;
+    if (b) { $('backdropShow').checked = b.show; $('backdropDim').value = b.dim; }
+  }
+
+  // ---------- device check ----------
+  initCheck() {
+    const sheet = $('checkSheet');
+    let rows = [];
+    const draw = () => {
+      $('checkList').innerHTML = rows.map((r) => `<li class="${r.ok === true ? 'yes' : r.ok === false ? 'no' : 'info'}"><b>${r.label}</b><span>${String(r.value).replace(/[<&]/g, '')}</span></li>`).join('');
+      $('checkPersist').hidden = !rows.some((r) => r.action === 'persist');
+    };
+    const refresh = async () => { rows = (await deviceReport(this)).concat(rows.filter((r) => r.camera)); draw(); };
+    $('checkBtn').onclick = () => { this.toggleDrawer(false); sheet.showModal(); refresh(); };
+    $('closeCheck').onclick = () => sheet.close();
+    $('checkCamera').onclick = async () => {
+      $('checkCamera').disabled = true;
+      const cam = (await cameraReport(this.camera)).map((r) => ({ ...r, camera: true }));
+      rows = rows.filter((r) => !r.camera).concat(cam); draw();
+      $('checkCamera').disabled = false;
+    };
+    $('checkPersist').onclick = async () => {
+      const ok = await navigator.storage.persist().catch(() => false);
+      this.toast(ok ? 'This browser will keep your files.' : 'The browser said no. Installing the app to the home screen usually helps.');
+      refresh();
+    };
+    $('checkCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(reportText(rows)); this.toast('Report copied.'); } catch { this.toast("Couldn't copy here; take a screenshot instead."); }
+    };
   }
 
   // ---------- find surfaces with the camera (structured light) ----------
@@ -484,17 +735,22 @@ class App {
     // leave Show mode: double-tap, or a long press
     const stage = $('stage');
     let pressT = 0, lastTap = 0;
+    let nextT = 0;
     stage.addEventListener('pointerdown', () => {
       if (!document.body.classList.contains('show')) return;
       const now = performance.now();
-      if (now - lastTap < 350) this.setShow(false);
+      clearTimeout(nextT);
+      if (now - lastTap < 350) { this.setShow(false); lastTap = 0; return; }
       lastTap = now;
       pressT = setTimeout(() => this.setShow(false), 900);
+      // a single tap runs the next cue, once it's clear it wasn't the start of a double-tap
+      if (this.show.cues.length) nextT = setTimeout(() => { if (document.body.classList.contains('show')) this.show.next(); }, 360);
     });
     stage.addEventListener('pointerup', () => clearTimeout(pressT));
     window.addEventListener('keydown', (e) => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
       if (e.key === 'Escape' && document.body.classList.contains('show')) { this.setShow(false); return; }
+      if ((e.key === ' ' || e.key === 'PageDown' || (e.key === 'ArrowRight' && document.body.classList.contains('show'))) && this.show.cues.length) { e.preventDefault(); this.show.next(); return; }
       const step = e.shiftKey ? 10 : 1;
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (d && this.editor.sel >= 0) { e.preventDefault(); this.editor.nudge(...d); }
@@ -505,7 +761,14 @@ class App {
     document.querySelectorAll('[data-add]').forEach((b) => {
       b.onclick = () => { this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length)); this.toast('Drag it onto a real surface, then drag its corners into place.'); };
     });
-    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => { this.editor.mode = b.dataset.mode; this.editor.selVert = null; this.editor.selPin = -1; this.changed({ geometry: false, save: false }); }; });
+    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => {
+      const ed = this.editor, s = this.project.surfaces[ed.sel];
+      ed.mode = b.dataset.mode; ed.selVert = null; ed.selPin = -1; ed.selMesh = -1;
+      if (ed.mode === 'mesh' && s && !s.mesh) { this.setMesh(s, 3); return; }   // a grid to bend, to start with
+      this.changed({ geometry: false, save: false });
+    }; });
+    $('meshSize').onchange = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) this.setMesh(s, +e.target.value); };
+    $('feather').oninput = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) { s.feather = +e.target.value; $('featherOut').textContent = s.feather + ' px'; this.changed(); } };
     $('partAdd').onclick = () => this.editor.addPart($('partShape').value, 1);
     $('partCut').onclick = () => this.editor.addPart($('partShape').value, -1);
     $('delPoint').onclick = () => { const err = this.editor.deletePoint(); if (err) this.toast(err); };
@@ -525,13 +788,13 @@ class App {
     });
 
     // content
-    const effects = $('effectList');
-    for (const e of EFFECTS) {
-      const b = document.createElement('button');
-      b.className = 'chip'; b.textContent = e.name; b.dataset.effect = e.id;
-      b.onclick = () => this.setContent({ kind: 'effect', effect: e.id });
-      effects.appendChild(b);
-    }
+    $('effectList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-effect]'); if (!b) return;
+      if (e.target.closest('[data-del]')) { this.deleteEffect(b.dataset.effect); return; }
+      this.setContent({ kind: 'effect', effect: b.dataset.effect });
+    });
+    this.renderEffectList();
+    this.initAI();
     $('addMedia').onchange = async (e) => {
       for (const f of e.target.files) {
         try { const m = await this.media.add(f); if (this.editor.sel >= 0) this.setContent({ kind: 'media', mediaId: m.id, fit: 'fill', space: 'surface' }); } catch (err) { this.toast(err.message); }
@@ -587,10 +850,13 @@ class App {
       this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', await this.outputFeatures());
       if (!this.output.win) this.toast('The browser blocked the output window. Allow pop-ups for this page.');
     };
-    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); };
+    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
     if (!this.channel) $('openOutput').disabled = true;
     this.initPresentation();
     this.initScan();
+    this.initCheck();
+    this.initShowUI();
+    this.initBackdrop();
 
     // how to connect: a guide sheet, opened by itself the first time the app runs
     const sheet = $('connectSheet');
@@ -637,7 +903,9 @@ class App {
 
   // ---------- rendering the UI from state ----------
   renderAll() {
+    if (this.editor) { this.renderEffectList(); this.renderBackdrop(); }
     this.renderSurfaceUI(); this.renderContentUI(); this.renderMediaUI(); this.renderSoundUI(); this.renderProjectList(); this.renderTransport();
+    if (this.editor) this.renderShowUI();
     $('projName').value = this.project.name;
     $('snap').checked = this.project.settings.snap !== false;
     $('loop').checked = this.project.settings.loop !== false;
@@ -658,11 +926,29 @@ class App {
     const has = ed.sel >= 0;
     for (const id of ['partAdd', 'partCut', 'dupSurface', 'delSurface']) $(id).disabled = !has;
     $('delPoint').disabled = !(has && ed.mode === 'points' && ed.selVert);
+    const s = this.project.surfaces[ed.sel];
+    $('meshSize').disabled = $('feather').disabled = !has;
+    $('meshSize').value = s && s.mesh ? String(s.mesh.n[0]) : '0';
+    $('feather').value = s ? s.feather || 0 : 0;
+    $('featherOut').textContent = (s ? s.feather || 0 : 0) + ' px';
     $('modeHint').textContent = !has ? 'Tap a surface to select it.'
       : ed.mode === 'warp' ? 'Drag the four corner dots onto the real surface\'s corners. Drag inside to move it.'
+      : ed.mode === 'mesh' ? 'Set the corners first. Then drag the grid points so the outline and content follow a curved or bowed surface.'
       : 'Drag a square to move a point. Drag a ring on an edge to add one. Double-tap a point to remove it. Drag inside a shape to move just that shape.';
     this.renderNudge();
   }
+  // give a surface an n x n bend grid (keeping its current shape), or none
+  setMesh(s, n) {
+    if (!n) { delete s.mesh; if (this.editor.mode === 'mesh') this.editor.mode = 'warp'; }
+    else {
+      const old = s.mesh, m = flatMesh(n, n);
+      if (old) { const f = meshEvaluator(old); m.pts = m.pts.map(([u, v]) => f(u, v)); }
+      s.mesh = m;
+    }
+    this.editor.selMesh = -1;
+    this.changed();
+  }
+
   renderNudge() {
     const t = this.editor && !document.body.classList.contains('show') ? this.editor.nudgeTarget() : '';
     const pad = $('nudge');
@@ -685,7 +971,7 @@ class App {
   renderMediaUI() {
     const list = $('mediaList');
     list.innerHTML = '';
-    const visual = this.media.list().filter((m) => m.kind !== 'audio');
+    const visual = this.media.list().filter((m) => m.kind !== 'audio' && m.id !== this.project.backdrop?.mediaId);
     for (const m of visual) {
       const b = document.createElement('button');
       b.className = 'chip'; b.textContent = (m.kind === 'video' ? 'Video: ' : 'Image: ') + m.name; b.dataset.media = m.id;

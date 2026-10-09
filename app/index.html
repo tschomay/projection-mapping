@@ -37,6 +37,9 @@ button, input, select { font: inherit; color: inherit; }
 #stage { position: fixed; inset: 0; background: #000; touch-action: none; }
 #box { position: absolute; }
 #box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* design on a photo: the photo sits behind the frame and the content adds light to it, as a projector would */
+#backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+body.photo #gl { mix-blend-mode: screen; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
 body.show #stage { cursor: none; }
@@ -103,6 +106,30 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .sheet-body p, .sheet-body ul { margin: 0 0 6px; }
 .sheet-body ul { padding-left: 18px; }
 .sheet-body li { margin-bottom: 4px; }
+.checks { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; }
+.checks li { display: grid; grid-template-columns: 18px minmax(0, 11em) 1fr; gap: 8px; font-size: 13px; align-items: baseline; }
+.checks li b { font-weight: 500; }
+.checks li span { color: var(--muted); overflow-wrap: anywhere; }
+.checks .yes::before { content: "✓"; color: var(--ok); } .checks .no::before { content: "✗"; color: var(--bad); } .checks .info::before { content: "·"; color: var(--muted); }
+.cues { display: grid; gap: 8px; }
+.cue { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 6px; }
+.cue.live { border-color: var(--lamp); box-shadow: inset 3px 0 0 var(--lamp); }
+.cue input[data-f="name"] { flex: 1; min-width: 0; }
+.cue input[data-f="value"], .cue input[data-f="dur"] { width: 5.5em; }
+.cue select { flex: 1; min-width: 0; }
+.cue .btn { padding: 6px 10px; }
+.timeline { position: relative; height: 34px; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; touch-action: none; overflow: hidden; }
+.timeline .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--fg); }
+.timeline b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--lamp); }
+.timeline b span { position: absolute; top: 2px; left: 4px; font: 11px var(--mono); color: var(--lamp); }
+.timeline b.live span { color: var(--fg); }
+.timeline .note { display: block; padding: 8px; }
+textarea { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: inherit; color: inherit; width: 100%; resize: vertical; }
+#aiKey { flex: 1; min-width: 0; }
+#aiStatus { white-space: pre-line; margin: 0; }
+.note a { color: var(--lamp); }
+.chip.own { display: inline-flex; align-items: center; gap: 6px; padding-right: 4px; }
+.chip.own button { background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; }
 #scanVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #scanView { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: #000; }
 #scanStatus { white-space: pre-line; margin: 8px 0 0; }
@@ -114,6 +141,7 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 <body>
 <div id="stage">
   <div id="box">
+    <img id="backdrop" alt="" hidden>
     <canvas id="gl"></canvas>
     <canvas id="pattern" hidden></canvas>
     <canvas id="overlay" aria-label="Projector frame: drag surfaces and their corners onto real objects"></canvas>
@@ -134,6 +162,7 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <button role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
       <button role="tab" data-tab="content" aria-selected="false">Content</button>
       <button role="tab" data-tab="sound" aria-selected="false">Sound</button>
+      <button role="tab" data-tab="show" aria-selected="false">Show</button>
       <button role="tab" data-tab="project" aria-selected="false">Project</button>
     </div>
     <button class="btn" id="closeDrawer" aria-label="Close tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
@@ -156,8 +185,15 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
     </div>
     <div class="group">
       <h3>Handles</h3>
-      <div class="seg" id="modeSeg"><button data-mode="warp" aria-pressed="true">Warp corners</button><button data-mode="points" aria-pressed="false">Edit points</button></div>
+      <div class="seg" id="modeSeg"><button data-mode="warp" aria-pressed="true">Corners</button><button data-mode="points" aria-pressed="false">Points</button><button data-mode="mesh" aria-pressed="false">Bend</button></div>
       <p class="note" id="modeHint"></p>
+    </div>
+    <div class="group">
+      <h3>Bend and soften</h3>
+      <div class="row"><label class="note" for="meshSize">Bend grid</label>
+        <select id="meshSize"><option value="0">Off (flat)</option><option value="2">2 × 2</option><option value="3">3 × 3</option><option value="4">4 × 4</option><option value="6">6 × 6</option><option value="8">8 × 8</option></select></div>
+      <div class="row"><label class="note" for="feather">Soft edge</label><input type="range" id="feather" min="0" max="60" step="1" value="0" style="flex:1"><span class="mono" id="featherOut">0 px</span></div>
+      <p class="note">For walls that bow, fabric and other gently curved things. Turning the grid off makes the surface flat again.</p>
     </div>
     <div class="group">
       <h3>Combine</h3>
@@ -178,6 +214,14 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
     <div class="group">
       <h3>Effects</h3>
       <div class="row" id="effectList"></div>
+    </div>
+    <div class="group">
+      <h3>Describe a look</h3>
+      <textarea id="aiPrompt" rows="2" placeholder="e.g. slow blue waves that flash white on the beat" aria-label="Describe the look"></textarea>
+      <div class="row"><button class="btn primary" id="aiGo" disabled>Write it with Claude</button><button class="btn" id="aiCancel" hidden>Cancel</button></div>
+      <p class="mono" id="aiStatus" role="status" aria-live="polite"></p>
+      <div class="row" id="aiKeyRow"><input type="password" id="aiKey" placeholder="sk-ant-…" aria-label="Anthropic API key" autocomplete="off"><button class="btn" id="aiKeySave">Save key</button></div>
+      <p class="note">Claude writes a new effect for your surfaces, about half a minute per look. It uses your own <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a>, kept only on this device and never in exported projects. New effects appear above with a ✦. <button class="btn" id="aiKeyForget" hidden>Forget my key</button></p>
     </div>
     <div class="group">
       <h3>Your videos and images</h3>
@@ -216,6 +260,26 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
     </div>
   </section>
 
+  <section class="pane" data-pane="show" hidden>
+    <div class="group">
+      <h3>Run the show</h3>
+      <div class="row"><button class="btn primary" id="cueGo">Go: first cue</button><button class="btn" id="cueFirst">Back to the start</button></div>
+      <p class="mono" id="cueState"></p>
+      <p class="note">In Show mode, tap once (or press Space) for the next cue. Double-tap still goes back to editing.</p>
+    </div>
+    <div class="group" id="timelineGroup" hidden>
+      <h3>Timeline</h3>
+      <div class="timeline" id="timeline" aria-label="Soundtrack timeline: tap to jump"></div>
+      <p class="note">Cues set to start at a time follow the soundtrack, also when it loops or you jump.</p>
+    </div>
+    <div class="group">
+      <h3>Cues</h3>
+      <div id="cueList" class="cues"></div>
+      <div class="row"><button class="btn" id="cueAdd">Add cue from the current look</button></div>
+      <p class="note">A cue remembers what every surface shows. Change the surfaces in Content, then add or save a cue. A cue can start on a tap, some seconds or beats after the previous one, or at a time in the song.</p>
+    </div>
+  </section>
+
   <section class="pane" data-pane="project" hidden>
     <div class="group">
       <h3>This project</h3>
@@ -232,6 +296,21 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <h3>Move between devices</h3>
       <div class="row"><button class="btn" id="exportProj">Export file</button><label class="btn file">Import file<input type="file" id="importProj" accept="application/json,.json"></label></div>
       <p class="note">The file holds the mapping and media names. Videos and images stay on each device; re-add them after importing.</p>
+    </div>
+    <div class="group">
+      <h3>Design on a photo</h3>
+      <div class="row"><label class="btn file">Choose a photo of the set<input type="file" id="addBackdrop" accept="image/*"></label></div>
+      <div id="backdropOpts" hidden>
+        <label class="check"><input type="checkbox" id="backdropShow" checked> Show the photo behind the surfaces</label>
+        <div class="row"><label class="note" for="backdropDim">Photo brightness</label><input type="range" id="backdropDim" min="0.1" max="1" step="0.05" value="0.6" style="flex:1"></div>
+        <div class="row"><button class="btn" id="removeBackdrop">Remove photo</button></div>
+      </div>
+      <p class="note">No projector yet? Take a photo from where the projector will stand, at dusk if it's outdoors. Trace surfaces on it and try content and cues; the content shows as light on the photo. On the day, nudge the corners onto the real objects. Turn the photo off before mirroring to a projector: it would be projected too.</p>
+    </div>
+    <div class="group">
+      <h3>This device</h3>
+      <div class="row"><button class="btn" id="checkBtn">Check this device</button></div>
+      <p class="note">What this phone supports: full screen, keeping awake, camera exposure lock, video formats, storage. Worth running before you buy adapters.</p>
     </div>
     <div class="group">
       <h3>Connect the projector</h3>
@@ -287,6 +366,15 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <h3>On the projector</h3>
       <p>Turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own softens the image and can shift it after you've mapped.</p>
     </section>
+  </div>
+</dialog>
+
+<dialog id="checkSheet" class="sheet" aria-labelledby="checkTitle">
+  <header><h2 id="checkTitle">Device check</h2><button class="btn" id="closeCheck" aria-label="Close">Done</button></header>
+  <div class="sheet-body">
+    <ul class="checks" id="checkList"></ul>
+    <div class="row"><button class="btn" id="checkCamera">Test the camera</button><button class="btn" id="checkPersist" hidden>Keep my files</button><button class="btn" id="checkCopy">Copy report</button></div>
+    <p class="note">Paste the report into an issue to record what was tested on which phone.</p>
   </div>
 </dialog>
 

@@ -43,23 +43,98 @@ export function pointInPoly(x, y, pts) {
 
 export const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
+// ---- mesh warp (roadmap #6) ----
+// A surface may carry s.mesh = { n: [nx, ny], pts }: (nx+1) x (ny+1) control points, row by row from v = 0, in the
+// homography's unit-square space. Content uv maps through a smooth Catmull-Rom surface that passes through every
+// point, then through the corner-pin homography, so a surface can bend onto a curved or bowed object with no seams.
+export function flatMesh(nx, ny) {
+  const pts = [];
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) pts.push([i / nx, j / ny]);
+  return { n: [nx, ny], pts };
+}
+
+const cr = (p0, p1, p2, p3, t) => 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
+
+// A fast evaluator for one mesh: content uv -> homography space. The grid is padded once with a ring of points
+// continued linearly past the edges, so every lookup is plain arithmetic.
+export function meshEvaluator(mesh) {
+  const [nx, ny] = mesh.n, P = mesh.pts, w = nx + 3;
+  const X = new Float64Array(w * (ny + 3)), Y = new Float64Array(w * (ny + 3));
+  const at = (i, j) => {
+    const ci = Math.max(0, Math.min(nx, i)), cj = Math.max(0, Math.min(ny, j));
+    let p = P[cj * (nx + 1) + ci];
+    if (i !== ci) { const q = P[cj * (nx + 1) + (i < 0 ? 1 : nx - 1)]; p = [2 * p[0] - q[0], 2 * p[1] - q[1]]; }
+    if (j !== cj) { const q = at(i, j < 0 ? 1 : ny - 1); p = [2 * p[0] - q[0], 2 * p[1] - q[1]]; }
+    return p;
+  };
+  for (let j = -1; j <= ny + 1; j++) for (let i = -1; i <= nx + 1; i++) { const p = at(i, j), o = (j + 1) * w + i + 1; X[o] = p[0]; Y[o] = p[1]; }
+  return (u, v) => {
+    const gx = u * nx, gy = v * ny;
+    const i = Math.max(0, Math.min(nx - 1, Math.floor(gx))), j = Math.max(0, Math.min(ny - 1, Math.floor(gy)));
+    const tx = gx - i, ty = gy - j;
+    const rowX = (r) => { const o = r * w + i; return cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx); };
+    const rowY = (r) => { const o = r * w + i; return cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx); };
+    return [cr(rowX(j), rowX(j + 1), rowX(j + 2), rowX(j + 3), ty), cr(rowY(j), rowY(j + 1), rowY(j + 2), rowY(j + 3), ty)];
+  };
+}
+export const meshPoint = (mesh, u, v) => meshEvaluator(mesh)(u, v);
+
+// homography space -> content uv (Newton's method; the warp is close to the identity). f: meshEvaluator(mesh).
+export function meshInverse(f, q, guess = q) {
+  let [u, v] = guess;
+  for (let it = 0; it < 12; it++) {
+    const p = f(u, v), ex = p[0] - q[0], ey = p[1] - q[1];
+    if (Math.abs(ex) + Math.abs(ey) < 1e-7) break;
+    const e = 1e-4, fu = f(u + e, v), fv = f(u, v + e);
+    const a = (fu[0] - p[0]) / e, b = (fv[0] - p[0]) / e, c = (fu[1] - p[1]) / e, d = (fv[1] - p[1]) / e, det = a * d - b * c;
+    if (Math.abs(det) < 1e-9) break;
+    let du = (d * ex - b * ey) / det, dv = (a * ey - c * ex) / det;
+    const m = Math.hypot(du, dv); if (m > 0.25) { du *= 0.25 / m; dv *= 0.25 / m; }
+    u -= du; v -= dv;
+  }
+  return [u, v];
+}
+
+// a polygon's edges split finely enough to follow a bent surface
+function densify(pts, steps, max) {
+  const out = [];
+  const per = Math.max(1, Math.min(steps, Math.floor(max / pts.length)));
+  pts.forEach((a, k) => {
+    const b = pts[(k + 1) % pts.length], n = Math.max(1, Math.min(per, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * steps)));
+    for (let t = 0; t < n; t++) out.push([a[0] + (b[0] - a[0]) * t / n, a[1] + (b[1] - a[1]) * t / n]);
+  });
+  return out;
+}
+
 // Pins are stored normalized; geometry works in frame pixels (W x H) so distances mean something on screen.
-export function surfaceGeom(s, W, H) {
+// toFrame(u, v) and toUV(x, y) map between content uv and frame pixels, through the mesh when there is one.
+// Each part has px (its own points, for handles) and outline (what's drawn and hit-tested: px, or finer when bent).
+export function surfaceGeom(s, W, H, maxVerts = 128) {
   const pins = s.pins.map(([x, y]) => [x * W, y * H]);
-  const Hm = squareToQuad(pins);
+  const Hm = squareToQuad(pins), Hi = inv3(Hm), mesh = s.mesh || null, f = mesh && meshEvaluator(mesh);
+  const toFrame = mesh ? (u, v) => hApply(Hm, ...f(u, v)) : (u, v) => hApply(Hm, u, v);
+  const toUV = mesh ? (x, y) => meshInverse(f, hApply(Hi, x, y)) : (x, y) => hApply(Hi, x, y);
   return {
     pins,
     H: Hm,
-    Hi: inv3(Hm),
-    parts: s.parts.map((p) => ({ op: p.op, px: p.pts.map(([u, v]) => hApply(Hm, u, v)) })),
+    Hi,
+    mesh,
+    toFrame,
+    toUV,
+    meshPx: mesh ? mesh.pts.map(([x, y]) => hApply(Hm, x, y)) : null,
+    parts: s.parts.map((p) => {
+      const px = p.pts.map(([u, v]) => toFrame(u, v));
+      return { op: p.op, px, outline: mesh ? densify(p.pts, Math.max(mesh.n[0], mesh.n[1]) * 4, maxVerts).map(([u, v]) => toFrame(u, v)) : px };
+    }),
     size: [(dist(pins[0], pins[1]) + dist(pins[3], pins[2])) / 2, (dist(pins[0], pins[3]) + dist(pins[1], pins[2])) / 2],
+    feather: s.feather || 0,
   };
 }
 
 export function insideSurface(g, x, y) {
   let inside = false;
   g.parts.forEach((p, j) => {
-    const pin = pointInPoly(x, y, p.px);
+    const pin = pointInPoly(x, y, p.outline);
     inside = j === 0 ? pin : p.op > 0 ? inside || pin : inside && !pin;
   });
   return inside;

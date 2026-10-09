@@ -70,6 +70,35 @@ How it's wired (`app/src/link.js`):
 The button is hidden where the API is missing (Safari, Firefox) and disabled
 while Chrome sees no screen.
 
+## Rehearsing without a projector
+
+To the phone, a TV or computer monitor is the same as a projector: an HDMI
+display, or a Cast or AirPlay receiver. Everything up to the light itself can
+be tried on one.
+
+1. **Run *Tools → Project → Check this device*** and tap *Test the camera*.
+   *Copy report* and paste it into the tested table below.
+2. **Wired:** plug the phone into the TV with the USB-C (or Lightning) to HDMI
+   adapter. If nothing shows, the phone has no video out; that's worth knowing
+   before buying a projector.
+3. **Wireless:** cast or AirPlay the screen to a Chromecast, Google TV or
+   Apple TV. Drag a surface corner and watch how far the TV lags behind.
+4. **Second screen:** in Chrome, *Present to a screen* and pick the Chromecast.
+   Add a short video to a surface and check it plays on the TV with sound.
+5. **Show mode:** tap *Show* and check nothing but the content reaches the TV,
+   then double-tap to come back.
+6. **Camera capture against the TV.** Prop the phone so its back camera sees
+   the TV screen, from the side. In *Find surfaces with the camera*, tick
+   *Keep wall and floor* and start. The TV is one flat surface, so the result
+   should be **one surface whose corners sit on the TV's picture corners**.
+   (It will also say almost everything looked like one plane; here that's
+   right.) That checks the real lag, exposure lock and timing. A TV is much brighter
+   than a projected image, so if the camera clips, angle it so there's a little
+   less glare.
+7. **Something box-shaped, without a projector:** put the TV behind a box, or
+   use the photo design mode (see the app README) to sketch surfaces on a photo
+   of the set and try the content.
+
 ## Tested so far
 
 Checked headless in Chromium only; nothing below has been tried on real
