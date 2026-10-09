@@ -42,6 +42,7 @@ export default async function run() {
     t.ok(await ed.evaluate(() => !document.getElementById('toast').hidden), 'Show-mode hint on first Show');
     await ed.keyboard.press('Escape');
     await ed.waitForFunction(() => !document.body.classList.contains('show'));
+    await ed.waitForFunction(() => document.getElementById('toast').hidden, null, { timeout: 10000 });   // the first hint has gone
     await ed.click('#showBtn');
     t.ok(await ed.evaluate(() => document.getElementById('toast').hidden || !/Double-tap/.test(document.getElementById('toast').textContent)), 'no hint once Show mode has been left');
     await ed.keyboard.press('Escape');
