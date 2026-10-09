@@ -37,6 +37,9 @@ button, input, select { font: inherit; color: inherit; }
 #stage { position: fixed; inset: 0; background: #000; touch-action: none; }
 #box { position: absolute; }
 #box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* design on a photo: the photo sits behind the frame and the content adds light to it, as a projector would */
+#backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+body.photo #gl { mix-blend-mode: screen; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
 body.show #stage { cursor: none; }
@@ -138,6 +141,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
 <body>
 <div id="stage">
   <div id="box">
+    <img id="backdrop" alt="" hidden>
     <canvas id="gl"></canvas>
     <canvas id="pattern" hidden></canvas>
     <canvas id="overlay" aria-label="Projector frame: drag surfaces and their corners onto real objects"></canvas>
@@ -292,6 +296,16 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
       <h3>Move between devices</h3>
       <div class="row"><button class="btn" id="exportProj">Export file</button><label class="btn file">Import file<input type="file" id="importProj" accept="application/json,.json"></label></div>
       <p class="note">The file holds the mapping and media names. Videos and images stay on each device; re-add them after importing.</p>
+    </div>
+    <div class="group">
+      <h3>Design on a photo</h3>
+      <div class="row"><label class="btn file">Choose a photo of the set<input type="file" id="addBackdrop" accept="image/*"></label></div>
+      <div id="backdropOpts" hidden>
+        <label class="check"><input type="checkbox" id="backdropShow" checked> Show the photo behind the surfaces</label>
+        <div class="row"><label class="note" for="backdropDim">Photo brightness</label><input type="range" id="backdropDim" min="0.1" max="1" step="0.05" value="0.6" style="flex:1"></div>
+        <div class="row"><button class="btn" id="removeBackdrop">Remove photo</button></div>
+      </div>
+      <p class="note">No projector yet? Take a photo from where the projector will stand, at dusk if it's outdoors. Trace surfaces on it and try content and cues; the content shows as light on the photo. On the day, nudge the corners onto the real objects. Turn the photo off before mirroring to a projector: it would be projected too.</p>
     </div>
     <div class="group">
       <h3>This device</h3>

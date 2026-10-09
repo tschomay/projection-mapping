@@ -42,6 +42,13 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    tap (or Space) runs the next one. Double-tap or long-press to go back to
    editing.
 
+**No projector yet?** *Project → Design on a photo*: pick a photo of the set,
+taken from where the projector will stand. Trace surfaces on it and try
+effects, media and cues; the content shows as light on the photo. On the day,
+nudge the corners onto the real objects. *Project → Check this device* shows
+what your phone supports, and [`docs/connecting.md`](../docs/connecting.md)
+explains rehearsing with a TV.
+
 Projects save automatically on the device, with media kept in IndexedDB.
 *Project → Export file* moves a mapping to another device; re-add the media
 files there.

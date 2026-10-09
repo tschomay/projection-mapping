@@ -206,7 +206,12 @@ class App {
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
   }
-  isUsed(id) { return this.project.soundtrack === id || this.project.surfaces.some((s) => s.content && s.content.mediaId === id); }
+  // media worth keeping with the project: on a surface now, in any cue's look, the soundtrack, or the design photo
+  isUsed(id) {
+    const p = this.project;
+    return p.soundtrack === id || p.backdrop?.mediaId === id || p.surfaces.some((s) => s.content && s.content.mediaId === id) ||
+      (p.cues || []).some((c) => Object.values(c.looks).some((l) => l && l.mediaId === id));
+  }
 
   async openProject(p) {
     this.pause();
@@ -514,6 +519,42 @@ class App {
     if (ph) ph.style.left = dur ? (st.currentTime / dur * 100) + '%' : '0';
   }
 
+  // ---------- designing on a photo of the set (no projector needed) ----------
+  initBackdrop() {
+    $('addBackdrop').onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      try {
+        const m = await this.media.add(f);
+        if (m.kind !== 'image') { this.media.remove(m.id); throw new Error('Pick a photo (an image file).'); }
+        const old = this.project.backdrop;
+        this.project.backdrop = { mediaId: m.id, show: true, dim: old?.dim ?? 0.6 };
+        if (old && old.mediaId !== m.id && !this.isUsed(old.mediaId)) this.media.remove(old.mediaId);
+        this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
+        this.toast('Content now shows as projected light on the photo. Take the photo from where the projector will stand.', 4500);
+      } catch (err) { this.toast(err.message); }
+    };
+    $('backdropShow').onchange = (e) => { if (this.project.backdrop) { this.project.backdrop.show = e.target.checked; this.scheduleSave(); this.renderBackdrop(); } };
+    $('backdropDim').oninput = (e) => { if (this.project.backdrop) { this.project.backdrop.dim = +e.target.value; this.scheduleSave(); this.renderBackdrop(); } };
+    $('removeBackdrop').onclick = () => {
+      const b = this.project.backdrop; if (!b) return;
+      this.project.backdrop = null;
+      if (!this.isUsed(b.mediaId)) this.media.remove(b.mediaId);
+      this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
+    };
+  }
+
+  renderBackdrop() {
+    const b = this.project.backdrop, m = b && this.media.get(b.mediaId), img = $('backdrop');
+    const on = !!(m && b.show);
+    if (on && img.getAttribute('src') !== m.url) img.src = m.url;
+    img.hidden = !on;
+    img.style.filter = `brightness(${b ? b.dim : 0.6})`;
+    document.body.classList.toggle('photo', on);
+    $('backdropOpts').hidden = !b;
+    if (b) { $('backdropShow').checked = b.show; $('backdropDim').value = b.dim; }
+  }
+
   // ---------- device check ----------
   initCheck() {
     const sheet = $('checkSheet');
@@ -815,6 +856,7 @@ class App {
     this.initScan();
     this.initCheck();
     this.initShowUI();
+    this.initBackdrop();
 
     // how to connect: a guide sheet, opened by itself the first time the app runs
     const sheet = $('connectSheet');
@@ -861,7 +903,7 @@ class App {
 
   // ---------- rendering the UI from state ----------
   renderAll() {
-    if (this.editor) this.renderEffectList();
+    if (this.editor) { this.renderEffectList(); this.renderBackdrop(); }
     this.renderSurfaceUI(); this.renderContentUI(); this.renderMediaUI(); this.renderSoundUI(); this.renderProjectList(); this.renderTransport();
     if (this.editor) this.renderShowUI();
     $('projName').value = this.project.name;
@@ -929,7 +971,7 @@ class App {
   renderMediaUI() {
     const list = $('mediaList');
     list.innerHTML = '';
-    const visual = this.media.list().filter((m) => m.kind !== 'audio');
+    const visual = this.media.list().filter((m) => m.kind !== 'audio' && m.id !== this.project.backdrop?.mediaId);
     for (const m of visual) {
       const b = document.createElement('button');
       b.className = 'chip'; b.textContent = (m.kind === 'video' ? 'Video: ' : 'Image: ') + m.name; b.dataset.media = m.id;
