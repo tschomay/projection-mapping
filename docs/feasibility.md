@@ -268,6 +268,19 @@ and warns.
 - Random scenes: usually 83–97% covered. Spill is higher, 0–17%, from floor
   fragments between boxes; one run in six did badly.
 
+**In the app** (roadmap #3): *Find surfaces with the camera* runs the same
+pipeline (`app/src/capture.js`) with the phone's own camera on a stand. The
+patterns go through whatever path drives the projector (mirroring, a second
+screen or an output window), so the app measures that path's lag on the first
+white frame and photographs each pattern only once the camera image has stopped
+changing *and* differs from the previous photo. It locks exposure, white balance
+and focus where the browser allows (Chrome on Android; not Safari), refuses to
+run when the camera barely sees the projection, and aborts if a white frame
+shot at the end differs from the one at the start (the phone moved). Lens
+distortion is handled only by preferring the main camera and a slightly looser
+inlier threshold. Tested on a synthetic camera so far, not yet on a real phone
+and projector.
+
 **Practical capture.** Gray code needs about 20–40 frames with the camera
 held still, so the phone goes on a tripod or is propped against something, and
 the app drives the projector and the camera together. That takes a few seconds.

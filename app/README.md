@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -16,6 +16,12 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    corners onto the surface's corners. Use the nudge pad for the last pixel.
    *Edit points* adds, moves and removes outline points. *Combine* adds shapes
    to a surface or cuts holes in it.
+   **Or let the camera find them:** *Tools → Surfaces → Find surfaces with
+   the camera*. Prop the phone 30 cm to 1 m to the side of the projector,
+   back camera facing the set, dim the lights and tap *Start*. The projector
+   shows about 40 stripe frames while the camera photographs each one (half a
+   minute or so; tap to cancel), then every flat face becomes a surface.
+   Check the corners afterwards; *Undo* brings back what you had.
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
    the phone. Media follows the surface's perspective. *One image across all*
    runs one video continuously across several surfaces.
@@ -69,5 +75,7 @@ IP as secure.
 | `src/audio.js` | Web Audio analysis: bass, mid, treble, level, beat |
 | `src/media.js` | The user's videos, images and audio (object URLs, IndexedDB) |
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
+| `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
+| `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
 | `src/link.js` | Links to a second screen (Presentation API), including sending media files |
 | `sw.js`, `manifest.webmanifest` | Installable, and works offline once loaded |

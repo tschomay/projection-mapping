@@ -40,6 +40,9 @@ button, input, select { font: inherit; color: inherit; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
 body.show #stage { cursor: none; }
+body.capturing #overlay, body.capturing .ui { display: none !important; }
+body.capturing #stage { cursor: none; }
+#box #pattern { image-rendering: pixelated; }
 
 .ui { position: fixed; z-index: 2; }
 .btn { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; }
@@ -100,6 +103,11 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .sheet-body p, .sheet-body ul { margin: 0 0 6px; }
 .sheet-body ul { padding-left: 18px; }
 .sheet-body li { margin-bottom: 4px; }
+#scanVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
+#scanView { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: #000; }
+#scanStatus { white-space: pre-line; margin: 8px 0 0; }
+.steps { padding-left: 18px; margin: 10px 0 4px; }
+.steps li { margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 </head>
@@ -107,6 +115,7 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 <div id="stage">
   <div id="box">
     <canvas id="gl"></canvas>
+    <canvas id="pattern" hidden></canvas>
     <canvas id="overlay" aria-label="Projector frame: drag surfaces and their corners onto real objects"></canvas>
   </div>
 </div>
@@ -135,6 +144,11 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <h3>Add a surface</h3>
       <div class="row"><button class="btn" data-add="square">Square</button><button class="btn" data-add="circle">Circle</button><button class="btn" data-add="triangle">Triangle</button></div>
       <p class="note">It appears in the middle of the projector frame. Drag it onto a real flat surface, then drag its corners onto the surface's corners.</p>
+    </div>
+    <div class="group">
+      <h3>Or find them with the camera</h3>
+      <div class="row"><button class="btn" id="scanBtn">Find surfaces with the camera</button></div>
+      <p class="note">The projector shows stripe patterns while this phone's camera, propped up beside the projector, photographs the set.</p>
     </div>
     <div class="group">
       <h3>Surfaces</h3>
@@ -273,6 +287,25 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <h3>On the projector</h3>
       <p>Turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own softens the image and can shift it after you've mapped.</p>
     </section>
+  </div>
+</dialog>
+
+<dialog id="scanSheet" class="sheet" aria-labelledby="scanTitle">
+  <header><h2 id="scanTitle">Find surfaces with the camera</h2><button class="btn" id="closeScan" aria-label="Close">Close</button></header>
+  <div class="sheet-body">
+    <ol class="steps">
+      <li>Prop this phone up 30 cm to 1 m <b>to the side of</b> the projector (not on top of it), back camera facing the set. Further to the side tells surfaces apart better.</li>
+      <li>Dim the room lights. Check the preview shows the whole projected area.</li>
+      <li>Tap <b>Start</b> and don't touch anything for about half a minute. The projector shows stripes; tap the screen to cancel.</li>
+    </ol>
+    <video id="scanVideo" muted playsinline aria-label="Camera preview"></video>
+    <div class="row">
+      <select id="scanCam" aria-label="Camera"><option value="">Back camera</option></select>
+      <label class="check"><input type="checkbox" id="scanKeepBg"> Keep wall and floor</label>
+    </div>
+    <div class="row"><button class="btn primary" id="scanStart" disabled>Start</button><button class="btn" id="scanUndo" hidden>Undo: bring back my surfaces</button></div>
+    <p class="mono" id="scanStatus" role="status" aria-live="polite"></p>
+    <canvas id="scanView" hidden aria-label="Flat areas found, in the projector frame"></canvas>
   </div>
 </dialog>
 
