@@ -40,6 +40,10 @@ in the issue listed, or paste the *Check this device* report there.
       with music playing from another device.
 - [ ] A long video (several hundred MB): does it still save and come back
       after a reload? (IndexedDB limits on phones, #14.)
+- [ ] Beat detection now runs on the audio thread (#21). With *Beat
+      sequence* on a few surfaces and music playing, add a heavy effect
+      (or an AI one) so the frame rate drops: the flashes should still land
+      on the beat, not drift or skip.
 
 ### Cues (#8)
 - [ ] Set up three looks, *Add cue from the current look* after each.
@@ -64,6 +68,8 @@ in the issue listed, or paste the *Check this device* report there.
 - [ ] *Bend* on a surface, drag grid points: smooth, no visible seams, and it
       doesn't stutter while dragging on the phone.
 - [ ] *Soft edge*: the outline fades.
+- [ ] Limits (#23): try a 17th surface; it should be refused with a message.
+      Bending many surfaces at 8 × 8 should still draw them all.
 
 ### Design on a photo
 - [ ] *Project → Design on a photo* with a photo of your set taken from
@@ -88,6 +94,9 @@ See `docs/connecting.md` → *Rehearsing without a projector*.
       only the output show on the TV while the phone keeps its controls?
       Add a short video: it's copied to the TV (a progress message shows),
       then plays with sound.
+- [ ] **Second screen with a big video** (#22): a 200 MB+ video should copy
+      across with a percentage shown on the phone, without the phone or the
+      Chromecast running out of memory. Note how long it took.
 - [ ] **Laptop**: TV as a second display, *Open output window*. In Chrome,
       after allowing window placement, it should open on the TV by itself.
 - [ ] Show mode while mirroring: nothing but content reaches the TV, black
@@ -125,6 +134,12 @@ See `docs/connecting.md` → *Rehearsing without a projector*.
 - [ ] Bend a surface onto something curved (a bowl, fabric, a column) and
       soften its edge.
 - [ ] An AI-written effect on the real set.
+
+## After each deploy
+
+- [ ] Open the app once online, then turn on airplane mode and reload: it
+      should still start (offline cache, #24). After a new deploy, the new
+      version should arrive on the next online visit.
 
 ## Not for you to test
 
