@@ -9,10 +9,14 @@ import { Editor } from './editor.js';
 import { AudioEngine } from './audio.js';
 import { MediaLibrary } from './media.js';
 import * as store from './store.js';
+import { ConnectionPort, presentationSupported, presentationReceiver } from './link.js';
 
 const $ = (id) => document.getElementById(id);
-const IS_OUTPUT = location.hash === '#output';
+const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
+const COARSE = matchMedia('(pointer: coarse)').matches;
 const FIT_CODE = { fill: 0, fit: 1, stretch: 2 };
+// sessionStorage, which can throw where storage is blocked
+const session = (op, key, value) => { try { return sessionStorage[op + 'Item'](key, value); } catch { return null; } };
 
 class App {
   constructor() {
@@ -27,6 +31,7 @@ class App {
     this.dirty = true;
     this.output = { win: null, connected: false, lastSeen: 0, aspect: null };
     this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('pm-sync') : null;
+    this.ports = new Set();   // second screens started through the Presentation API
     this.t0 = performance.now();
     this.media.onchange = () => { this.dirty = true; if (!IS_OUTPUT) this.renderMediaUI(); };
 
@@ -50,7 +55,7 @@ class App {
     c.width = Math.max(1, Math.round(bw * scale)); c.height = Math.max(1, Math.round(bh * scale));
     const frame = [1280, Math.round(1280 / aspect)];
     if (frame[1] !== this.frame[1]) { this.frame = frame; this.renderer.frame = frame; this.dirty = true; }
-    if (IS_OUTPUT && this.channel) this.channel.postMessage({ type: 'hello', aspect: W / H });
+    if (IS_OUTPUT) this.hello();
   }
 
   // ---------- state changes ----------
@@ -148,11 +153,18 @@ class App {
     if (on) {
       this.gesture();
       $('drawer').hidden = true; $('toolsBtn').setAttribute('aria-expanded', 'false');
-      const fs = document.documentElement.requestFullscreen;
-      if (fs && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-      this.toast('Double-tap to go back to editing', 2500);
-    } else if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+      // full screen, then hold landscape on phones so a nudge doesn't rotate the projected frame
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen()
+          .then(() => COARSE && screen.orientation?.lock?.('landscape'))
+          .catch(() => {});
+      }
+      // the hint is projected too when mirroring, so it shows only until someone has left Show mode once
+      if (!store.getFlag('showHintDone')) this.toast('Double-tap to go back to editing', 2500);
+    } else {
+      store.setFlag('showHintDone');
+      screen.orientation?.unlock?.();
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
     }
     this.renderNudge();
   }
@@ -188,40 +200,144 @@ class App {
   }
 
   // ---------- output window (laptop + projector as second display) ----------
+  post(msg) {
+    if (this.channel) this.channel.postMessage(msg);
+    for (const p of this.ports) p.post(msg);
+  }
+
   broadcast(transportOnly = false) {
-    if (IS_OUTPUT || !this.channel || !this.output.connected) return;
+    if (IS_OUTPUT || !this.output.connected) return;
     const msg = { type: 'state', playing: this.playing, time: this.currentTime() };
     if (!transportOnly) { msg.project = this.project; msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
-    this.channel.postMessage(msg);
+    this.post(msg);
   }
+
+  hello() { this.post({ type: 'hello', aspect: innerWidth / innerHeight }); }
 
   initOutput() {
     document.title = 'Surface Mapper output';
     document.body.classList.add('show');
     this.editor = null;
-    $('gate').hidden = false;
-    $('gate').classList.remove('ui');
-    $('gateBtn').onclick = () => {
+    const receiver = presentationReceiver();
+    if (receiver) {
+      // a second screen has no one to tap a gate: start straight away (Cast receivers allow autoplay)
       this.gesture();
-      document.documentElement.requestFullscreen?.().catch(() => {});
-      $('gate').hidden = true;
-      if (this.playing) this.play();
-    };
-    $('stage').addEventListener('dblclick', () => document.documentElement.requestFullscreen?.().catch(() => {}));
-    if (!this.channel) return;
-    this.channel.onmessage = ({ data }) => {
-      if (data.type !== 'state') return;
-      if (data.project) {
-        this.project = data.project;
-        for (const m of data.media || []) this.media.addUrl(m);
-        this.dirty = true;
+      const attach = (conn) => {
+        const port = new ConnectionPort(conn);
+        port.onmessage = (data) => this.onState(data, port);
+        port.onfile = ({ id, file }) => {
+          this.media.replaceFile(id, file);
+          this.dirty = true;
+          if (this.playing) this.play();
+        };
+        port.onclose = () => this.ports.delete(port);
+        this.ports.add(port);
+        this.hello();
+      };
+      receiver.connectionList.then((list) => {
+        list.connections.forEach(attach);
+        list.onconnectionavailable = (e) => attach(e.connection);
+      });
+    } else {
+      $('gate').hidden = false;
+      $('gate').classList.remove('ui');
+      $('gateBtn').onclick = () => {
+        this.gesture();
+        document.documentElement.requestFullscreen?.().catch(() => {});
+        $('gate').hidden = true;
+        if (this.playing) this.play();
+      };
+      $('stage').addEventListener('dblclick', () => document.documentElement.requestFullscreen?.().catch(() => {}));
+    }
+    if (this.channel) this.channel.onmessage = ({ data }) => this.onState(data, null);
+    setInterval(() => this.hello(), 1000);
+  }
+
+  // output side: apply the editor's state. A port is set for a second screen, which may be another device.
+  onState(data, port) {
+    if (data.type !== 'state') return;
+    if (data.project) {
+      this.project = data.project;
+      for (const m of data.media || []) {
+        if (this.media.get(m.id)) continue;
+        const item = this.media.addUrl(m);
+        // the editor's object URL only opens in the same browser; otherwise ask for the file itself
+        if (port) item.el.addEventListener('error', () => { if (this.media.get(m.id) === item) port.post({ type: 'need', id: m.id }); }, { once: true });
       }
-      if (data.playing && !this.playing) this.play();
-      if (!data.playing && this.playing) this.pause();
-      const el = this.soundtrackEl() || this.playingEls()[0];
-      if (el && Math.abs(el.currentTime - data.time) > 0.3) for (const e of this.playingEls()) e.currentTime = data.time;
+      this.dirty = true;
+    }
+    if (data.playing && !this.playing) this.play();
+    if (!data.playing && this.playing) this.pause();
+    const el = this.soundtrackEl() || this.playingEls()[0];
+    if (el && Math.abs(el.currentTime - data.time) > 0.3) for (const e of this.playingEls()) e.currentTime = data.time;
+  }
+
+  // editor side: an output said hello
+  onHello(data) {
+    const first = !this.output.connected;
+    Object.assign(this.output, { connected: true, lastSeen: performance.now(), aspect: data.aspect });
+    if (first) { this.applyMute(); this.layout(); this.renderOutputState(); this.broadcast(); this.toast('Output connected. It plays the sound; this device is silent.'); }
+    else if (Math.abs(this.output.aspect - data.aspect) > 0.001) this.layout();
+  }
+
+  // ---------- second screen through the Presentation API (Chrome: Cast devices, wired or wireless displays) ----------
+  initPresentation() {
+    const btn = $('presentBtn');
+    if (!presentationSupported()) { btn.hidden = true; $('presentNote').hidden = true; return; }
+    const url = location.href.split('#')[0] + '#output';
+    this.presentReq = new PresentationRequest([url]);
+    try { navigator.presentation.defaultRequest = this.presentReq; } catch { /* read-only in some browsers */ }
+    this.presentReq.getAvailability()
+      .then((av) => { const upd = () => { btn.disabled = !av.value && !this.presenting; this.renderOutputState(); }; av.onchange = upd; upd(); })
+      .catch(() => { /* can't watch for screens here; the button simply tries */ });
+    this.presentReq.onconnectionavailable = (e) => this.addPresentation(e.connection);
+    btn.onclick = () => {
+      if (this.presenting) { this.presenting.terminate(); return; }
+      this.presentReq.start().then((c) => this.addPresentation(c)).catch((err) => {
+        if (err.name !== 'AbortError') this.toast('No screen to present to. Check the projector or Chromecast is on the same Wi-Fi.');
+      });
     };
-    setInterval(() => this.channel.postMessage({ type: 'hello', aspect: innerWidth / innerHeight }), 1000);
+    // pick a running presentation back up after a reload
+    const last = session('get', 'pm-presentation');
+    if (last) this.presentReq.reconnect(last).then((c) => this.addPresentation(c)).catch(() => session('remove', 'pm-presentation'));
+  }
+
+  addPresentation(conn) {
+    if (this.presenting === conn) return;
+    this.presenting = conn;
+    session('set', 'pm-presentation', conn.id);
+    const port = new ConnectionPort(conn);
+    port.onmessage = (data) => {
+      if (data.type === 'hello') this.onHello(data);
+      if (data.type === 'need') {
+        const m = this.media.get(data.id);
+        if (!m || !m.file) return;
+        this.toast(`Sending ${m.name} to the screen…`);
+        port.sendFile(m.id, { blob: m.file, name: m.name, type: m.file.type });
+      }
+    };
+    port.onclose = () => {
+      this.ports.delete(port);
+      if (this.presenting === conn) this.presenting = null;
+      if (conn.state === 'terminated') session('remove', 'pm-presentation');
+      this.renderOutputState();
+    };
+    this.ports.add(port);
+    // the connection may open after it's handed over; say hello once it does
+    if (conn.state === 'connected') this.broadcast(); else conn.addEventListener('connect', () => this.broadcast(), { once: true });
+    this.renderOutputState();
+  }
+
+  // laptop: put the output window on the projector straight away when the browser can see the second display
+  async outputFeatures() {
+    try {
+      if (window.screen.isExtended && 'getScreenDetails' in window) {
+        const d = await window.getScreenDetails();
+        const s = d.screens.find((x) => x !== d.currentScreen);
+        if (s) return `popup,left=${s.availLeft},top=${s.availTop},width=${s.availWidth},height=${s.availHeight}`;
+      }
+    } catch { /* permission refused: open it here and let the user drag it */ }
+    return 'popup,width=960,height=540';
   }
 
   // ---------- editor UI ----------
@@ -341,18 +457,20 @@ class App {
       if (!f) return;
       try { const p = store.parseProject(await f.text()); await this.openProject(p); this.save(); this.toast(`Imported "${p.name}".`); } catch (err) { this.toast(err.message || "That file couldn't be read."); }
     };
-    $('openOutput').onclick = () => {
-      this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', 'popup,width=960,height=540');
+    $('openOutput').onclick = async () => {
+      this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', await this.outputFeatures());
       if (!this.output.win) this.toast('The browser blocked the output window. Allow pop-ups for this page.');
     };
-    if (this.channel) this.channel.onmessage = ({ data }) => {
-      if (data.type !== 'hello') return;
-      const first = !this.output.connected;
-      Object.assign(this.output, { connected: true, lastSeen: performance.now(), aspect: data.aspect });
-      if (first) { this.applyMute(); this.layout(); this.renderOutputState(); this.broadcast(); this.toast('Output window connected. It plays the sound; this window is silent.'); }
-      else if (Math.abs(this.output.aspect - data.aspect) > 0.001) this.layout();
-    };
+    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); };
     if (!this.channel) $('openOutput').disabled = true;
+    this.initPresentation();
+
+    // how to connect: a guide sheet, opened by itself the first time the app runs
+    const sheet = $('connectSheet');
+    for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
+    $('closeConnect').onclick = () => sheet.close();
+    sheet.addEventListener('close', () => store.setFlag('connectSeen'));
+    if (!store.getFlag('connectSeen') && sheet.showModal) sheet.showModal();
     this.selectTab('surfaces');
   }
 
@@ -473,7 +591,11 @@ class App {
     sel.innerHTML = list.map((p) => `<option value="${p.id}">${(p.name || 'Untitled').replace(/[<&"]/g, '')}</option>`).join('');
     sel.value = this.project.id;
   }
-  renderOutputState() { $('outputState').textContent = this.output.connected ? 'Output window connected' : ''; }
+  renderOutputState() {
+    $('outputState').textContent = this.presenting ? 'Presenting to a second screen' : this.output.connected ? 'Output window connected' : '';
+    $('presentBtn').textContent = this.presenting ? 'Stop presenting' : 'Present to a screen';
+    if (this.presenting) $('presentBtn').disabled = false;
+  }
 
   drawMeter(a) {
     if ($('drawer').hidden) return;

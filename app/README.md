@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -29,9 +29,16 @@ Projects save automatically on the device, with media kept in IndexedDB.
 *Project → Export file* moves a mapping to another device; re-add the media
 files there.
 
+**Second screen (Chrome):** *Project → Present to a screen* sends only the
+output to a Chromecast, a cast-capable projector or a display Chrome can
+present to, and the phone keeps its controls. Videos and images are copied to
+the screen when it needs them. See [`docs/connecting.md`](../docs/connecting.md)
+for every path and what's been tested.
+
 **Laptop with the projector as a second display:** *Project → Open output
-window*, drag the window onto the projector, and click it once. That window
-shows only the output and plays the sound; keep editing in the main window.
+window*. Chrome puts it on the projector if you allow window placement;
+otherwise drag it there. Click it once. That window shows only the output and
+plays the sound; keep editing in the main window.
 
 ## Deploying
 
@@ -62,4 +69,5 @@ IP as secure.
 | `src/audio.js` | Web Audio analysis: bass, mid, treble, level, beat |
 | `src/media.js` | The user's videos, images and audio (object URLs, IndexedDB) |
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
+| `src/link.js` | Links to a second screen (Presentation API), including sending media files |
 | `sw.js`, `manifest.webmanifest` | Installable, and works offline once loaded |

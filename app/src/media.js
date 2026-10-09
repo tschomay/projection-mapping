@@ -17,7 +17,7 @@ export class MediaLibrary {
     if (!kind) throw new Error(`${file.name} isn't a video, image or audio file.`);
     id = id || 'm' + Math.random().toString(36).slice(2, 10);
     const url = URL.createObjectURL(file);
-    const item = { id, name: file.name, kind, url, el: this.makeElement(kind, url) };
+    const item = { id, name: file.name, kind, url, file, el: this.makeElement(kind, url) };
     this.items.set(id, item);
     if (persist) putBlob(id, { name: file.name, type: file.type, blob: file }).catch(() => { item.unsaved = true; });
     this.onchange();
@@ -30,6 +30,14 @@ export class MediaLibrary {
     const item = { id, name, kind, url, el: this.makeElement(kind, url) };
     this.items.set(id, item);
     return item;
+  }
+
+  // swap in the real bytes for an item whose URL didn't open here (a second screen on another device)
+  replaceFile(id, file) {
+    const old = this.items.get(id);
+    if (old && old.el.pause) old.el.pause();
+    this.items.delete(id);   // the old URL belongs to the editor, so it isn't revoked here
+    return this.add(file, { persist: false, id });
   }
 
   makeElement(kind, url) {

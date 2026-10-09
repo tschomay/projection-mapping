@@ -90,6 +90,16 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 body.show #toast:not([hidden]) { display: block !important; }
 #gate { position: fixed; inset: 0; display: grid; place-items: center; background: #000c; z-index: 6; text-align: center; padding: 24px; }
 #gate .btn { min-height: 48px; font-size: 16px; }
+dialog.sheet { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+dialog.sheet:not([open]) { display: none; }
+dialog.sheet::backdrop { background: #000a; }
+dialog.sheet header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--line); }
+dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.sheet-body { overflow-y: auto; padding: 4px 16px 16px; }
+.sheet-body h3 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; color: var(--lamp); }
+.sheet-body p, .sheet-body ul { margin: 0 0 6px; }
+.sheet-body ul { padding-left: 18px; }
+.sheet-body li { margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 </head>
@@ -146,6 +156,7 @@ body.show #toast:not([hidden]) { display: block !important; }
       <div class="row"><button class="btn" id="delPoint">Delete point</button><button class="btn" id="dupSurface">Duplicate</button><button class="btn" id="delSurface">Delete surface</button></div>
       <label class="check"><input type="checkbox" id="snap" checked> Snap corners together so neighbouring surfaces share edges</label>
     </div>
+    <p class="note">Projector not showing this yet? <button class="btn" id="connectBtn2">How to connect</button></p>
   </section>
 
   <section class="pane" data-pane="content" hidden>
@@ -210,10 +221,11 @@ body.show #toast:not([hidden]) { display: block !important; }
     </div>
     <div class="group">
       <h3>Connect the projector</h3>
-      <p class="note"><b>Phone:</b> connect with a USB-C to HDMI adapter (or Lightning AV adapter), or cast or AirPlay the screen. The phone screen becomes the projector frame, so map with this app full screen in landscape. Wired is best: no lag, and sound goes over HDMI.</p>
-      <p class="note"><b>On the projector:</b> turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own correction softens the image and can move it after you've mapped.</p>
-      <p class="note"><b>Laptop with the projector as a second display:</b> open the output window, drag it onto the projector and click it once to go full screen. Keep editing here.</p>
-      <div class="row"><button class="btn" id="openOutput">Open output window</button><span class="mono" id="outputState"></span></div>
+      <p class="note">Simplest: mirror this phone to the projector, wired if you can. The phone screen becomes the projector frame.</p>
+      <div class="row"><button class="btn" id="connectBtn">How to connect</button></div>
+      <p class="note" id="presentNote"><b>Second screen:</b> the projector shows only the output while this device keeps its controls. Works in Chrome with a Chromecast, a cast-capable projector or a connected display.</p>
+      <div class="row"><button class="btn" id="presentBtn">Present to a screen</button><button class="btn" id="openOutput">Open output window</button></div>
+      <p class="mono" id="outputState"></p>
     </div>
   </section>
 </aside>
@@ -226,6 +238,43 @@ body.show #toast:not([hidden]) { display: block !important; }
   <button data-nudge="1,0" aria-label="Nudge right"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 8L6 3v10z"/></svg></button>
   <span></span><button data-nudge="0,1" aria-label="Nudge down"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13l5-7H3z"/></svg></button><span></span>
 </div>
+
+<dialog id="connectSheet" class="sheet" aria-labelledby="connectTitle">
+  <header><h2 id="connectTitle">Connect the projector</h2><button class="btn" id="closeConnect" aria-label="Close">Done</button></header>
+  <div class="sheet-body">
+    <section>
+      <h3>1. Cable: best</h3>
+      <p>A <b>USB-C to HDMI adapter</b> (Android phones with video out, iPhone 15 and later) or Apple's <b>Lightning Digital AV adapter</b> (older iPhones). No lag, and sound goes over HDMI to the projector.</p>
+      <p class="note">Not every Android phone has video out over USB-C; look up "DisplayPort Alt Mode" for your model. Get an adapter with a charging port for long shows.</p>
+    </section>
+    <section>
+      <h3>2. Wireless mirroring</h3>
+      <p><b>Android:</b> Quick Settings → <i>Cast</i> or <i>Screen cast</i>, to a Chromecast or a projector with Google Cast. <b>iPhone:</b> Control Center → <i>Screen Mirroring</i>, to an Apple TV or an AirPlay projector.</p>
+      <p class="note">No cable, but 0.1–0.3 s of lag and some blur on fast motion. Fine for mapping; content may run a beat behind the sound on the phone.</p>
+    </section>
+    <section>
+      <h3>3. Second screen (Chrome)</h3>
+      <p><i>Tools → Project → Present to a screen</i> sends only the output to a Chromecast, a cast-capable projector or a connected display. This device keeps its controls, so nothing you do here is projected.</p>
+      <p class="note">Videos and images are copied to the screen over Wi-Fi when it needs them; big videos take a while.</p>
+    </section>
+    <section>
+      <h3>4. Laptop</h3>
+      <p>Use the projector as a second display, then <i>Tools → Project → Open output window</i>. Chrome puts it on the projector by itself if you allow window placement; otherwise drag it there and click it once.</p>
+    </section>
+    <section>
+      <h3>When mirroring</h3>
+      <ul>
+        <li>Everything on the phone screen is projected. Map in landscape, then tap <b>Show</b>: only the content is left. Double-tap to come back.</li>
+        <li>Turn on <b>Do Not Disturb</b> so notifications don't pop up on the projection.</li>
+        <li>The phone is wider than the projector, so you'll get thin black bars at the sides. That's normal.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>On the projector</h3>
+      <p>Turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own softens the image and can shift it after you've mapped.</p>
+    </section>
+  </div>
+</dialog>
 
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
 <div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>
