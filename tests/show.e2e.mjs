@@ -90,10 +90,13 @@ export default async function run() {
       for (const el of window.app.playingEls()) el.currentTime = 0;
       window.app.play();
       window.__t0 = performance.now();
+      window.__b0 = window.app.audio.state.beats;
+      window.app.onCue = ((orig) => (i) => { window.__fired = { beats: window.app.audio.state.beats - window.__b0, secs: (performance.now() - window.__t0) / 1000 }; orig.call(window.app, i); })(window.app.onCue);
     });
-    const ok = await page.waitForFunction(() => window.app.show.index === 1, null, { timeout: 20000 }).then(() => true, () => false);
-    const secs = await page.evaluate(() => (performance.now() - window.__t0) / 1000);
-    t.ok(ok && secs > 1.2 && secs < 4, `four beats later the next cue runs (${secs.toFixed(1)} s at 120 bpm)`);
+    // beats are detected once per frame, so a slow machine counts them later, never sooner
+    const ok = await page.waitForFunction(() => window.app.show.index === 1, null, { timeout: 30000 }).then(() => true, () => false);
+    const f = await page.evaluate(() => window.__fired);
+    t.ok(ok && f && f.beats === 4 && f.secs > 1.2, `the next cue runs on the fourth beat (${f ? `${f.beats} beats, ${f.secs.toFixed(1)} s at 120 bpm` : 'never'})`);
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();

@@ -209,11 +209,12 @@ export function decodeAndSegment(shots, { camW, camH, W, H, minContrast = 20, se
     const mates = pieces.filter((_, j) => gfind(j) === gfind(i));
     const size = mates.reduce((a, m) => a + m.cells.length, 0);
     for (const c of pc.cells) plabel[c] = out.length;
-    // wall and floor reach across the frame, though a camera beside the projector may miss its far edges
+    // wall and floor reach across the frame, though a camera beside the projector may miss its far edges; and floor
+    // seen between boxes comes in several separate pieces of one plane, while a box face is one piece (two at most)
     let x0 = GW, x1 = 0;
     for (const m of mates) for (const c of m.cells) { const x = c % GW; if (x < x0) x0 = x; if (x > x1) x1 = x; }
     const spans = (mates.some((m) => touchesX(m.cells, 0)) && mates.some((m) => touchesX(m.cells, GW - 1))) || x1 - x0 > GW * 0.75;
-    out.push({ cells: pc.cells, H: pc.H, background: spans || size > GW * GH * 0.25 });
+    out.push({ cells: pc.cells, H: pc.H, background: spans || size > GW * GH * 0.25 || mates.length >= 3 });
   });
   // Where two planes meet at a crease the projector->camera mapping is continuous, so each plane's homography also
   // predicts the cells just across the boundary. Where one object hides another there's a depth jump (parallax).
