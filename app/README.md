@@ -85,7 +85,9 @@ IP as secure.
 
 | File | What it does |
 |---|---|
-| `src/app.js` | Wiring: layout, UI, playback, Show mode, autosave, output window |
+| `src/app.js` | The app: state, layout, frame loop, playback, Show mode, autosave, output window and second screen |
+| `src/ui/*.js` | One module per drawer pane (surfaces, content, sound, cues, project) plus camera capture; mixed into the app |
+| `src/env.js` | Small shared helpers (`$`, whether this page is an output display) |
 | `src/renderer.js` | WebGL2 renderer: one fragment shader for all surfaces, effects and media |
 | `src/effects.js` | Built-in effects (GLSL); audio uniforms are documented at the top |
 | `src/geometry.js` | Homographies, shapes, hit-testing |

@@ -3,25 +3,22 @@
 // window placed on the projector display. Surfaces are traced on that frame, filled with effects or media, and
 // driven by sound.
 import { Renderer, MAX_MEDIA } from './renderer.js';
-import { EFFECTS } from './effects.js';
-import { surfaceGeom, newSurface, flatMesh, meshEvaluator } from './geometry.js';
+import { surfaceGeom } from './geometry.js';
 import { Editor } from './editor.js';
 import { AudioEngine } from './audio.js';
 import { MediaLibrary } from './media.js';
-import * as store from './store.js';
 import { ConnectionPort, presentationSupported, presentationReceiver } from './link.js';
-import { drawPattern, surfacesFromShots } from './capture.js';
-import { Camera, CaptureError, listCameras, runCapture } from './camera.js';
-import { deviceReport, cameraReport, reportText } from './diagnostics.js';
-import { ShowRunner, newCue, fmtTime, parseTime } from './show.js';
-import { generateEffect, describeSurfaces, getKey, setKey, namespaced } from './ai.js';
-
-const $ = (id) => document.getElementById(id);
-const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
-const COARSE = matchMedia('(pointer: coarse)').matches;
-const FIT_CODE = { fill: 0, fit: 1, stretch: 2 };
-// sessionStorage, which can throw where storage is blocked
-const session = (op, key, value) => { try { return sessionStorage[op + 'Item'](key, value); } catch { return null; } };
+import { drawPattern } from './capture.js';
+import { ShowRunner } from './show.js';
+import { namespaced } from './ai.js';
+import { $, IS_OUTPUT, COARSE, FIT_CODE, session } from './env.js';
+import * as store from './store.js';
+import { surfacesUI } from './ui/surfaces.js';
+import { contentUI } from './ui/content.js';
+import { soundUI } from './ui/sound.js';
+import { cuesUI } from './ui/cues.js';
+import { projectUI } from './ui/project.js';
+import { scanUI } from './ui/scan.js';
 
 class App {
   constructor() {
@@ -139,6 +136,7 @@ class App {
     const st = this.soundtrackEl(); if (st) els.add(st);
     return [...els];
   }
+
   applyMute() {
     // when an output window is connected it plays the sound; this window stays silent
     const st = this.soundtrackEl();
@@ -148,6 +146,7 @@ class App {
       m.el.muted = !(m.el === st && !(this.output.connected && !IS_OUTPUT));
     }
   }
+
   play() {
     this.gesture();
     const st = this.soundtrackEl();
@@ -157,11 +156,13 @@ class App {
     for (const el of this.playingEls()) el.play().catch(() => { if (!IS_OUTPUT) this.toast('Tap Play again to start playback.'); });
     this.renderTransport(); this.broadcast(true);
   }
+
   pause() {
     this.playing = false;
     for (const m of this.media.list()) if (m.el.pause) m.el.pause();
     this.renderTransport(); this.broadcast(true);
   }
+
   restart() { for (const m of this.media.list()) if (m.kind !== 'image') m.el.currentTime = 0; this.broadcast(true); }
   currentTime() { const el = this.soundtrackEl() || this.playingEls()[0]; return el ? el.currentTime : 0; }
 
@@ -200,12 +201,14 @@ class App {
     $('saveState').textContent = 'Saving…';
     this.saveTimer = setTimeout(() => this.save(), 400);
   }
+
   save() {
     this.project.media = this.media.meta().filter((m) => this.isUsed(m.id));
     const ok = store.saveProject(this.project);
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
   }
+
   // media worth keeping with the project: on a surface now, in any cue's look, the soundtrack, or the design photo
   isUsed(id) {
     const p = this.project;
@@ -244,7 +247,6 @@ class App {
   }
 
   hello() { this.post({ type: 'hello', aspect: innerWidth / innerHeight }); }
-
   initOutput() {
     document.title = 'Surface Mapper output';
     document.body.classList.add('show');
@@ -362,226 +364,6 @@ class App {
     this.renderOutputState();
   }
 
-  // ---------- effects, including AI-written ones ----------
-  renderEffectList() {
-    const own = this.project.effects || [];
-    const esc = (t) => String(t).replace(/[<&"]/g, '');
-    $('effectList').innerHTML = EFFECTS.map((e) => `<button class="chip" data-effect="${e.id}">${e.name}</button>`).join('') +
-      own.map((e) => `<span class="chip own" data-effect="${e.id}" role="button" tabindex="0" title="${esc(e.prompt || '')}">✦ ${esc(e.name)}<button data-del aria-label="Delete ${esc(e.name)}">×</button></span>`).join('');
-    this.renderContentUI();
-  }
-
-  deleteEffect(id) {
-    this.project.effects = (this.project.effects || []).filter((e) => e.id !== id);
-    for (const s of this.project.surfaces) if (s.content?.effect === id) s.content = { kind: 'effect', effect: 'outline' };
-    this.changed(); this.renderEffectList();
-  }
-
-  initAI() {
-    const status = $('aiStatus');
-    const showKey = () => { const has = !!getKey(); $('aiKeyRow').hidden = has; $('aiKeyForget').hidden = !has; $('aiGo').disabled = !has; };
-    $('aiKeySave').onclick = () => {
-      const k = $('aiKey').value.trim();
-      if (!/^sk-ant-/.test(k)) { status.textContent = 'That doesn\'t look like an Anthropic API key (they start with sk-ant-).'; return; }
-      setKey(k); $('aiKey').value = ''; showKey(); status.textContent = 'Key saved on this device.';
-    };
-    $('aiKeyForget').onclick = () => { setKey(''); showKey(); status.textContent = 'Key removed from this device.'; };
-    $('aiGo').onclick = () => this.runAI();
-    $('aiCancel').onclick = () => this.aiAbort?.abort();
-    showKey();
-  }
-
-  async runAI() {
-    const request = $('aiPrompt').value.trim(), status = $('aiStatus');
-    if (!request) { status.textContent = 'Describe the look first, for example "slow blue waves that flash on the beat".'; return; }
-    if (!this.project.surfaces.length) { status.textContent = 'Add a surface first.'; return; }
-    const id = 'u' + Math.random().toString(36).slice(2, 8);
-    this.aiAbort = new AbortController();
-    $('aiGo').disabled = true; $('aiCancel').hidden = false;
-    try {
-      const res = await generateEffect({
-        apiKey: getKey(), request, signal: this.aiAbort.signal,
-        context: describeSurfaces(this.project.surfaces, this.geoms, this.frame),
-        compile: (code) => this.renderer.tryEffect(id, namespaced(id, code)),
-        progress: (t) => { status.textContent = t; },
-      });
-      const name = request.length > 28 ? request.slice(0, 27).trim() + '…' : request;
-      (this.project.effects ||= []).push({ id, name, prompt: request, code: res.code });
-      // show it on the selected surface, or on all of them
-      const targets = this.editor.sel >= 0 ? [this.project.surfaces[this.editor.sel]] : this.project.surfaces;
-      const before = targets.map((s) => s.content);
-      for (const s of targets) s.content = { kind: 'effect', effect: id };
-      this.changed(); this.renderEffectList();
-      status.textContent = (res.note || 'Done.') + (res.repaired ? ' (Fixed a compile error on the way.)' : '');
-      this.watchFrameRate(() => { targets.forEach((s, i) => { s.content = before[i]; }); this.changed(); }, name);
-    } catch (err) {
-      status.textContent = err.message;
-    } finally {
-      $('aiGo').disabled = !getKey(); $('aiCancel').hidden = true;
-    }
-  }
-
-  // guardrail: if a new effect makes the frame rate collapse, put the previous look back
-  watchFrameRate(revert, name) {
-    const before = this.fps || 60;
-    setTimeout(() => {
-      if (this.fps < 20 && before > 35) { revert(); this.toast(`"${name}" was too heavy for this device, so the previous look is back. It stays in the effect list.`, 5000); }
-    }, 3000);
-  }
-
-  // ---------- cues and timeline ----------
-  onCue() {
-    this.changed();
-    this.renderShowUI();
-  }
-
-  initShowUI() {
-    const list = $('cueList');
-    $('cueAdd').onclick = () => {
-      if (!this.project.surfaces.length) { this.toast('Add surfaces first: a cue remembers what each one shows.'); return; }
-      const cues = this.show.cues;
-      cues.push(newCue(this.project.surfaces, cues.length + 1));
-      this.show.index = cues.length - 1;
-      this.scheduleSave(); this.renderShowUI();
-      this.toast('Cue saved. Change what the surfaces show, then add the next cue.');
-    };
-    $('cueGo').onclick = () => { if (this.show.index < 0) this.show.go(0); else this.show.next(); };
-    $('cueFirst').onclick = () => { this.show.go(0, { transition: false }); if (this.soundtrackEl()) this.restart(); };
-    list.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-act]'); if (!b) return;
-      const i = +b.closest('[data-i]').dataset.i, cues = this.show.cues, c = cues[i];
-      const act = b.dataset.act;
-      if (act === 'go') this.show.go(i);
-      if (act === 'save') { Object.assign(c, { looks: newCue(this.project.surfaces, 0).looks }); this.toast(`${c.name} now has the current look.`); }
-      if (act === 'up' && i > 0) [cues[i - 1], cues[i]] = [cues[i], cues[i - 1]];
-      if (act === 'down' && i < cues.length - 1) [cues[i + 1], cues[i]] = [cues[i], cues[i + 1]];
-      if (act === 'del') { cues.splice(i, 1); if (this.show.index >= cues.length) this.show.index = cues.length - 1; }
-      if (act === 'now') { c.start.value = Math.round(this.currentTime() * 10) / 10; }
-      this.scheduleSave(); this.renderShowUI();
-    });
-    list.addEventListener('change', (e) => {
-      const el = e.target, i = +el.closest('[data-i]').dataset.i, c = this.show.cues[i];
-      if (el.dataset.f === 'name') c.name = el.value.trim() || c.name;
-      if (el.dataset.f === 'mode') { c.start.mode = el.value; c.start.value = el.value === 'after' ? 5 : el.value === 'beats' ? 8 : el.value === 'at' ? Math.round(this.currentTime() * 10) / 10 : 0; }
-      if (el.dataset.f === 'value') {
-        const v = c.start.mode === 'at' ? parseTime(el.value) : parseFloat(el.value);
-        if (v != null && v >= 0) c.start.value = v;
-      }
-      if (el.dataset.f === 'type') c.transition.type = el.value;
-      if (el.dataset.f === 'dur') { const v = parseFloat(el.value); if (v >= 0) c.transition.dur = v; }
-      this.scheduleSave(); this.renderShowUI();
-    });
-    $('timeline').addEventListener('pointerdown', (e) => {
-      const st = this.soundtrackEl(); if (!st || !st.duration) return;
-      const r = e.currentTarget.getBoundingClientRect();
-      const t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * st.duration;
-      for (const el of this.playingEls()) el.currentTime = t;
-      this.broadcast(true);
-    });
-    this.renderShowUI();
-  }
-
-  renderShowUI() {
-    const cues = this.show.cues, list = $('cueList');
-    const esc = (t) => String(t).replace(/[<&"]/g, '');
-    const opt = (v, label, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`;
-    list.innerHTML = cues.map((c, i) => {
-      const m = c.start.mode;
-      const val = m === 'tap' ? '' : `<input type="text" inputmode="decimal" data-f="value" aria-label="${m === 'at' ? 'Time in the soundtrack' : m === 'after' ? 'Seconds' : 'Beats'}" value="${m === 'at' ? fmtTime(c.start.value) : c.start.value}">${m === 'at' ? '<button class="btn" data-act="now" title="Use the soundtrack\'s current time">Now</button>' : `<span class="note">${m === 'after' ? 's' : 'beats'}</span>`}`;
-      return `<div class="cue${i === this.show.index ? ' live' : ''}" data-i="${i}">
-        <div class="row"><input type="text" data-f="name" aria-label="Cue name" value="${esc(c.name)}"><button class="btn${i === this.show.index ? ' primary' : ''}" data-act="go">Go</button></div>
-        <div class="row"><select data-f="mode" aria-label="How it starts">${opt('tap', 'On a tap', m)}${opt('after', 'After the previous, by', m)}${opt('beats', 'After the previous, beats', m)}${opt('at', 'At a time in the song', m)}</select>${val}</div>
-        <div class="row"><select data-f="type" aria-label="Transition">${opt('fade', 'Crossfade', c.transition.type)}${opt('cut', 'Cut', c.transition.type)}${opt('wipe', 'Wipe across', c.transition.type)}</select>
-          ${c.transition.type === 'cut' ? '' : `<input type="text" inputmode="decimal" data-f="dur" aria-label="Transition seconds" value="${c.transition.dur}"><span class="note">s</span>`}</div>
-        <div class="row"><button class="btn" data-act="save">Save current look</button><button class="btn" data-act="up" aria-label="Move up"${i ? '' : ' disabled'}>↑</button><button class="btn" data-act="down" aria-label="Move down"${i < cues.length - 1 ? '' : ' disabled'}>↓</button><button class="btn" data-act="del">Delete</button></div>
-      </div>`;
-    }).join('') || '<p class="note">No cues yet. Set up a look on the surfaces, then add it as a cue.</p>';
-    const cur = cues[this.show.index];
-    $('cueState').textContent = cur ? `On stage: ${cur.name} (${this.show.index + 1} of ${cues.length})` : cues.length ? 'No cue running yet: tap Go.' : '';
-    $('cueGo').textContent = this.show.index < 0 ? 'Go: first cue' : 'Go: next cue';
-    $('cueGo').disabled = !cues.length || this.show.index >= cues.length - 1;
-    $('cueFirst').disabled = !cues.length;
-    $('timelineGroup').hidden = !cues.some((c) => c.start.mode === 'at');
-    this.timelineKey = '';
-  }
-
-  // the soundtrack as a strip, with a marker per timed cue and the playhead
-  drawTimeline() {
-    const tl = $('timeline');
-    if ($('drawer').hidden || $('timelineGroup').hidden || tl.offsetParent === null) return;
-    const st = this.soundtrackEl(), dur = st && st.duration && isFinite(st.duration) ? st.duration : 0;
-    const key = dur + '|' + this.show.cues.map((c) => c.start.mode + c.start.value).join() + '|' + this.show.index;
-    if (key !== this.timelineKey) {
-      this.timelineKey = key;
-      tl.innerHTML = dur ? '<i class="playhead"></i>' + this.show.cues.map((c, i) => c.start.mode === 'at' ? `<b class="${i === this.show.index ? 'live' : ''}" style="left:${Math.min(100, c.start.value / dur * 100)}%"><span>${i + 1}</span></b>` : '').join('') : '<span class="note">Pick a soundtrack in Sound to place cues in time.</span>';
-    }
-    const ph = tl.querySelector('.playhead');
-    if (ph) ph.style.left = dur ? (st.currentTime / dur * 100) + '%' : '0';
-  }
-
-  // ---------- designing on a photo of the set (no projector needed) ----------
-  initBackdrop() {
-    $('addBackdrop').onchange = async (e) => {
-      const f = e.target.files[0]; e.target.value = '';
-      if (!f) return;
-      try {
-        const m = await this.media.add(f);
-        if (m.kind !== 'image') { this.media.remove(m.id); throw new Error('Pick a photo (an image file).'); }
-        const old = this.project.backdrop;
-        this.project.backdrop = { mediaId: m.id, show: true, dim: old?.dim ?? 0.6 };
-        if (old && old.mediaId !== m.id && !this.isUsed(old.mediaId)) this.media.remove(old.mediaId);
-        this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
-        this.toast('Content now shows as projected light on the photo. Take the photo from where the projector will stand.', 4500);
-      } catch (err) { this.toast(err.message); }
-    };
-    $('backdropShow').onchange = (e) => { if (this.project.backdrop) { this.project.backdrop.show = e.target.checked; this.scheduleSave(); this.renderBackdrop(); } };
-    $('backdropDim').oninput = (e) => { if (this.project.backdrop) { this.project.backdrop.dim = +e.target.value; this.scheduleSave(); this.renderBackdrop(); } };
-    $('removeBackdrop').onclick = () => {
-      const b = this.project.backdrop; if (!b) return;
-      this.project.backdrop = null;
-      if (!this.isUsed(b.mediaId)) this.media.remove(b.mediaId);
-      this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
-    };
-  }
-
-  renderBackdrop() {
-    const b = this.project.backdrop, m = b && this.media.get(b.mediaId), img = $('backdrop');
-    const on = !!(m && b.show);
-    if (on && img.getAttribute('src') !== m.url) img.src = m.url;
-    img.hidden = !on;
-    img.style.filter = `brightness(${b ? b.dim : 0.6})`;
-    document.body.classList.toggle('photo', on);
-    $('backdropOpts').hidden = !b;
-    if (b) { $('backdropShow').checked = b.show; $('backdropDim').value = b.dim; }
-  }
-
-  // ---------- device check ----------
-  initCheck() {
-    const sheet = $('checkSheet');
-    let rows = [];
-    const draw = () => {
-      $('checkList').innerHTML = rows.map((r) => `<li class="${r.ok === true ? 'yes' : r.ok === false ? 'no' : 'info'}"><b>${r.label}</b><span>${String(r.value).replace(/[<&]/g, '')}</span></li>`).join('');
-      $('checkPersist').hidden = !rows.some((r) => r.action === 'persist');
-    };
-    const refresh = async () => { rows = (await deviceReport(this)).concat(rows.filter((r) => r.camera)); draw(); };
-    $('checkBtn').onclick = () => { this.toggleDrawer(false); sheet.showModal(); refresh(); };
-    $('closeCheck').onclick = () => sheet.close();
-    $('checkCamera').onclick = async () => {
-      $('checkCamera').disabled = true;
-      const cam = (await cameraReport(this.camera)).map((r) => ({ ...r, camera: true }));
-      rows = rows.filter((r) => !r.camera).concat(cam); draw();
-      $('checkCamera').disabled = false;
-    };
-    $('checkPersist').onclick = async () => {
-      const ok = await navigator.storage.persist().catch(() => false);
-      this.toast(ok ? 'This browser will keep your files.' : 'The browser said no. Installing the app to the home screen usually helps.');
-      refresh();
-    };
-    $('checkCopy').onclick = async () => {
-      try { await navigator.clipboard.writeText(reportText(rows)); this.toast('Report copied.'); } catch { this.toast("Couldn't copy here; take a screenshot instead."); }
-    };
-  }
-
   // ---------- find surfaces with the camera (structured light) ----------
   // a capture pattern over the whole frame; null hides it
   showPattern(f) {
@@ -590,118 +372,6 @@ class App {
     const [W, H] = this.frame;
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     drawPattern(c.getContext('2d'), f, W, H);
-    c.hidden = false;
-  }
-
-  initScan() {
-    const sheet = $('scanSheet');
-    this.camera = new Camera($('scanVideo'));
-    $('scanBtn').onclick = () => {
-      this.toggleDrawer(false);
-      $('scanView').hidden = true; $('scanUndo').hidden = true;
-      sheet.showModal();
-      this.openCamera($('scanCam').value);
-    };
-    $('closeScan').onclick = () => sheet.close();
-    sheet.addEventListener('close', () => { if (!this.scanning) this.camera.close(); });
-    $('scanCam').onchange = (e) => this.openCamera(e.target.value);
-    $('scanStart').onclick = () => this.runScan();
-    $('scanUndo').onclick = () => {
-      if (!this.scanPrev) return;
-      this.project.surfaces = this.scanPrev; this.scanPrev = null;
-      this.editor.select(-1); this.changed();
-      $('scanUndo').hidden = true;
-      $('scanStatus').textContent = 'Your earlier surfaces are back.';
-    };
-    // cancel a capture: tap anywhere, or Escape
-    $('stage').addEventListener('pointerdown', () => { if (this.scanning) this.scanAbort?.abort(); });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.scanning) this.scanAbort?.abort(); });
-  }
-
-  async openCamera(deviceId) {
-    const status = $('scanStatus');
-    $('scanStart').disabled = true;
-    status.textContent = 'Opening the camera…';
-    try {
-      const used = await this.camera.open(deviceId || undefined);
-      // camera names are only readable once permission is granted
-      const cams = await listCameras(), sel = $('scanCam');
-      if (cams.length > 1) {
-        sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${(c.label || 'Camera ' + (i + 1)).replace(/[<&"]/g, '')}</option>`).join('');
-        sel.value = used || deviceId || cams[0].deviceId;
-      }
-      sel.hidden = cams.length < 2;
-      $('scanStart').disabled = false;
-      status.textContent = 'Aim the camera at the set, then tap Start. Use the main camera, not the ultra-wide one.';
-    } catch (err) {
-      status.textContent = err.message;
-    }
-  }
-
-  async runScan() {
-    const sheet = $('scanSheet'), status = $('scanStatus');
-    const [W, H] = this.frame;
-    // with an output window or second screen the patterns go there and this screen shows progress;
-    // otherwise this screen is the projector, so everything but the pattern is hidden
-    const remote = this.output.connected;
-    const show = (f) => { if (remote) this.post({ type: 'pattern', f }); else this.showPattern(f); };
-    this.scanning = true;
-    this.scanAbort = new AbortController();
-    $('scanStart').disabled = true; $('scanUndo').hidden = true; $('scanView').hidden = true;
-    if (!remote) {
-      sheet.close();
-      document.body.classList.add('capturing');
-      this.gesture();
-      if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-    }
-    let message;
-    try {
-      const cap = await runCapture(this.camera, {
-        W, H, show, signal: this.scanAbort.signal,
-        progress: (i, n, text) => { status.textContent = text; },
-      });
-      show(null);
-      status.textContent = 'Looking for flat surfaces…';
-      await new Promise((r) => setTimeout(r, 30));
-      const res = surfacesFromShots(cap.shots, { camW: cap.camW, camH: cap.camH, W, H, keepBackground: $('scanKeepBg').checked });
-      this.drawScan(res);
-      if (!res.surfaces.length) throw new CaptureError(res.planes ? 'Only wall and floor were found. Tick "Keep wall and floor" to use them, or bring objects closer to the projector.' : 'No flat surfaces were found. Check the camera sees the projection clearly, and dim the lights.');
-      this.scanPrev = this.project.surfaces;
-      this.project.surfaces = res.surfaces;
-      this.editor.select(-1);
-      this.changed();
-      $('scanUndo').hidden = !this.scanPrev.length;
-      message = `Found ${res.surfaces.length} surface${res.surfaces.length === 1 ? '' : 's'}` +
-        (res.background && !$('scanKeepBg').checked ? `; ${res.background} wall or floor area${res.background === 1 ? '' : 's'} left out` : '') + '.\n' +
-        `The camera decoded ${Math.round(res.coverage * 100)}% of the frame. Projection lag ${Math.round(cap.latency)} ms.` +
-        (cap.locked.length ? ` Locked ${cap.locked.join(', ')}.` : '') +
-        (res.degenerate ? '\nAlmost everything looked like one plane: move the camera further to the side of the projector.' : '') +
-        '\nCheck each surface in Edit mode and drag any corner that is off.';
-    } catch (err) {
-      message = err instanceof CaptureError ? err.message : 'The capture failed: ' + (err.message || err);
-    } finally {
-      show(null);
-      document.body.classList.remove('capturing');
-      this.scanning = false;
-      $('scanStart').disabled = false;
-      if (!sheet.open) sheet.showModal();
-      status.textContent = message;
-      ($('scanView').hidden ? status : $('scanView')).scrollIntoView({ block: 'nearest' });
-    }
-  }
-
-  // the flat areas found, one colour each, in the projector frame (grey: wall and floor)
-  drawScan(res) {
-    const { GW, GH, regions } = res.res, c = $('scanView');
-    c.width = GW; c.height = GH;
-    const ctx = c.getContext('2d'), img = ctx.createImageData(GW, GH);
-    regions.forEach((r, i) => {
-      const keep = !r.background || $('scanKeepBg').checked;
-      const h = (i * 0.137) % 1, col = keep ? [0, 8, 4].map((n) => { const k = (n + h * 12) % 12; return 255 * (0.55 - 0.41 * Math.max(-1, Math.min(k - 3, 9 - k, 1))); }) : [45, 52, 64];
-      for (const cell of r.cells) img.data.set([col[0], col[1], col[2], 255], cell * 4);
-    });
-    for (let k = 3; k < img.data.length; k += 4) if (!img.data[k]) img.data[k] = 255;
-    ctx.putImageData(img, 0, 0);
     c.hidden = false;
   }
 
@@ -757,137 +427,11 @@ class App {
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.editor.mode === 'points' && this.editor.selVert) { e.preventDefault(); const err = this.editor.deletePoint(); if (err) this.toast(err); }
     });
 
-    // surfaces
-    document.querySelectorAll('[data-add]').forEach((b) => {
-      b.onclick = () => { this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length)); this.toast('Drag it onto a real surface, then drag its corners into place.'); };
-    });
-    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => {
-      const ed = this.editor, s = this.project.surfaces[ed.sel];
-      ed.mode = b.dataset.mode; ed.selVert = null; ed.selPin = -1; ed.selMesh = -1;
-      if (ed.mode === 'mesh' && s && !s.mesh) { this.setMesh(s, 3); return; }   // a grid to bend, to start with
-      this.changed({ geometry: false, save: false });
-    }; });
-    $('meshSize').onchange = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) this.setMesh(s, +e.target.value); };
-    $('feather').oninput = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) { s.feather = +e.target.value; $('featherOut').textContent = s.feather + ' px'; this.changed(); } };
-    $('partAdd').onclick = () => this.editor.addPart($('partShape').value, 1);
-    $('partCut').onclick = () => this.editor.addPart($('partShape').value, -1);
-    $('delPoint').onclick = () => { const err = this.editor.deletePoint(); if (err) this.toast(err); };
-    $('dupSurface').onclick = () => this.editor.duplicateSurface();
-    $('delSurface').onclick = () => this.editor.deleteSurface();
-    $('snap').onchange = (e) => { this.editor.snap = this.project.settings.snap = e.target.checked; this.scheduleSave(); };
-
-    // nudge pad
-    let step = 1;
-    $('nudgeStep').onclick = () => { step = step === 1 ? 10 : 1; $('nudgeStep').textContent = step + 'px'; };
-    document.querySelectorAll('[data-nudge]').forEach((b) => {
-      const [dx, dy] = b.dataset.nudge.split(',').map(Number);
-      let rep = 0;
-      const go = () => this.editor.nudge(dx * step, dy * step);
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); go(); rep = setTimeout(function again() { go(); rep = setTimeout(again, 60); }, 400); });
-      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(rep));
-    });
-
-    // content
-    $('effectList').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-effect]'); if (!b) return;
-      if (e.target.closest('[data-del]')) { this.deleteEffect(b.dataset.effect); return; }
-      this.setContent({ kind: 'effect', effect: b.dataset.effect });
-    });
-    this.renderEffectList();
-    this.initAI();
-    $('addMedia').onchange = async (e) => {
-      for (const f of e.target.files) {
-        try { const m = await this.media.add(f); if (this.editor.sel >= 0) this.setContent({ kind: 'media', mediaId: m.id, fit: 'fill', space: 'surface' }); } catch (err) { this.toast(err.message); }
-      }
-      e.target.value = '';
-    };
-    document.querySelectorAll('#fitSeg button').forEach((b) => { b.onclick = () => this.setContent({ fit: b.dataset.fit }, true); });
-    document.querySelectorAll('#spaceSeg button').forEach((b) => { b.onclick = () => this.setContent({ space: b.dataset.space }, true); });
-    $('applyAll').onclick = () => {
-      const s = this.project.surfaces[this.editor.sel] || this.project.surfaces[0];
-      if (!s) return;
-      for (const t of this.project.surfaces) t.content = { ...s.content };
-      this.changed();
-      this.toast('Every surface now shows the same content.');
-    };
-
-    // sound
-    $('addAudio').onchange = async (e) => {
-      const f = e.target.files[0]; e.target.value = '';
-      if (!f) return;
-      try { const m = await this.media.add(f); this.project.soundtrack = m.id; this.applyMute(); this.renderSoundUI(); this.scheduleSave(); } catch (err) { this.toast(err.message); }
-    };
-    $('soundtrack').onchange = (e) => {
-      const was = this.playing; this.pause();
-      this.project.soundtrack = e.target.value || null; this.applyMute(); this.scheduleSave();
-      if (was) this.play();
-    };
-    $('loop').onchange = (e) => { this.project.settings.loop = e.target.checked; this.applyMute(); this.scheduleSave(); };
-    $('sens').oninput = (e) => { this.audio.sensitivity = this.project.settings.sensitivity = parseFloat(e.target.value); this.scheduleSave(); };
-    $('micToggle').onchange = async (e) => {
-      try { await this.audio.useMic(e.target.checked); } catch (err) { e.target.checked = false; this.toast(err.message || 'The microphone is not available.'); }
-    };
-
-    // project
-    $('projName').onchange = (e) => { this.project.name = e.target.value.trim() || 'Untitled mapping'; this.scheduleSave(); };
-    $('projList').onchange = (e) => { const p = store.loadProject(e.target.value); if (p) this.openProject(p); };
-    $('newProj').onclick = () => { this.save(); this.openProject(store.newProject()); this.save(); this.toast('New project started.'); };
-    $('delProj').onclick = () => {
-      if (!this.confirmPending) { this.confirmPending = true; $('delProj').textContent = 'Tap again to delete'; setTimeout(() => { this.confirmPending = false; $('delProj').textContent = 'Delete'; }, 3000); return; }
-      this.confirmPending = false; $('delProj').textContent = 'Delete';
-      store.deleteProject(this.project.id);
-      const idx = store.listProjects();
-      this.openProject((idx.current && store.loadProject(idx.current)) || store.newProject());
-      this.toast('Project deleted.');
-    };
-    $('exportProj').onclick = () => this.exportProject();
-    $('importProj').onchange = async (e) => {
-      const f = e.target.files[0]; e.target.value = '';
-      if (!f) return;
-      try { const p = store.parseProject(await f.text()); await this.openProject(p); this.save(); this.toast(`Imported "${p.name}".`); } catch (err) { this.toast(err.message || "That file couldn't be read."); }
-    };
-    $('openOutput').onclick = async () => {
-      this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', await this.outputFeatures());
-      if (!this.output.win) this.toast('The browser blocked the output window. Allow pop-ups for this page.');
-    };
     if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
     if (!this.channel) $('openOutput').disabled = true;
+    for (const init of ['initSurfacesUI', 'initContentUI', 'initSoundUI', 'initProjectUI', 'initCuesUI', 'initScan']) this[init]();
     this.initPresentation();
-    this.initScan();
-    this.initCheck();
-    this.initShowUI();
-    this.initBackdrop();
-
-    // how to connect: a guide sheet, opened by itself the first time the app runs
-    const sheet = $('connectSheet');
-    for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
-    $('closeConnect').onclick = () => sheet.close();
-    sheet.addEventListener('close', () => store.setFlag('connectSeen'));
-    if (!store.getFlag('connectSeen') && sheet.showModal) sheet.showModal();
     this.selectTab('surfaces');
-  }
-
-  async exportProject() {
-    this.save();
-    const text = JSON.stringify(this.project, null, 2);
-    const filename = (this.project.name || 'mapping').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.json';
-    // inside a Claude artifact, downloads go through the platform; elsewhere a plain download link works
-    try {
-      const dl = window.claude && (await window.claude.use('downloads'));
-      if (dl) { await dl.save({ filename, data: text }); return; }
-    } catch { /* fall through */ }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }
-
-  setContent(patch, merge = false) {
-    const s = this.project.surfaces[this.editor.sel];
-    if (!s) { this.toast('Select a surface first: tap it in the frame or in the Surfaces list.'); return; }
-    s.content = merge ? { ...s.content, ...patch } : patch;
-    if (s.content.kind === 'media') { const m = this.media.get(s.content.mediaId); if (m && m.kind === 'video' && this.playing) m.el.play().catch(() => {}); }
-    this.changed();
   }
 
   toggleDrawer(force) {
@@ -896,6 +440,7 @@ class App {
     $('toolsBtn').setAttribute('aria-expanded', String(open));
     this.renderNudge();
   }
+
   selectTab(tab) {
     document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== tab; });
@@ -911,112 +456,6 @@ class App {
     $('loop').checked = this.project.settings.loop !== false;
     $('sens').value = this.project.settings.sensitivity || 1;
   }
-  renderSurfaceUI() {
-    const list = $('surfaceList'), ed = this.editor;
-    list.innerHTML = '';
-    this.project.surfaces.forEach((s, i) => {
-      const b = document.createElement('button');
-      b.className = 'chip'; b.textContent = 'Surface ' + (i + 1);
-      b.setAttribute('aria-pressed', String(i === ed.sel));
-      b.onclick = () => ed.select(i);
-      list.appendChild(b);
-    });
-    if (!this.project.surfaces.length) list.innerHTML = '<span class="note">None yet. Add one above.</span>';
-    document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
-    const has = ed.sel >= 0;
-    for (const id of ['partAdd', 'partCut', 'dupSurface', 'delSurface']) $(id).disabled = !has;
-    $('delPoint').disabled = !(has && ed.mode === 'points' && ed.selVert);
-    const s = this.project.surfaces[ed.sel];
-    $('meshSize').disabled = $('feather').disabled = !has;
-    $('meshSize').value = s && s.mesh ? String(s.mesh.n[0]) : '0';
-    $('feather').value = s ? s.feather || 0 : 0;
-    $('featherOut').textContent = (s ? s.feather || 0 : 0) + ' px';
-    $('modeHint').textContent = !has ? 'Tap a surface to select it.'
-      : ed.mode === 'warp' ? 'Drag the four corner dots onto the real surface\'s corners. Drag inside to move it.'
-      : ed.mode === 'mesh' ? 'Set the corners first. Then drag the grid points so the outline and content follow a curved or bowed surface.'
-      : 'Drag a square to move a point. Drag a ring on an edge to add one. Double-tap a point to remove it. Drag inside a shape to move just that shape.';
-    this.renderNudge();
-  }
-  // give a surface an n x n bend grid (keeping its current shape), or none
-  setMesh(s, n) {
-    if (!n) { delete s.mesh; if (this.editor.mode === 'mesh') this.editor.mode = 'warp'; }
-    else {
-      const old = s.mesh, m = flatMesh(n, n);
-      if (old) { const f = meshEvaluator(old); m.pts = m.pts.map(([u, v]) => f(u, v)); }
-      s.mesh = m;
-    }
-    this.editor.selMesh = -1;
-    this.changed();
-  }
-
-  renderNudge() {
-    const t = this.editor && !document.body.classList.contains('show') ? this.editor.nudgeTarget() : '';
-    const pad = $('nudge');
-    pad.hidden = !t;
-    if (t) { $('nudgeLabel').textContent = 'Nudge ' + t; pad.style.left = ''; }
-  }
-  renderContentUI() {
-    const s = this.project.surfaces[this.editor.sel];
-    $('contentTarget').textContent = s ? `Choosing what surface ${this.editor.sel + 1} shows.` : 'Select a surface to choose what it shows.';
-    const c = s ? s.content || {} : {};
-    document.querySelectorAll('#effectList .chip').forEach((b) => b.setAttribute('aria-pressed', String(c.kind === 'effect' && c.effect === b.dataset.effect)));
-    document.querySelectorAll('#mediaList .chip').forEach((b) => b.setAttribute('aria-pressed', String(c.kind === 'media' && c.mediaId === b.dataset.media)));
-    $('mediaOpts').hidden = c.kind !== 'media';
-    document.querySelectorAll('#fitSeg button').forEach((b) => b.setAttribute('aria-pressed', String((c.fit || 'fill') === b.dataset.fit)));
-    document.querySelectorAll('#spaceSeg button').forEach((b) => b.setAttribute('aria-pressed', String((c.space || 'surface') === b.dataset.space)));
-    $('applyAll').disabled = !s;
-    const over = this.project.surfaces.filter((x) => x.content?.kind === 'media').map((x) => x.content.mediaId);
-    if (new Set(over).size > MAX_MEDIA) this.toast(`Up to ${MAX_MEDIA} different videos or images can show at once.`);
-  }
-  renderMediaUI() {
-    const list = $('mediaList');
-    list.innerHTML = '';
-    const visual = this.media.list().filter((m) => m.kind !== 'audio' && m.id !== this.project.backdrop?.mediaId);
-    for (const m of visual) {
-      const b = document.createElement('button');
-      b.className = 'chip'; b.textContent = (m.kind === 'video' ? 'Video: ' : 'Image: ') + m.name; b.dataset.media = m.id;
-      b.onclick = () => this.setContent({ kind: 'media', mediaId: m.id, fit: 'fill', space: 'surface' });
-      list.appendChild(b);
-    }
-    if (!visual.length) list.innerHTML = '<span class="note">Nothing added yet.</span>';
-    this.renderContentUI();
-    this.renderSoundUI();
-    $('playBtn').hidden = !this.media.list().some((m) => m.kind !== 'image');
-  }
-  renderSoundUI() {
-    const sel = $('soundtrack');
-    sel.innerHTML = '<option value="">No soundtrack</option>' + this.media.list().filter((m) => m.kind !== 'image')
-      .map((m) => `<option value="${m.id}">${m.kind === 'video' ? 'Sound of video: ' : ''}${m.name.replace(/[<&"]/g, '')}</option>`).join('');
-    sel.value = this.project.soundtrack && this.media.get(this.project.soundtrack) ? this.project.soundtrack : '';
-  }
-  renderTransport() {
-    for (const id of ['playBtn', 'playBtn2']) {
-      const b = $(id), label = this.playing ? 'Pause' : 'Play';
-      if (id === 'playBtn') {
-        b.querySelector('span').textContent = label;
-        b.querySelector('svg').innerHTML = this.playing ? '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>' : '<path d="M4 2.5v11l9-5.5z"/>';
-      } else b.textContent = label;
-    }
-  }
-  renderProjectList() {
-    const idx = store.listProjects(), sel = $('projList');
-    const list = idx.list.some((p) => p.id === this.project.id) ? idx.list : idx.list.concat([{ id: this.project.id, name: this.project.name }]);
-    sel.innerHTML = list.map((p) => `<option value="${p.id}">${(p.name || 'Untitled').replace(/[<&"]/g, '')}</option>`).join('');
-    sel.value = this.project.id;
-  }
-  renderOutputState() {
-    $('outputState').textContent = this.presenting ? 'Presenting to a second screen' : this.output.connected ? 'Output window connected' : '';
-    $('presentBtn').textContent = this.presenting ? 'Stop presenting' : 'Present to a screen';
-    if (this.presenting) $('presentBtn').disabled = false;
-  }
-
-  drawMeter(a) {
-    if ($('drawer').hidden) return;
-    $('mBass').style.height = Math.round(a.bass * 100) + '%';
-    $('mMid').style.height = Math.round(a.mid * 100) + '%';
-    $('mTreble').style.height = Math.round(a.treble * 100) + '%';
-    $('mBeat').style.background = a.beat > 0.3 ? 'var(--lamp)' : 'var(--raise)';
-  }
 
   toast(text, ms = 3200) {
     const t = $('toast');
@@ -1025,6 +464,9 @@ class App {
     this.toastT = setTimeout(() => { t.style.opacity = '0'; setTimeout(() => { t.hidden = true; }, 300); }, ms);
   }
 }
+
+// each drawer pane's wiring and rendering lives in its own module under ui/
+Object.assign(App.prototype, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI);
 
 // offline support when served over http(s); unavailable in embedded previews, which is fine
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

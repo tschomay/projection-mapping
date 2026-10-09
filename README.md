@@ -10,6 +10,8 @@ viewpoint, so they come out pre-warped and continuous across edges.
 - [`docs/hardware.md`](docs/hardware.md): what to expect from a cheap
   projector indoors and outdoors, which projector and phone features matter,
   and outdoor practicalities.
+- [`docs/testing.md`](docs/testing.md): **what to test on a real phone, TV and
+  projector**, as a checklist, with where to report results.
 - [`docs/connecting.md`](docs/connecting.md): the ways a phone or laptop
   drives the projector, the default (wired mirroring), the second-screen path,
   and which combinations have been tried.
