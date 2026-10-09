@@ -103,6 +103,11 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .sheet-body p, .sheet-body ul { margin: 0 0 6px; }
 .sheet-body ul { padding-left: 18px; }
 .sheet-body li { margin-bottom: 4px; }
+.checks { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; }
+.checks li { display: grid; grid-template-columns: 18px minmax(0, 11em) 1fr; gap: 8px; font-size: 13px; align-items: baseline; }
+.checks li b { font-weight: 500; }
+.checks li span { color: var(--muted); overflow-wrap: anywhere; }
+.checks .yes::before { content: "✓"; color: var(--ok); } .checks .no::before { content: "✗"; color: var(--bad); } .checks .info::before { content: "·"; color: var(--muted); }
 #scanVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #scanView { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: #000; }
 #scanStatus { white-space: pre-line; margin: 8px 0 0; }
@@ -234,6 +239,11 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <p class="note">The file holds the mapping and media names. Videos and images stay on each device; re-add them after importing.</p>
     </div>
     <div class="group">
+      <h3>This device</h3>
+      <div class="row"><button class="btn" id="checkBtn">Check this device</button></div>
+      <p class="note">What this phone supports: full screen, keeping awake, camera exposure lock, video formats, storage. Worth running before you buy adapters.</p>
+    </div>
+    <div class="group">
       <h3>Connect the projector</h3>
       <p class="note">Simplest: mirror this phone to the projector, wired if you can. The phone screen becomes the projector frame.</p>
       <div class="row"><button class="btn" id="connectBtn">How to connect</button></div>
@@ -287,6 +297,15 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <h3>On the projector</h3>
       <p>Turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own softens the image and can shift it after you've mapped.</p>
     </section>
+  </div>
+</dialog>
+
+<dialog id="checkSheet" class="sheet" aria-labelledby="checkTitle">
+  <header><h2 id="checkTitle">Device check</h2><button class="btn" id="closeCheck" aria-label="Close">Done</button></header>
+  <div class="sheet-body">
+    <ul class="checks" id="checkList"></ul>
+    <div class="row"><button class="btn" id="checkCamera">Test the camera</button><button class="btn" id="checkPersist" hidden>Keep my files</button><button class="btn" id="checkCopy">Copy report</button></div>
+    <p class="note">Paste the report into an issue to record what was tested on which phone.</p>
   </div>
 </dialog>
 

@@ -12,6 +12,7 @@ import * as store from './store.js';
 import { ConnectionPort, presentationSupported, presentationReceiver } from './link.js';
 import { drawPattern, surfacesFromShots } from './capture.js';
 import { Camera, CaptureError, listCameras, runCapture } from './camera.js';
+import { deviceReport, cameraReport, reportText } from './diagnostics.js';
 
 const $ = (id) => document.getElementById(id);
 const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
@@ -95,6 +96,8 @@ class App {
   }
 
   frameLoop(now) {
+    const dt = now - (this.lastNow || now); this.lastNow = now;
+    if (dt > 0 && dt < 500) this.fps = this.fps ? this.fps * 0.95 + 50 / dt : 1000 / dt;   // smoothed frame rate
     if (this.dirty) this.sync();
     const sounding = this.playing && !!this.soundtrackEl() && !(this.output.connected && !IS_OUTPUT);
     const a = this.audio.update(now, sounding);
@@ -329,6 +332,33 @@ class App {
     // the connection may open after it's handed over; say hello once it does
     if (conn.state === 'connected') this.broadcast(); else conn.addEventListener('connect', () => this.broadcast(), { once: true });
     this.renderOutputState();
+  }
+
+  // ---------- device check ----------
+  initCheck() {
+    const sheet = $('checkSheet');
+    let rows = [];
+    const draw = () => {
+      $('checkList').innerHTML = rows.map((r) => `<li class="${r.ok === true ? 'yes' : r.ok === false ? 'no' : 'info'}"><b>${r.label}</b><span>${String(r.value).replace(/[<&]/g, '')}</span></li>`).join('');
+      $('checkPersist').hidden = !rows.some((r) => r.action === 'persist');
+    };
+    const refresh = async () => { rows = (await deviceReport(this)).concat(rows.filter((r) => r.camera)); draw(); };
+    $('checkBtn').onclick = () => { this.toggleDrawer(false); sheet.showModal(); refresh(); };
+    $('closeCheck').onclick = () => sheet.close();
+    $('checkCamera').onclick = async () => {
+      $('checkCamera').disabled = true;
+      const cam = (await cameraReport(this.camera)).map((r) => ({ ...r, camera: true }));
+      rows = rows.filter((r) => !r.camera).concat(cam); draw();
+      $('checkCamera').disabled = false;
+    };
+    $('checkPersist').onclick = async () => {
+      const ok = await navigator.storage.persist().catch(() => false);
+      this.toast(ok ? 'This browser will keep your files.' : 'The browser said no. Installing the app to the home screen usually helps.');
+      refresh();
+    };
+    $('checkCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(reportText(rows)); this.toast('Report copied.'); } catch { this.toast("Couldn't copy here; take a screenshot instead."); }
+    };
   }
 
   // ---------- find surfaces with the camera (structured light) ----------
@@ -591,6 +621,7 @@ class App {
     if (!this.channel) $('openOutput').disabled = true;
     this.initPresentation();
     this.initScan();
+    this.initCheck();
 
     // how to connect: a guide sheet, opened by itself the first time the app runs
     const sheet = $('connectSheet');

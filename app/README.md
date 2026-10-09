@@ -77,5 +77,6 @@ IP as secure.
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
 | `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
+| `src/diagnostics.js` | *Check this device*: what the phone supports, and a camera test |
 | `src/link.js` | Links to a second screen (Presentation API), including sending media files |
 | `sw.js`, `manifest.webmanifest` | Installable, and works offline once loaded |

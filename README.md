@@ -19,6 +19,9 @@ viewpoint, so they come out pre-warped and continuous across edges.
   surfaces on the projector frame, fill them with effects, video and images,
   and drive them with sound. Static files; deploys to Vercel as-is (see
   `vercel.json`). Live at https://surface-mapper-alpha.vercel.app.
+- [`tests/`](tests/README.md): checks for the app, including a synthetic room
+  and camera for testing surface capture without a projector. They run on every
+  push.
 - [`sim/index.html`](sim/index.html): the **Projection Mapping Sandbox**, a
   browser simulation of a room, a projector and a few boxes. Open it directly
   in a browser (it loads three.js from jsDelivr).
