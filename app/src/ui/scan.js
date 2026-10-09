@@ -83,7 +83,7 @@ export const scanUI = {
       this.editor.select(-1);
       this.changed();
       $('scanUndo').hidden = !this.scanPrev.length;
-      message = `Found ${res.surfaces.length} surface${res.surfaces.length === 1 ? '' : 's'}` +
+      message = `Found ${res.found} surface${res.found === 1 ? '' : 's'}` + (res.found > res.surfaces.length ? ` and kept the ${res.surfaces.length} largest (the most that can be projected)` : '') +
         (res.background && !$('scanKeepBg').checked ? `; ${res.background} wall or floor area${res.background === 1 ? '' : 's'} left out` : '') + '.\n' +
         `The camera decoded ${Math.round(res.coverage * 100)}% of the frame. Projection lag ${Math.round(cap.latency)} ms.` +
         (cap.locked.length ? ` Locked ${cap.locked.join(', ')}.` : '') +

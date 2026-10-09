@@ -2,11 +2,12 @@
 // Methods mixed into App (see app.js), so `this` is the app.
 import { newSurface, flatMesh, meshEvaluator } from '../geometry.js';
 import { $ } from '../env.js';
+import { MAX_SURF } from '../renderer.js';
 
 export const surfacesUI = {
   initSurfacesUI() {
     document.querySelectorAll('[data-add]').forEach((b) => {
-      b.onclick = () => { this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length)); this.toast('Drag it onto a real surface, then drag its corners into place.'); };
+      b.onclick = () => { if (this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length))) this.toast('Drag it onto a real surface, then drag its corners into place.'); };
     });
     document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => {
       const ed = this.editor, s = this.project.surfaces[ed.sel];
@@ -46,6 +47,12 @@ export const surfacesUI = {
       list.appendChild(b);
     });
     if (!this.project.surfaces.length) list.innerHTML = '<span class="note">None yet. Add one above.</span>';
+    // the renderer has fixed room; say so rather than quietly not drawing something
+    const lim = this.overLimit;
+    $('limitNote').hidden = !lim;
+    if (lim) $('limitNote').textContent = lim.surfaces < lim.of
+      ? `Only the first ${MAX_SURF} surfaces can be shown; surfaces ${MAX_SURF + 1} to ${lim.of} aren't projected. Delete or combine some.`
+      : `Too many shapes or outline points to show them all: ${lim.droppedParts} shape${lim.droppedParts === 1 ? ' isn\'t' : 's aren\'t'} projected. Delete some combined shapes, or use a smaller bend grid.`;
     document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
     const has = ed.sel >= 0;
     for (const id of ['partAdd', 'partCut', 'dupSurface', 'delSurface']) $(id).disabled = !has;

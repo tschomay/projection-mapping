@@ -20,6 +20,7 @@ npm run test:quick   # just the pipeline checks, about two seconds
 | `show.e2e.mjs` | Cues and timeline: three cues in sync with a generated 120 bpm song, jumping back, a tap in Show mode, and a cue that follows four beats. |
 | `ai.e2e.mjs` | AI-written effects with a fake SDK in place of the CDN module: the request (model, effort, refusal fallback, the surfaces described), one compile-repair round, applying the effect, a refusal, and key handling. No API key or network needed. |
 | `mesh.e2e.mjs` | Bending a surface with its grid and softening its edge, read back from the rendered frame: the outline and content follow the bend, no seams between cells, the feather, and point editing through the bend. |
+| `limits.e2e.mjs` | Renderer limits: more than 2,048 outline points still draw; a 17th surface is refused; too many surfaces or shapes are reported in the Surfaces pane. |
 | `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. |
 | `scan.e2e.mjs` | *Find surfaces with the camera* end to end, with a fake camera that films the synthetic room lit by the app's patterns, with a lag like a mirrored projector. |
 

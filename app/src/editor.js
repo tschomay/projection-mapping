@@ -1,7 +1,7 @@
 // Touch-first editing of 2D surfaces on the projector frame.
 // Works in frame pixels (see App.frame); stores pins normalized so a project survives a change of screen.
 import { SHAPES, hApply, pointInPoly, insideSurface, dist } from './geometry.js';
-import { MAX_PART_VERTS } from './renderer.js';
+import { MAX_PART_VERTS, MAX_SURF, MAX_PARTS } from './renderer.js';
 
 const HANDLE_CSS_PX = 22;   // touch target radius
 
@@ -123,10 +123,15 @@ export class Editor {
   }
 
   // ---- commands ----
-  addSurface(surface) { this.surfaces.push(surface); this.select(this.surfaces.length - 1); this.app.changed(); }
+  addSurface(surface) {
+    if (this.surfaces.length >= MAX_SURF) { this.app.toast(`Up to ${MAX_SURF} surfaces can be projected. Combine shapes into one surface to cover more.`); return false; }
+    this.surfaces.push(surface); this.select(this.surfaces.length - 1); this.app.changed();
+    return true;
+  }
   addPart(shape, op) {
     const s = this.surfaces[this.sel];
     if (!s || s.parts.length >= 8) return false;
+    if (this.surfaces.reduce((a, x) => a + x.parts.length, 0) >= MAX_PARTS) { this.app.toast(`Up to ${MAX_PARTS} shapes in all can be projected.`); return false; }
     s.parts.push({ op, pts: SHAPES[shape]().map(([u, v]) => [0.3 + 0.4 * u, 0.3 + 0.4 * v]) });
     this.mode = 'points'; this.selVert = null;
     this.app.changed();

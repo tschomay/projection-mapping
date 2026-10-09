@@ -382,7 +382,10 @@ export function weldPins(surfaces, tol) {
 // The whole analysis: photos -> surfaces in the app's format (normalized pins), plus stats for the UI.
 export function surfacesFromShots(shots, { camW, camH, W, H, keepBackground = false, minContrast = 20 }) {
   const res = decodeAndSegment(shots, { camW, camH, W, H, minContrast });
-  const raw = res.regions.map((r, i) => (keepBackground || !r.background ? regionToSurface(r, i, res) : null)).filter(Boolean);
+  // largest first, so if there are more than can be shown, the small ones are the ones left out
+  const order = res.regions.map((r, i) => i).filter((i) => keepBackground || !res.regions[i].background)
+    .sort((a, b) => res.regions[b].cells.length - res.regions[a].cells.length);
+  const raw = order.map((i) => regionToSurface(res.regions[i], i, res)).filter(Boolean);
   weldPins(raw, 10);
   const surfaces = raw.slice(0, MAX_SURF).map((s) => ({
     id: Math.random().toString(36).slice(2, 10),
@@ -392,6 +395,7 @@ export function surfacesFromShots(shots, { camW, camH, W, H, keepBackground = fa
   }));
   return {
     surfaces,
+    found: raw.length,            // can be more than surfaces.length: the renderer shows up to MAX_SURF
     planes: res.regions.length,
     background: res.regions.filter((r) => r.background).length,
     decoded: res.decoded,

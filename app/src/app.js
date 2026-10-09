@@ -99,7 +99,9 @@ class App {
     const fx = this.project.surfaces.map((s) => fxOf(s.content));
     // during a cue transition, the previous look too
     const from = this.show.fade && this.show.fade.from;
-    this.renderer.setSurfaces(this.geoms, fx, from ? this.project.surfaces.map((s) => fxOf(from[s.id] || s.content)) : fx);
+    const fit = this.renderer.setSurfaces(this.geoms, fx, from ? this.project.surfaces.map((s) => fxOf(from[s.id] || s.content)) : fx);
+    const over = fit.surfaces < fit.of || fit.droppedParts > 0 ? fit : null;
+    if (!IS_OUTPUT && JSON.stringify(over) !== JSON.stringify(this.overLimit || null)) { this.overLimit = over; this.renderSurfaceUI(); }
     this.dirty = false;
   }
 
