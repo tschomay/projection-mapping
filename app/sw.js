@@ -1,8 +1,8 @@
 // Offline support: a show often happens where there's no reliable internet.
-// The app shell is cached on install; fonts are cached the first time they load. Bump VERSION on release.
-const VERSION = 'surface-mapper-v8';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
-  './src/app.js', './src/renderer.js', './src/effects.js', './src/geometry.js', './src/editor.js', './src/audio.js', './src/media.js', './src/store.js', './src/link.js', './src/capture.js', './src/camera.js', './src/diagnostics.js', './src/show.js', './src/ai.js'];
+// The app shell is cached on install; fonts are cached the first time they load. VERSION and SHELL are written by
+// tools/sw.mjs (run it after adding or changing app files; the tests check it, and Vercel runs it on deploy).
+const VERSION = 'surface-mapper-02ca8d1ab7';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './src/ai.js', './src/app.js', './src/audio.js', './src/camera.js', './src/capture.js', './src/diagnostics.js', './src/editor.js', './src/effects.js', './src/geometry.js', './src/link.js', './src/media.js', './src/renderer.js', './src/show.js', './src/store.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

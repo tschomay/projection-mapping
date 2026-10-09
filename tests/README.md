@@ -13,6 +13,7 @@ npm run test:quick   # just the pipeline checks, about two seconds
 
 | File | What it checks |
 |---|---|
+| `sw.test.mjs` | The offline cache list and version in `app/sw.js` match the app's files. If it fails, run `node tools/sw.mjs`. |
 | `capture.test.mjs` | The surface-capture pipeline (`app/src/capture.js`) on a synthetic room: a projector, a camera beside it, a wall, a floor and a box. The box faces must come back as three surfaces with the right corners. Node only. |
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
