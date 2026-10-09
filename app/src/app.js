@@ -9,10 +9,16 @@ import { Editor } from './editor.js';
 import { AudioEngine } from './audio.js';
 import { MediaLibrary } from './media.js';
 import * as store from './store.js';
+import { ConnectionPort, presentationSupported, presentationReceiver } from './link.js';
+import { drawPattern, surfacesFromShots } from './capture.js';
+import { Camera, CaptureError, listCameras, runCapture } from './camera.js';
 
 const $ = (id) => document.getElementById(id);
-const IS_OUTPUT = location.hash === '#output';
+const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
+const COARSE = matchMedia('(pointer: coarse)').matches;
 const FIT_CODE = { fill: 0, fit: 1, stretch: 2 };
+// sessionStorage, which can throw where storage is blocked
+const session = (op, key, value) => { try { return sessionStorage[op + 'Item'](key, value); } catch { return null; } };
 
 class App {
   constructor() {
@@ -27,6 +33,7 @@ class App {
     this.dirty = true;
     this.output = { win: null, connected: false, lastSeen: 0, aspect: null };
     this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('pm-sync') : null;
+    this.ports = new Set();   // second screens started through the Presentation API
     this.t0 = performance.now();
     this.media.onchange = () => { this.dirty = true; if (!IS_OUTPUT) this.renderMediaUI(); };
 
@@ -50,7 +57,7 @@ class App {
     c.width = Math.max(1, Math.round(bw * scale)); c.height = Math.max(1, Math.round(bh * scale));
     const frame = [1280, Math.round(1280 / aspect)];
     if (frame[1] !== this.frame[1]) { this.frame = frame; this.renderer.frame = frame; this.dirty = true; }
-    if (IS_OUTPUT && this.channel) this.channel.postMessage({ type: 'hello', aspect: W / H });
+    if (IS_OUTPUT) this.hello();
   }
 
   // ---------- state changes ----------
@@ -148,11 +155,18 @@ class App {
     if (on) {
       this.gesture();
       $('drawer').hidden = true; $('toolsBtn').setAttribute('aria-expanded', 'false');
-      const fs = document.documentElement.requestFullscreen;
-      if (fs && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-      this.toast('Double-tap to go back to editing', 2500);
-    } else if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+      // full screen, then hold landscape on phones so a nudge doesn't rotate the projected frame
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen()
+          .then(() => COARSE && screen.orientation?.lock?.('landscape'))
+          .catch(() => {});
+      }
+      // the hint is projected too when mirroring, so it shows only until someone has left Show mode once
+      if (!store.getFlag('showHintDone')) this.toast('Double-tap to go back to editing', 2500);
+    } else {
+      store.setFlag('showHintDone');
+      screen.orientation?.unlock?.();
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
     }
     this.renderNudge();
   }
@@ -188,40 +202,268 @@ class App {
   }
 
   // ---------- output window (laptop + projector as second display) ----------
+  post(msg) {
+    if (this.channel) this.channel.postMessage(msg);
+    for (const p of this.ports) p.post(msg);
+  }
+
   broadcast(transportOnly = false) {
-    if (IS_OUTPUT || !this.channel || !this.output.connected) return;
+    if (IS_OUTPUT || !this.output.connected) return;
     const msg = { type: 'state', playing: this.playing, time: this.currentTime() };
     if (!transportOnly) { msg.project = this.project; msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
-    this.channel.postMessage(msg);
+    this.post(msg);
   }
+
+  hello() { this.post({ type: 'hello', aspect: innerWidth / innerHeight }); }
 
   initOutput() {
     document.title = 'Surface Mapper output';
     document.body.classList.add('show');
     this.editor = null;
-    $('gate').hidden = false;
-    $('gate').classList.remove('ui');
-    $('gateBtn').onclick = () => {
+    const receiver = presentationReceiver();
+    if (receiver) {
+      // a second screen has no one to tap a gate: start straight away (Cast receivers allow autoplay)
       this.gesture();
-      document.documentElement.requestFullscreen?.().catch(() => {});
-      $('gate').hidden = true;
-      if (this.playing) this.play();
-    };
-    $('stage').addEventListener('dblclick', () => document.documentElement.requestFullscreen?.().catch(() => {}));
-    if (!this.channel) return;
-    this.channel.onmessage = ({ data }) => {
-      if (data.type !== 'state') return;
-      if (data.project) {
-        this.project = data.project;
-        for (const m of data.media || []) this.media.addUrl(m);
-        this.dirty = true;
+      const attach = (conn) => {
+        const port = new ConnectionPort(conn);
+        port.onmessage = (data) => this.onState(data, port);
+        port.onfile = ({ id, file }) => {
+          this.media.replaceFile(id, file);
+          this.dirty = true;
+          if (this.playing) this.play();
+        };
+        port.onclose = () => this.ports.delete(port);
+        this.ports.add(port);
+        this.hello();
+      };
+      receiver.connectionList.then((list) => {
+        list.connections.forEach(attach);
+        list.onconnectionavailable = (e) => attach(e.connection);
+      });
+    } else {
+      $('gate').hidden = false;
+      $('gate').classList.remove('ui');
+      $('gateBtn').onclick = () => {
+        this.gesture();
+        document.documentElement.requestFullscreen?.().catch(() => {});
+        $('gate').hidden = true;
+        if (this.playing) this.play();
+      };
+      $('stage').addEventListener('dblclick', () => document.documentElement.requestFullscreen?.().catch(() => {}));
+    }
+    if (this.channel) this.channel.onmessage = ({ data }) => this.onState(data, null);
+    setInterval(() => this.hello(), 1000);
+  }
+
+  // output side: apply the editor's state. A port is set for a second screen, which may be another device.
+  onState(data, port) {
+    if (data.type === 'pattern') { this.showPattern(data.f); return; }
+    if (data.type !== 'state') return;
+    if (data.project) {
+      this.project = data.project;
+      for (const m of data.media || []) {
+        if (this.media.get(m.id)) continue;
+        const item = this.media.addUrl(m);
+        // the editor's object URL only opens in the same browser; otherwise ask for the file itself
+        if (port) item.el.addEventListener('error', () => { if (this.media.get(m.id) === item) port.post({ type: 'need', id: m.id }); }, { once: true });
       }
-      if (data.playing && !this.playing) this.play();
-      if (!data.playing && this.playing) this.pause();
-      const el = this.soundtrackEl() || this.playingEls()[0];
-      if (el && Math.abs(el.currentTime - data.time) > 0.3) for (const e of this.playingEls()) e.currentTime = data.time;
+      this.dirty = true;
+    }
+    if (data.playing && !this.playing) this.play();
+    if (!data.playing && this.playing) this.pause();
+    const el = this.soundtrackEl() || this.playingEls()[0];
+    if (el && Math.abs(el.currentTime - data.time) > 0.3) for (const e of this.playingEls()) e.currentTime = data.time;
+  }
+
+  // editor side: an output said hello
+  onHello(data) {
+    const first = !this.output.connected;
+    Object.assign(this.output, { connected: true, lastSeen: performance.now(), aspect: data.aspect });
+    if (first) { this.applyMute(); this.layout(); this.renderOutputState(); this.broadcast(); this.toast('Output connected. It plays the sound; this device is silent.'); }
+    else if (Math.abs(this.output.aspect - data.aspect) > 0.001) this.layout();
+  }
+
+  // ---------- second screen through the Presentation API (Chrome: Cast devices, wired or wireless displays) ----------
+  initPresentation() {
+    const btn = $('presentBtn');
+    if (!presentationSupported()) { btn.hidden = true; $('presentNote').hidden = true; return; }
+    const url = location.href.split('#')[0] + '#output';
+    this.presentReq = new PresentationRequest([url]);
+    try { navigator.presentation.defaultRequest = this.presentReq; } catch { /* read-only in some browsers */ }
+    this.presentReq.getAvailability()
+      .then((av) => { const upd = () => { btn.disabled = !av.value && !this.presenting; this.renderOutputState(); }; av.onchange = upd; upd(); })
+      .catch(() => { /* can't watch for screens here; the button simply tries */ });
+    this.presentReq.onconnectionavailable = (e) => this.addPresentation(e.connection);
+    btn.onclick = () => {
+      if (this.presenting) { this.presenting.terminate(); return; }
+      this.presentReq.start().then((c) => this.addPresentation(c)).catch((err) => {
+        if (err.name !== 'AbortError') this.toast('No screen to present to. Check the projector or Chromecast is on the same Wi-Fi.');
+      });
     };
-    setInterval(() => this.channel.postMessage({ type: 'hello', aspect: innerWidth / innerHeight }), 1000);
+    // pick a running presentation back up after a reload
+    const last = session('get', 'pm-presentation');
+    if (last) this.presentReq.reconnect(last).then((c) => this.addPresentation(c)).catch(() => session('remove', 'pm-presentation'));
+  }
+
+  addPresentation(conn) {
+    if (this.presenting === conn) return;
+    this.presenting = conn;
+    session('set', 'pm-presentation', conn.id);
+    const port = new ConnectionPort(conn);
+    port.onmessage = (data) => {
+      if (data.type === 'hello') this.onHello(data);
+      if (data.type === 'need') {
+        const m = this.media.get(data.id);
+        if (!m || !m.file) return;
+        this.toast(`Sending ${m.name} to the screen…`);
+        port.sendFile(m.id, { blob: m.file, name: m.name, type: m.file.type });
+      }
+    };
+    port.onclose = () => {
+      this.ports.delete(port);
+      if (this.presenting === conn) this.presenting = null;
+      if (conn.state === 'terminated') session('remove', 'pm-presentation');
+      this.renderOutputState();
+    };
+    this.ports.add(port);
+    // the connection may open after it's handed over; say hello once it does
+    if (conn.state === 'connected') this.broadcast(); else conn.addEventListener('connect', () => this.broadcast(), { once: true });
+    this.renderOutputState();
+  }
+
+  // ---------- find surfaces with the camera (structured light) ----------
+  // a capture pattern over the whole frame; null hides it
+  showPattern(f) {
+    const c = $('pattern');
+    if (!f) { c.hidden = true; return; }
+    const [W, H] = this.frame;
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    drawPattern(c.getContext('2d'), f, W, H);
+    c.hidden = false;
+  }
+
+  initScan() {
+    const sheet = $('scanSheet');
+    this.camera = new Camera($('scanVideo'));
+    $('scanBtn').onclick = () => {
+      this.toggleDrawer(false);
+      $('scanView').hidden = true; $('scanUndo').hidden = true;
+      sheet.showModal();
+      this.openCamera($('scanCam').value);
+    };
+    $('closeScan').onclick = () => sheet.close();
+    sheet.addEventListener('close', () => { if (!this.scanning) this.camera.close(); });
+    $('scanCam').onchange = (e) => this.openCamera(e.target.value);
+    $('scanStart').onclick = () => this.runScan();
+    $('scanUndo').onclick = () => {
+      if (!this.scanPrev) return;
+      this.project.surfaces = this.scanPrev; this.scanPrev = null;
+      this.editor.select(-1); this.changed();
+      $('scanUndo').hidden = true;
+      $('scanStatus').textContent = 'Your earlier surfaces are back.';
+    };
+    // cancel a capture: tap anywhere, or Escape
+    $('stage').addEventListener('pointerdown', () => { if (this.scanning) this.scanAbort?.abort(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.scanning) this.scanAbort?.abort(); });
+  }
+
+  async openCamera(deviceId) {
+    const status = $('scanStatus');
+    $('scanStart').disabled = true;
+    status.textContent = 'Opening the camera…';
+    try {
+      const used = await this.camera.open(deviceId || undefined);
+      // camera names are only readable once permission is granted
+      const cams = await listCameras(), sel = $('scanCam');
+      if (cams.length > 1) {
+        sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${(c.label || 'Camera ' + (i + 1)).replace(/[<&"]/g, '')}</option>`).join('');
+        sel.value = used || deviceId || cams[0].deviceId;
+      }
+      sel.hidden = cams.length < 2;
+      $('scanStart').disabled = false;
+      status.textContent = 'Aim the camera at the set, then tap Start. Use the main camera, not the ultra-wide one.';
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  }
+
+  async runScan() {
+    const sheet = $('scanSheet'), status = $('scanStatus');
+    const [W, H] = this.frame;
+    // with an output window or second screen the patterns go there and this screen shows progress;
+    // otherwise this screen is the projector, so everything but the pattern is hidden
+    const remote = this.output.connected;
+    const show = (f) => { if (remote) this.post({ type: 'pattern', f }); else this.showPattern(f); };
+    this.scanning = true;
+    this.scanAbort = new AbortController();
+    $('scanStart').disabled = true; $('scanUndo').hidden = true; $('scanView').hidden = true;
+    if (!remote) {
+      sheet.close();
+      document.body.classList.add('capturing');
+      this.gesture();
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+    }
+    let message;
+    try {
+      const cap = await runCapture(this.camera, {
+        W, H, show, signal: this.scanAbort.signal,
+        progress: (i, n, text) => { status.textContent = text; },
+      });
+      show(null);
+      status.textContent = 'Looking for flat surfaces…';
+      await new Promise((r) => setTimeout(r, 30));
+      const res = surfacesFromShots(cap.shots, { camW: cap.camW, camH: cap.camH, W, H, keepBackground: $('scanKeepBg').checked });
+      this.drawScan(res);
+      if (!res.surfaces.length) throw new CaptureError(res.planes ? 'Only wall and floor were found. Tick "Keep wall and floor" to use them, or bring objects closer to the projector.' : 'No flat surfaces were found. Check the camera sees the projection clearly, and dim the lights.');
+      this.scanPrev = this.project.surfaces;
+      this.project.surfaces = res.surfaces;
+      this.editor.select(-1);
+      this.changed();
+      $('scanUndo').hidden = !this.scanPrev.length;
+      message = `Found ${res.surfaces.length} surface${res.surfaces.length === 1 ? '' : 's'}` +
+        (res.background && !$('scanKeepBg').checked ? `; ${res.background} wall or floor area${res.background === 1 ? '' : 's'} left out` : '') + '.\n' +
+        `The camera decoded ${Math.round(res.coverage * 100)}% of the frame. Projection lag ${Math.round(cap.latency)} ms.` +
+        (cap.locked.length ? ` Locked ${cap.locked.join(', ')}.` : '') +
+        (res.degenerate ? '\nAlmost everything looked like one plane: move the camera further to the side of the projector.' : '') +
+        '\nCheck each surface in Edit mode and drag any corner that is off.';
+    } catch (err) {
+      message = err instanceof CaptureError ? err.message : 'The capture failed: ' + (err.message || err);
+    } finally {
+      show(null);
+      document.body.classList.remove('capturing');
+      this.scanning = false;
+      $('scanStart').disabled = false;
+      if (!sheet.open) sheet.showModal();
+      status.textContent = message;
+      ($('scanView').hidden ? status : $('scanView')).scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // the flat areas found, one colour each, in the projector frame (grey: wall and floor)
+  drawScan(res) {
+    const { GW, GH, regions } = res.res, c = $('scanView');
+    c.width = GW; c.height = GH;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(GW, GH);
+    regions.forEach((r, i) => {
+      const keep = !r.background || $('scanKeepBg').checked;
+      const h = (i * 0.137) % 1, col = keep ? [0, 8, 4].map((n) => { const k = (n + h * 12) % 12; return 255 * (0.55 - 0.41 * Math.max(-1, Math.min(k - 3, 9 - k, 1))); }) : [45, 52, 64];
+      for (const cell of r.cells) img.data.set([col[0], col[1], col[2], 255], cell * 4);
+    });
+    for (let k = 3; k < img.data.length; k += 4) if (!img.data[k]) img.data[k] = 255;
+    ctx.putImageData(img, 0, 0);
+    c.hidden = false;
+  }
+
+  // laptop: put the output window on the projector straight away when the browser can see the second display
+  async outputFeatures() {
+    try {
+      if (window.screen.isExtended && 'getScreenDetails' in window) {
+        const d = await window.getScreenDetails();
+        const s = d.screens.find((x) => x !== d.currentScreen);
+        if (s) return `popup,left=${s.availLeft},top=${s.availTop},width=${s.availWidth},height=${s.availHeight}`;
+      }
+    } catch { /* permission refused: open it here and let the user drag it */ }
+    return 'popup,width=960,height=540';
   }
 
   // ---------- editor UI ----------
@@ -341,18 +583,21 @@ class App {
       if (!f) return;
       try { const p = store.parseProject(await f.text()); await this.openProject(p); this.save(); this.toast(`Imported "${p.name}".`); } catch (err) { this.toast(err.message || "That file couldn't be read."); }
     };
-    $('openOutput').onclick = () => {
-      this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', 'popup,width=960,height=540');
+    $('openOutput').onclick = async () => {
+      this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', await this.outputFeatures());
       if (!this.output.win) this.toast('The browser blocked the output window. Allow pop-ups for this page.');
     };
-    if (this.channel) this.channel.onmessage = ({ data }) => {
-      if (data.type !== 'hello') return;
-      const first = !this.output.connected;
-      Object.assign(this.output, { connected: true, lastSeen: performance.now(), aspect: data.aspect });
-      if (first) { this.applyMute(); this.layout(); this.renderOutputState(); this.broadcast(); this.toast('Output window connected. It plays the sound; this window is silent.'); }
-      else if (Math.abs(this.output.aspect - data.aspect) > 0.001) this.layout();
-    };
+    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); };
     if (!this.channel) $('openOutput').disabled = true;
+    this.initPresentation();
+    this.initScan();
+
+    // how to connect: a guide sheet, opened by itself the first time the app runs
+    const sheet = $('connectSheet');
+    for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
+    $('closeConnect').onclick = () => sheet.close();
+    sheet.addEventListener('close', () => store.setFlag('connectSeen'));
+    if (!store.getFlag('connectSeen') && sheet.showModal) sheet.showModal();
     this.selectTab('surfaces');
   }
 
@@ -473,7 +718,11 @@ class App {
     sel.innerHTML = list.map((p) => `<option value="${p.id}">${(p.name || 'Untitled').replace(/[<&"]/g, '')}</option>`).join('');
     sel.value = this.project.id;
   }
-  renderOutputState() { $('outputState').textContent = this.output.connected ? 'Output window connected' : ''; }
+  renderOutputState() {
+    $('outputState').textContent = this.presenting ? 'Presenting to a second screen' : this.output.connected ? 'Output window connected' : '';
+    $('presentBtn').textContent = this.presenting ? 'Stop presenting' : 'Present to a screen';
+    if (this.presenting) $('presentBtn').disabled = false;
+  }
 
   drawMeter(a) {
     if ($('drawer').hidden) return;

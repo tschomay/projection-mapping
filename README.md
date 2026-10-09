@@ -10,6 +10,9 @@ viewpoint, so they come out pre-warped and continuous across edges.
 - [`docs/hardware.md`](docs/hardware.md): what to expect from a cheap
   projector indoors and outdoors, which projector and phone features matter,
   and outdoor practicalities.
+- [`docs/connecting.md`](docs/connecting.md): the ways a phone or laptop
+  drives the projector, the default (wired mirroring), the second-screen path,
+  and which combinations have been tried.
 - [`docs/prior-art.md`](docs/prior-art.md): what MadMapper, Resolume, HeavyM,
   Lightform, disguise and the open-source tools teach us.
 - [`app/`](app/README.md): **Surface Mapper**, the phone-first app. Trace

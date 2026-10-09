@@ -7,6 +7,10 @@ const projectKey = (id) => 'pm.project.' + id;
 function read(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
 function write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } }
 
+// one-off UI flags for this device (hints seen, guides opened)
+export function getFlag(name) { return !!read('pm.flag.' + name); }
+export function setFlag(name) { write('pm.flag.' + name, true); }
+
 export function listProjects() { return read(INDEX_KEY) || { current: null, list: [] }; }
 
 export function loadProject(id) { return read(projectKey(id)); }

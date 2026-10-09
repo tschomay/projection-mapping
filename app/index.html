@@ -40,6 +40,9 @@ button, input, select { font: inherit; color: inherit; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
 body.show #stage { cursor: none; }
+body.capturing #overlay, body.capturing .ui { display: none !important; }
+body.capturing #stage { cursor: none; }
+#box #pattern { image-rendering: pixelated; }
 
 .ui { position: fixed; z-index: 2; }
 .btn { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; }
@@ -90,6 +93,21 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 body.show #toast:not([hidden]) { display: block !important; }
 #gate { position: fixed; inset: 0; display: grid; place-items: center; background: #000c; z-index: 6; text-align: center; padding: 24px; }
 #gate .btn { min-height: 48px; font-size: 16px; }
+dialog.sheet { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+dialog.sheet:not([open]) { display: none; }
+dialog.sheet::backdrop { background: #000a; }
+dialog.sheet header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--line); }
+dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.sheet-body { overflow-y: auto; padding: 4px 16px 16px; }
+.sheet-body h3 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; color: var(--lamp); }
+.sheet-body p, .sheet-body ul { margin: 0 0 6px; }
+.sheet-body ul { padding-left: 18px; }
+.sheet-body li { margin-bottom: 4px; }
+#scanVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
+#scanView { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: #000; }
+#scanStatus { white-space: pre-line; margin: 8px 0 0; }
+.steps { padding-left: 18px; margin: 10px 0 4px; }
+.steps li { margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 </head>
@@ -97,6 +115,7 @@ body.show #toast:not([hidden]) { display: block !important; }
 <div id="stage">
   <div id="box">
     <canvas id="gl"></canvas>
+    <canvas id="pattern" hidden></canvas>
     <canvas id="overlay" aria-label="Projector frame: drag surfaces and their corners onto real objects"></canvas>
   </div>
 </div>
@@ -127,6 +146,11 @@ body.show #toast:not([hidden]) { display: block !important; }
       <p class="note">It appears in the middle of the projector frame. Drag it onto a real flat surface, then drag its corners onto the surface's corners.</p>
     </div>
     <div class="group">
+      <h3>Or find them with the camera</h3>
+      <div class="row"><button class="btn" id="scanBtn">Find surfaces with the camera</button></div>
+      <p class="note">The projector shows stripe patterns while this phone's camera, propped up beside the projector, photographs the set.</p>
+    </div>
+    <div class="group">
       <h3>Surfaces</h3>
       <div class="row" id="surfaceList"></div>
     </div>
@@ -146,6 +170,7 @@ body.show #toast:not([hidden]) { display: block !important; }
       <div class="row"><button class="btn" id="delPoint">Delete point</button><button class="btn" id="dupSurface">Duplicate</button><button class="btn" id="delSurface">Delete surface</button></div>
       <label class="check"><input type="checkbox" id="snap" checked> Snap corners together so neighbouring surfaces share edges</label>
     </div>
+    <p class="note">Projector not showing this yet? <button class="btn" id="connectBtn2">How to connect</button></p>
   </section>
 
   <section class="pane" data-pane="content" hidden>
@@ -210,10 +235,11 @@ body.show #toast:not([hidden]) { display: block !important; }
     </div>
     <div class="group">
       <h3>Connect the projector</h3>
-      <p class="note"><b>Phone:</b> connect with a USB-C to HDMI adapter (or Lightning AV adapter), or cast or AirPlay the screen. The phone screen becomes the projector frame, so map with this app full screen in landscape. Wired is best: no lag, and sound goes over HDMI.</p>
-      <p class="note"><b>On the projector:</b> turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own correction softens the image and can move it after you've mapped.</p>
-      <p class="note"><b>Laptop with the projector as a second display:</b> open the output window, drag it onto the projector and click it once to go full screen. Keep editing here.</p>
-      <div class="row"><button class="btn" id="openOutput">Open output window</button><span class="mono" id="outputState"></span></div>
+      <p class="note">Simplest: mirror this phone to the projector, wired if you can. The phone screen becomes the projector frame.</p>
+      <div class="row"><button class="btn" id="connectBtn">How to connect</button></div>
+      <p class="note" id="presentNote"><b>Second screen:</b> the projector shows only the output while this device keeps its controls. Works in Chrome with a Chromecast, a cast-capable projector or a connected display.</p>
+      <div class="row"><button class="btn" id="presentBtn">Present to a screen</button><button class="btn" id="openOutput">Open output window</button></div>
+      <p class="mono" id="outputState"></p>
     </div>
   </section>
 </aside>
@@ -226,6 +252,62 @@ body.show #toast:not([hidden]) { display: block !important; }
   <button data-nudge="1,0" aria-label="Nudge right"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 8L6 3v10z"/></svg></button>
   <span></span><button data-nudge="0,1" aria-label="Nudge down"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13l5-7H3z"/></svg></button><span></span>
 </div>
+
+<dialog id="connectSheet" class="sheet" aria-labelledby="connectTitle">
+  <header><h2 id="connectTitle">Connect the projector</h2><button class="btn" id="closeConnect" aria-label="Close">Done</button></header>
+  <div class="sheet-body">
+    <section>
+      <h3>1. Cable: best</h3>
+      <p>A <b>USB-C to HDMI adapter</b> (Android phones with video out, iPhone 15 and later) or Apple's <b>Lightning Digital AV adapter</b> (older iPhones). No lag, and sound goes over HDMI to the projector.</p>
+      <p class="note">Not every Android phone has video out over USB-C; look up "DisplayPort Alt Mode" for your model. Get an adapter with a charging port for long shows.</p>
+    </section>
+    <section>
+      <h3>2. Wireless mirroring</h3>
+      <p><b>Android:</b> Quick Settings → <i>Cast</i> or <i>Screen cast</i>, to a Chromecast or a projector with Google Cast. <b>iPhone:</b> Control Center → <i>Screen Mirroring</i>, to an Apple TV or an AirPlay projector.</p>
+      <p class="note">No cable, but 0.1–0.3 s of lag and some blur on fast motion. Fine for mapping; content may run a beat behind the sound on the phone.</p>
+    </section>
+    <section>
+      <h3>3. Second screen (Chrome)</h3>
+      <p><i>Tools → Project → Present to a screen</i> sends only the output to a Chromecast, a cast-capable projector or a connected display. This device keeps its controls, so nothing you do here is projected.</p>
+      <p class="note">Videos and images are copied to the screen over Wi-Fi when it needs them; big videos take a while.</p>
+    </section>
+    <section>
+      <h3>4. Laptop</h3>
+      <p>Use the projector as a second display, then <i>Tools → Project → Open output window</i>. Chrome puts it on the projector by itself if you allow window placement; otherwise drag it there and click it once.</p>
+    </section>
+    <section>
+      <h3>When mirroring</h3>
+      <ul>
+        <li>Everything on the phone screen is projected. Map in landscape, then tap <b>Show</b>: only the content is left. Double-tap to come back.</li>
+        <li>Turn on <b>Do Not Disturb</b> so notifications don't pop up on the projection.</li>
+        <li>The phone is wider than the projector, so you'll get thin black bars at the sides. That's normal.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>On the projector</h3>
+      <p>Turn off keystone and auto-keystone, and set the picture to "native" or "just scan" (no overscan or zoom). This app does the correction; the projector's own softens the image and can shift it after you've mapped.</p>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="scanSheet" class="sheet" aria-labelledby="scanTitle">
+  <header><h2 id="scanTitle">Find surfaces with the camera</h2><button class="btn" id="closeScan" aria-label="Close">Close</button></header>
+  <div class="sheet-body">
+    <ol class="steps">
+      <li>Prop this phone up 30 cm to 1 m <b>to the side of</b> the projector (not on top of it), back camera facing the set. Further to the side tells surfaces apart better.</li>
+      <li>Dim the room lights. Check the preview shows the whole projected area.</li>
+      <li>Tap <b>Start</b> and don't touch anything for about half a minute. The projector shows stripes; tap the screen to cancel.</li>
+    </ol>
+    <video id="scanVideo" muted playsinline aria-label="Camera preview"></video>
+    <div class="row">
+      <select id="scanCam" aria-label="Camera"><option value="">Back camera</option></select>
+      <label class="check"><input type="checkbox" id="scanKeepBg"> Keep wall and floor</label>
+    </div>
+    <div class="row"><button class="btn primary" id="scanStart" disabled>Start</button><button class="btn" id="scanUndo" hidden>Undo: bring back my surfaces</button></div>
+    <p class="mono" id="scanStatus" role="status" aria-live="polite"></p>
+    <canvas id="scanView" hidden aria-label="Flat areas found, in the projector frame"></canvas>
+  </div>
+</dialog>
 
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
 <div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>
