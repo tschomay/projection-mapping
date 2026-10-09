@@ -11,7 +11,7 @@ import { ConnectionPort, presentationSupported, presentationReceiver } from './l
 import { drawPattern } from './capture.js';
 import { ShowRunner } from './show.js';
 import { namespaced } from './ai.js';
-import { $, IS_OUTPUT, COARSE, FIT_CODE, session } from './env.js';
+import { $, IS_OUTPUT, COARSE, FIT_CODE, MAX_RENDER_PIXELS, session } from './env.js';
 import * as store from './store.js';
 import { surfacesUI } from './ui/surfaces.js';
 import { contentUI } from './ui/content.js';
@@ -58,7 +58,7 @@ class App {
     if (bh > H) { bh = H; bw = H * aspect; }
     Object.assign(this.box.style, { width: bw + 'px', height: bh + 'px', left: (W - bw) / 2 + 'px', top: (H - bh) / 2 + 'px' });
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const scale = Math.min(dpr, Math.sqrt(2.6e6 / (bw * bh)));   // cap the pixel count on high-density phones
+    const scale = Math.min(dpr, Math.sqrt(MAX_RENDER_PIXELS / (bw * bh)));   // cap the pixel count on high-density phones
     const c = $('gl');
     c.width = Math.max(1, Math.round(bw * scale)); c.height = Math.max(1, Math.round(bh * scale));
     const frame = [1280, Math.round(1280 / aspect)];
