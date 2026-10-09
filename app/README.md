@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -23,7 +23,9 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    minute or so; tap to cancel), then every flat face becomes a surface.
    Check the corners afterwards; *Undo* brings back what you had.
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
-   the phone. Media follows the surface's perspective. *One image across all*
+   the phone. Or *Describe a look* and Claude writes a new effect for
+   your surfaces (it needs your own Anthropic API key, stored only on the
+   device). Media follows the surface's perspective. *One image across all*
    runs one video continuously across several surfaces.
 5. **Sound.** In *Tools → Sound*, pick a soundtrack: a video's own sound or an
    audio file. "Beat sequence", "Pulse to music" and "Tiles" follow the beat.
@@ -84,6 +86,7 @@ IP as secure.
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
 | `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
+| `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the Claude API call, one compile-repair round |
 | `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |
 | `src/diagnostics.js` | *Check this device*: what the phone supports, and a camera test |
 | `src/link.js` | Links to a second screen (Presentation API), including sending media files |

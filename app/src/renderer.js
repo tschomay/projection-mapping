@@ -153,8 +153,39 @@ export class Renderer {
     });
     this.media = new Array(MAX_MEDIA).fill(null);   // { el, aspect, ready, isVideo, uploaded }
     this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    this.effects = EFFECTS;
     this.program = this.compile(buildFragment());
   }
+
+  // built-in effects plus the project's own (AI-written) ones; each custom effect is { id, code }.
+  // Returns null, or the compiler log (the previous effects stay in place).
+  setEffects(custom = []) {
+    const all = EFFECTS.concat(custom);
+    if (all.map((e) => e.id).join() === this.effects.map((e) => e.id).join() && all.every((e, i) => e.code === this.effects[i].code)) return null;
+    const old = { program: this.program, u: this.u };
+    try {
+      this.program = this.compile(buildFragment(all));
+      this.gl.deleteProgram(old.program);
+      this.effects = all;
+      return null;
+    } catch (err) {
+      Object.assign(this, old);
+      return String(err.message || err);
+    }
+  }
+
+  // compile a candidate effect alongside the current ones, without using it; null or the compiler log,
+  // with line numbers counted from the candidate's first line
+  tryEffect(id, code) {
+    const gl = this.gl, src = buildFragment(this.effects.concat([{ id, code: '#line 1\n' + code + '\n#line 9000' }]));
+    const sh = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(sh, src); gl.compileShader(sh);
+    const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS), log = ok ? null : gl.getShaderInfoLog(sh) || 'compile failed';
+    gl.deleteShader(sh);
+    return log;
+  }
+
+  effectIndex(id) { return Math.max(0, this.effects.findIndex((e) => e.id === id)); }
 
   makeTexture(filter) {
     const gl = this.gl, t = gl.createTexture();

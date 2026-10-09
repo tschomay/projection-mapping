@@ -1,8 +1,8 @@
 // Offline support: a show often happens where there's no reliable internet.
 // The app shell is cached on install; fonts are cached the first time they load. Bump VERSION on release.
-const VERSION = 'surface-mapper-v5';
+const VERSION = 'surface-mapper-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
-  './src/app.js', './src/renderer.js', './src/effects.js', './src/geometry.js', './src/editor.js', './src/audio.js', './src/media.js', './src/store.js', './src/link.js', './src/capture.js', './src/camera.js', './src/diagnostics.js', './src/show.js'];
+  './src/app.js', './src/renderer.js', './src/effects.js', './src/geometry.js', './src/editor.js', './src/audio.js', './src/media.js', './src/store.js', './src/link.js', './src/capture.js', './src/camera.js', './src/diagnostics.js', './src/show.js', './src/ai.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
