@@ -228,17 +228,45 @@ Measured in the sandbox:
 | Perfect (true faces) | 0.00° | 0.00° | 0.0 cm |
 | Hand-traced quality (±3 px), 8 random scenes | 0.0–1.6° | within 0.1–2.8° | 2–14 cm* |
 | From the camera scan, default scene (5 runs) | 0.4–3.5° | within 0.4–6.4° | 8–21 cm*; 3–4 of 4 boxes found |
-| From the camera scan, random scenes | unreliable | unreliable | unreliable |
+| From the camera scan, random scenes (first version) | within 2° in 8 of 20 | unreliable | unreliable |
+| From the camera scan, random scenes, with the wall-floor line and the throw ratio | within 2° in 28 of 30, median 0.3° | within about 1° | |
 
 \*Includes the never-lit back corners and boxes partly outside the frame.
+
+**What made the camera-scan solve reliable** (roadmap #5; measure it with
+`tests/bench/solve.bench.mjs`, which runs the sandbox on seeded random layouts):
+
+1. **Floor seen between boxes is floor.** The scan used to return those
+   fragments as small surfaces, and because a box meets the floor at a crease,
+   they chained neighbouring boxes into one object. A plane seen as three or
+   more separate pieces, or spread across most of the frame's width, is now
+   treated as wall or floor.
+2. **The throw ratio from the spec sheet.** From one viewpoint a wider lens
+   aimed flatter fits the corners almost as well as the real lens; on 20 seeds
+   the solved lens was off by up to 48°. Giving the throw ratio removes that.
+   It's robust to the rounding on spec sheets: 5% off still gives 18 of 20.
+   Without it, 14 of 19.
+3. **The line where the wall meets the floor.** The scan already finds wall and
+   floor; where they meet is a known line in the room (y = 0, z = 0), so its
+   position in the projector image pins pitch and roll. The highest floor edge
+   in each column is used, then the straight line through most of them, which
+   skips the bottoms of boxes (also floor edges, but in front of the wall).
+4. **Level and square to the wall by default.** Rotating the projector and
+   every box together about the vertical changes nothing in the image, so yaw
+   and roll lean towards zero unless the boxes clearly say otherwise.
+
+The two remaining misses (seeds 5 at 2.1° and 18 at 4.4°) have a short or
+mostly hidden wall-floor line. Showing which dimensions are poorly determined
+and asking for one more measurement (idea 4 in #5) is the next step there.
 
 Two takeaways. First, the projected image stays aligned even when the 3D
 boxes are noticeably off, because the solved projector and the solved boxes
 err together and the errors cancel in the image. Lighting and shadow
 directions are only approximately right, which is fine for effects like the
-moving sun. Second, raw camera-scan surfaces on cluttered scenes still need a
-tidy-up (delete floor fragments, fix corners hidden by other objects) before
-the solve is trustworthy. The practical flow is: capture, tidy, then solve.
+moving sun. Second, raw camera-scan surfaces used to need a tidy-up (delete floor
+fragments, fix corners hidden by other objects) before the solve was
+trustworthy; with the changes above the scan can go straight to the solve on
+most layouts.
 
 ## Finding surfaces from photos
 

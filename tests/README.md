@@ -28,3 +28,18 @@ holds small helpers. If Playwright is installed somewhere else, point
 
 The browser tests run Chromium with software WebGL, so they're slow; the camera
 test is slowest because the app waits for each projected frame to settle.
+
+## Benchmarks
+
+`bench/` holds measurements rather than pass/fail checks. They drive the
+sandbox (`sim/index.html`) headless with a seeded `Math.random`, so each seed is
+one fixed random layout and camera spot.
+
+```sh
+node bench/solve.bench.mjs 20 1        # 20 seeds from 1: projector aim error after camera scan + 3D solve
+node bench/solve.diag.mjs 4            # one seed in detail: what each scanned surface really is, true vs solved projector
+THROW= node bench/solve.bench.mjs 20 1 # without the throw ratio
+SIM_PATH=/path/to/other/index.html ... # compare another version of the sandbox
+```
+
+Each seed takes about a minute under software WebGL.
