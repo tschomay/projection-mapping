@@ -19,6 +19,9 @@ uniform int uSurfCount;
 uniform mat3 uHinv[${MAX_SURF}];
 uniform vec4 uSurfInfo[${MAX_SURF}];   // first part, part count, width px, height px
 uniform vec4 uSurfFx[${MAX_SURF}];     // effect index (-1 = media), media slot, space (0 surface, 1 frame), fit (0 fill, 1 fit, 2 stretch)
+uniform vec4 uSurfFxFrom[${MAX_SURF}]; // the previous look during a cue transition
+uniform float uMix;                    // transition progress 0..1, or -1 when none is running
+uniform int uMixType;                  // 0 crossfade, 1 cut, 2 wipe left to right across the frame
 uniform vec4 uPart[${MAX_PARTS}];      // first vertex, vertex count, op (+1 add, -1 cut)
 uniform vec4 uPartBox[${MAX_PARTS}];
 uniform sampler2D uMedia0; uniform sampler2D uMedia1; uniform sampler2D uMedia2; uniform sampler2D uMedia3;
@@ -101,7 +104,12 @@ void main() {
       vec3 h = uHinv[si] * vec3(px, 1.0);
       s.uv = h.xy / h.z; s.px = px; s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
       s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
-      col = clamp(content(uSurfFx[si], s, uTime), 0.0, 1.0) * clamp(0.5 - D, 0.0, 1.0);
+      col = clamp(content(uSurfFx[si], s, uTime), 0.0, 1.0);
+      if (uMix >= 0.0) {
+        float w = uMixType == 0 ? uMix : uMixType == 1 ? step(0.5, uMix) : smoothstep(s.screen.x + 0.04, s.screen.x - 0.04, uMix * 1.16 - 0.08);
+        if (w < 1.0) col = mix(clamp(content(uSurfFxFrom[si], s, uTime), 0.0, 1.0), col, w);
+      }
+      col *= clamp(0.5 - D, 0.0, 1.0);
       break;
     }
   }
@@ -144,7 +152,7 @@ export class Renderer {
       return t;
     });
     this.media = new Array(MAX_MEDIA).fill(null);   // { el, aspect, ready, isVideo, uploaded }
-    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
     this.program = this.compile(buildFragment());
   }
 
@@ -171,13 +179,14 @@ export class Renderer {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     const u = {};
-    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
     this.u = u;
     return p;
   }
 
-  // geoms: output of surfaceGeom per surface (frame pixels); fx: [effectIndex, mediaSlot, space, fit] per surface
-  setSurfaces(geoms, fx) {
+  // geoms: output of surfaceGeom per surface (frame pixels); fx: [effectIndex, mediaSlot, space, fit] per surface;
+  // fxFrom: the same for the previous look while a cue transition runs
+  setSurfaces(geoms, fx, fxFrom = fx) {
     const S = this.surf;
     let vi = 0, pi = 0;
     const n = Math.min(geoms.length, MAX_SURF);
@@ -197,6 +206,7 @@ export class Renderer {
       S.hinv.set(g.Hi, si * 9);
       S.info.set([first, pi - first, g.size[0], g.size[1]], si * 4);
       S.fx.set(fx[si], si * 4);
+      S.fxFrom.set(fxFrom[si], si * 4);
     }
     S.count = n;
     const gl = this.gl;
@@ -225,7 +235,8 @@ export class Renderer {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   }
 
-  render(time, audio) {
+  // mix: { amount 0..1, type } while a cue transition runs, else null
+  render(time, audio, mix = null) {
     const gl = this.gl, u = this.u, S = this.surf;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.uploadMedia();
@@ -238,6 +249,9 @@ export class Renderer {
     gl.uniformMatrix3fv(u.uHinv, true, S.hinv);
     gl.uniform4fv(u.uSurfInfo, S.info);
     gl.uniform4fv(u.uSurfFx, S.fx);
+    gl.uniform4fv(u.uSurfFxFrom, S.fxFrom);
+    gl.uniform1f(u.uMix, mix ? mix.amount : -1);
+    gl.uniform1i(u.uMixType, mix ? mix.type : 0);
     gl.uniform4fv(u.uPart, S.part);
     gl.uniform4fv(u.uPartBox, S.box);
     const mi = new Float32Array(MAX_MEDIA * 4);

@@ -13,6 +13,7 @@ import { ConnectionPort, presentationSupported, presentationReceiver } from './l
 import { drawPattern, surfacesFromShots } from './capture.js';
 import { Camera, CaptureError, listCameras, runCapture } from './camera.js';
 import { deviceReport, cameraReport, reportText } from './diagnostics.js';
+import { ShowRunner, newCue, fmtTime, parseTime } from './show.js';
 
 const $ = (id) => document.getElementById(id);
 const IS_OUTPUT = location.hash === '#output' || !!presentationReceiver();
@@ -36,6 +37,8 @@ class App {
     this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('pm-sync') : null;
     this.ports = new Set();   // second screens started through the Presentation API
     this.t0 = performance.now();
+    this.show = new ShowRunner(this);
+    this.remoteBeats = 0;     // beats heard by a connected output, which plays the sound
     this.media.onchange = () => { this.dirty = true; if (!IS_OUTPUT) this.renderMediaUI(); };
 
     if (IS_OUTPUT) this.initOutput(); else this.initEditor();
@@ -77,32 +80,45 @@ class App {
     this.geoms = this.project.surfaces.map((s) => surfaceGeom(s, W, H));
     // media used by surfaces get the four texture slots, in order of first use
     const slots = [];
-    for (const s of this.project.surfaces) {
-      const c = s.content;
+    const looks = this.project.surfaces.map((s) => s.content);
+    if (this.show.fade) looks.push(...Object.values(this.show.fade.from));
+    for (const c of looks) {
       if (c && c.kind === 'media' && this.media.get(c.mediaId) && !slots.includes(c.mediaId) && slots.length < MAX_MEDIA) slots.push(c.mediaId);
     }
     this.slots = slots;
     for (let i = 0; i < MAX_MEDIA; i++) this.renderer.setMedia(i, slots[i] ? this.media.get(slots[i]).el : null);
-    const fx = this.project.surfaces.map((s) => {
-      const c = s.content || { kind: 'effect', effect: 'outline' };
+    const fxOf = (c) => {
+      c = c || { kind: 'effect', effect: 'outline' };
       if (c.kind === 'media') {
         const slot = slots.indexOf(c.mediaId);
         return slot < 0 ? [effectIndex('off'), 0, 0, 0] : [-1, slot, c.space === 'frame' ? 1 : 0, FIT_CODE[c.fit || 'fill']];
       }
       return [effectIndex(c.effect), 0, 0, 0];
-    });
-    this.renderer.setSurfaces(this.geoms, fx);
+    };
+    const fx = this.project.surfaces.map((s) => fxOf(s.content));
+    // during a cue transition, the previous look too
+    const from = this.show.fade && this.show.fade.from;
+    this.renderer.setSurfaces(this.geoms, fx, from ? this.project.surfaces.map((s) => fxOf(from[s.id] || s.content)) : fx);
     this.dirty = false;
   }
 
   frameLoop(now) {
     const dt = now - (this.lastNow || now); this.lastNow = now;
-    if (dt > 0 && dt < 500) this.fps = this.fps ? this.fps * 0.95 + 50 / dt : 1000 / dt;   // smoothed frame rate
+    if (dt > 0 && dt < 5000) this.fps = this.fps ? this.fps * 0.95 + 50 / dt : 1000 / dt;   // smoothed frame rate; long gaps (a hidden tab) are skipped
     if (this.dirty) this.sync();
     const sounding = this.playing && !!this.soundtrackEl() && !(this.output.connected && !IS_OUTPUT);
     const a = this.audio.update(now, sounding);
-    this.renderer.render((now - this.t0) / 1000, a);
     if (!IS_OUTPUT) {
+      // cues that start by themselves; with an output connected, it plays the sound and reports the beats
+      const beats = this.output.connected ? { active: true, beats: this.remoteBeats } : a;
+      this.show.tick(now, beats, this.soundtrackEl() ? this.currentTime() : null, this.playing);
+    } else if (a.beats !== this.lastBeats) { this.lastBeats = a.beats; if (a.active) this.post({ type: 'beat' }); }
+    const mix = this.show.mix(now);
+    if (mix === null && this.wasMixing) this.sync();   // the transition just ended
+    this.wasMixing = mix !== null;
+    this.renderer.render((now - this.t0) / 1000, a, mix);
+    if (!IS_OUTPUT) {
+      this.drawTimeline();
       if (!document.body.classList.contains('show')) this.editor.draw();
       this.drawMeter(a);
       if (this.output.connected && now - this.output.lastSeen > 6000) { this.output.connected = false; this.applyMute(); this.layout(); this.renderOutputState(); }
@@ -191,6 +207,7 @@ class App {
   async openProject(p) {
     this.pause();
     this.project = p;
+    this.show.index = -1; this.show.fade = null;
     p.settings = { snap: true, sensitivity: 1, loop: true, ...(p.settings || {}) };
     this.editor.select(-1);
     this.editor.snap = p.settings.snap;
@@ -213,7 +230,7 @@ class App {
   broadcast(transportOnly = false) {
     if (IS_OUTPUT || !this.output.connected) return;
     const msg = { type: 'state', playing: this.playing, time: this.currentTime() };
-    if (!transportOnly) { msg.project = this.project; msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
+    if (!transportOnly) { msg.project = this.project; msg.fade = this.show.snapshot(performance.now()); msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
     this.post(msg);
   }
 
@@ -264,6 +281,7 @@ class App {
     if (data.type !== 'state') return;
     if (data.project) {
       this.project = data.project;
+      this.show.restore(data.fade, performance.now());
       for (const m of data.media || []) {
         if (this.media.get(m.id)) continue;
         const item = this.media.addUrl(m);
@@ -315,6 +333,7 @@ class App {
     const port = new ConnectionPort(conn);
     port.onmessage = (data) => {
       if (data.type === 'hello') this.onHello(data);
+      if (data.type === 'beat') this.remoteBeats++;
       if (data.type === 'need') {
         const m = this.media.get(data.id);
         if (!m || !m.file) return;
@@ -332,6 +351,96 @@ class App {
     // the connection may open after it's handed over; say hello once it does
     if (conn.state === 'connected') this.broadcast(); else conn.addEventListener('connect', () => this.broadcast(), { once: true });
     this.renderOutputState();
+  }
+
+  // ---------- cues and timeline ----------
+  onCue() {
+    this.changed();
+    this.renderShowUI();
+  }
+
+  initShowUI() {
+    const list = $('cueList');
+    $('cueAdd').onclick = () => {
+      if (!this.project.surfaces.length) { this.toast('Add surfaces first: a cue remembers what each one shows.'); return; }
+      const cues = this.show.cues;
+      cues.push(newCue(this.project.surfaces, cues.length + 1));
+      this.show.index = cues.length - 1;
+      this.scheduleSave(); this.renderShowUI();
+      this.toast('Cue saved. Change what the surfaces show, then add the next cue.');
+    };
+    $('cueGo').onclick = () => { if (this.show.index < 0) this.show.go(0); else this.show.next(); };
+    $('cueFirst').onclick = () => { this.show.go(0, { transition: false }); if (this.soundtrackEl()) this.restart(); };
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const i = +b.closest('[data-i]').dataset.i, cues = this.show.cues, c = cues[i];
+      const act = b.dataset.act;
+      if (act === 'go') this.show.go(i);
+      if (act === 'save') { Object.assign(c, { looks: newCue(this.project.surfaces, 0).looks }); this.toast(`${c.name} now has the current look.`); }
+      if (act === 'up' && i > 0) [cues[i - 1], cues[i]] = [cues[i], cues[i - 1]];
+      if (act === 'down' && i < cues.length - 1) [cues[i + 1], cues[i]] = [cues[i], cues[i + 1]];
+      if (act === 'del') { cues.splice(i, 1); if (this.show.index >= cues.length) this.show.index = cues.length - 1; }
+      if (act === 'now') { c.start.value = Math.round(this.currentTime() * 10) / 10; }
+      this.scheduleSave(); this.renderShowUI();
+    });
+    list.addEventListener('change', (e) => {
+      const el = e.target, i = +el.closest('[data-i]').dataset.i, c = this.show.cues[i];
+      if (el.dataset.f === 'name') c.name = el.value.trim() || c.name;
+      if (el.dataset.f === 'mode') { c.start.mode = el.value; c.start.value = el.value === 'after' ? 5 : el.value === 'beats' ? 8 : el.value === 'at' ? Math.round(this.currentTime() * 10) / 10 : 0; }
+      if (el.dataset.f === 'value') {
+        const v = c.start.mode === 'at' ? parseTime(el.value) : parseFloat(el.value);
+        if (v != null && v >= 0) c.start.value = v;
+      }
+      if (el.dataset.f === 'type') c.transition.type = el.value;
+      if (el.dataset.f === 'dur') { const v = parseFloat(el.value); if (v >= 0) c.transition.dur = v; }
+      this.scheduleSave(); this.renderShowUI();
+    });
+    $('timeline').addEventListener('pointerdown', (e) => {
+      const st = this.soundtrackEl(); if (!st || !st.duration) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * st.duration;
+      for (const el of this.playingEls()) el.currentTime = t;
+      this.broadcast(true);
+    });
+    this.renderShowUI();
+  }
+
+  renderShowUI() {
+    const cues = this.show.cues, list = $('cueList');
+    const esc = (t) => String(t).replace(/[<&"]/g, '');
+    const opt = (v, label, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`;
+    list.innerHTML = cues.map((c, i) => {
+      const m = c.start.mode;
+      const val = m === 'tap' ? '' : `<input type="text" inputmode="decimal" data-f="value" aria-label="${m === 'at' ? 'Time in the soundtrack' : m === 'after' ? 'Seconds' : 'Beats'}" value="${m === 'at' ? fmtTime(c.start.value) : c.start.value}">${m === 'at' ? '<button class="btn" data-act="now" title="Use the soundtrack\'s current time">Now</button>' : `<span class="note">${m === 'after' ? 's' : 'beats'}</span>`}`;
+      return `<div class="cue${i === this.show.index ? ' live' : ''}" data-i="${i}">
+        <div class="row"><input type="text" data-f="name" aria-label="Cue name" value="${esc(c.name)}"><button class="btn${i === this.show.index ? ' primary' : ''}" data-act="go">Go</button></div>
+        <div class="row"><select data-f="mode" aria-label="How it starts">${opt('tap', 'On a tap', m)}${opt('after', 'After the previous, by', m)}${opt('beats', 'After the previous, beats', m)}${opt('at', 'At a time in the song', m)}</select>${val}</div>
+        <div class="row"><select data-f="type" aria-label="Transition">${opt('fade', 'Crossfade', c.transition.type)}${opt('cut', 'Cut', c.transition.type)}${opt('wipe', 'Wipe across', c.transition.type)}</select>
+          ${c.transition.type === 'cut' ? '' : `<input type="text" inputmode="decimal" data-f="dur" aria-label="Transition seconds" value="${c.transition.dur}"><span class="note">s</span>`}</div>
+        <div class="row"><button class="btn" data-act="save">Save current look</button><button class="btn" data-act="up" aria-label="Move up"${i ? '' : ' disabled'}>↑</button><button class="btn" data-act="down" aria-label="Move down"${i < cues.length - 1 ? '' : ' disabled'}>↓</button><button class="btn" data-act="del">Delete</button></div>
+      </div>`;
+    }).join('') || '<p class="note">No cues yet. Set up a look on the surfaces, then add it as a cue.</p>';
+    const cur = cues[this.show.index];
+    $('cueState').textContent = cur ? `On stage: ${cur.name} (${this.show.index + 1} of ${cues.length})` : cues.length ? 'No cue running yet: tap Go.' : '';
+    $('cueGo').textContent = this.show.index < 0 ? 'Go: first cue' : 'Go: next cue';
+    $('cueGo').disabled = !cues.length || this.show.index >= cues.length - 1;
+    $('cueFirst').disabled = !cues.length;
+    $('timelineGroup').hidden = !cues.some((c) => c.start.mode === 'at');
+    this.timelineKey = '';
+  }
+
+  // the soundtrack as a strip, with a marker per timed cue and the playhead
+  drawTimeline() {
+    const tl = $('timeline');
+    if ($('drawer').hidden || $('timelineGroup').hidden || tl.offsetParent === null) return;
+    const st = this.soundtrackEl(), dur = st && st.duration && isFinite(st.duration) ? st.duration : 0;
+    const key = dur + '|' + this.show.cues.map((c) => c.start.mode + c.start.value).join() + '|' + this.show.index;
+    if (key !== this.timelineKey) {
+      this.timelineKey = key;
+      tl.innerHTML = dur ? '<i class="playhead"></i>' + this.show.cues.map((c, i) => c.start.mode === 'at' ? `<b class="${i === this.show.index ? 'live' : ''}" style="left:${Math.min(100, c.start.value / dur * 100)}%"><span>${i + 1}</span></b>` : '').join('') : '<span class="note">Pick a soundtrack in Sound to place cues in time.</span>';
+    }
+    const ph = tl.querySelector('.playhead');
+    if (ph) ph.style.left = dur ? (st.currentTime / dur * 100) + '%' : '0';
   }
 
   // ---------- device check ----------
@@ -514,17 +623,22 @@ class App {
     // leave Show mode: double-tap, or a long press
     const stage = $('stage');
     let pressT = 0, lastTap = 0;
+    let nextT = 0;
     stage.addEventListener('pointerdown', () => {
       if (!document.body.classList.contains('show')) return;
       const now = performance.now();
-      if (now - lastTap < 350) this.setShow(false);
+      clearTimeout(nextT);
+      if (now - lastTap < 350) { this.setShow(false); lastTap = 0; return; }
       lastTap = now;
       pressT = setTimeout(() => this.setShow(false), 900);
+      // a single tap runs the next cue, once it's clear it wasn't the start of a double-tap
+      if (this.show.cues.length) nextT = setTimeout(() => { if (document.body.classList.contains('show')) this.show.next(); }, 360);
     });
     stage.addEventListener('pointerup', () => clearTimeout(pressT));
     window.addEventListener('keydown', (e) => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
       if (e.key === 'Escape' && document.body.classList.contains('show')) { this.setShow(false); return; }
+      if ((e.key === ' ' || e.key === 'PageDown' || (e.key === 'ArrowRight' && document.body.classList.contains('show'))) && this.show.cues.length) { e.preventDefault(); this.show.next(); return; }
       const step = e.shiftKey ? 10 : 1;
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (d && this.editor.sel >= 0) { e.preventDefault(); this.editor.nudge(...d); }
@@ -617,11 +731,12 @@ class App {
       this.output.win = window.open(location.href.split('#')[0] + '#output', 'pm-output', await this.outputFeatures());
       if (!this.output.win) this.toast('The browser blocked the output window. Allow pop-ups for this page.');
     };
-    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); };
+    if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
     if (!this.channel) $('openOutput').disabled = true;
     this.initPresentation();
     this.initScan();
     this.initCheck();
+    this.initShowUI();
 
     // how to connect: a guide sheet, opened by itself the first time the app runs
     const sheet = $('connectSheet');
@@ -669,6 +784,7 @@ class App {
   // ---------- rendering the UI from state ----------
   renderAll() {
     this.renderSurfaceUI(); this.renderContentUI(); this.renderMediaUI(); this.renderSoundUI(); this.renderProjectList(); this.renderTransport();
+    if (this.editor) this.renderShowUI();
     $('projName').value = this.project.name;
     $('snap').checked = this.project.settings.snap !== false;
     $('loop').checked = this.project.settings.loop !== false;

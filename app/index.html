@@ -108,6 +108,19 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .checks li b { font-weight: 500; }
 .checks li span { color: var(--muted); overflow-wrap: anywhere; }
 .checks .yes::before { content: "✓"; color: var(--ok); } .checks .no::before { content: "✗"; color: var(--bad); } .checks .info::before { content: "·"; color: var(--muted); }
+.cues { display: grid; gap: 8px; }
+.cue { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 6px; }
+.cue.live { border-color: var(--lamp); box-shadow: inset 3px 0 0 var(--lamp); }
+.cue input[data-f="name"] { flex: 1; min-width: 0; }
+.cue input[data-f="value"], .cue input[data-f="dur"] { width: 5.5em; }
+.cue select { flex: 1; min-width: 0; }
+.cue .btn { padding: 6px 10px; }
+.timeline { position: relative; height: 34px; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; touch-action: none; overflow: hidden; }
+.timeline .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--fg); }
+.timeline b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--lamp); }
+.timeline b span { position: absolute; top: 2px; left: 4px; font: 11px var(--mono); color: var(--lamp); }
+.timeline b.live span { color: var(--fg); }
+.timeline .note { display: block; padding: 8px; }
 #scanVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #scanView { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; background: #000; }
 #scanStatus { white-space: pre-line; margin: 8px 0 0; }
@@ -139,6 +152,7 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <button role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
       <button role="tab" data-tab="content" aria-selected="false">Content</button>
       <button role="tab" data-tab="sound" aria-selected="false">Sound</button>
+      <button role="tab" data-tab="show" aria-selected="false">Show</button>
       <button role="tab" data-tab="project" aria-selected="false">Project</button>
     </div>
     <button class="btn" id="closeDrawer" aria-label="Close tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
@@ -218,6 +232,26 @@ dialog.sheet h2 { margin: 0; font-size: 17px; font-weight: 600; }
       <div class="meter" aria-hidden="true"><div><i id="mBass"></i></div><div><i id="mMid"></i></div><div><i id="mTreble"></i></div><span id="mBeat"></span></div>
       <div class="meter-labels"><span>bass</span><span>mid</span><span>treble</span><span>beat</span></div>
       <p class="note">"Beat sequence", "Pulse to music" and "Tiles" follow the beat when sound is playing.</p>
+    </div>
+  </section>
+
+  <section class="pane" data-pane="show" hidden>
+    <div class="group">
+      <h3>Run the show</h3>
+      <div class="row"><button class="btn primary" id="cueGo">Go: first cue</button><button class="btn" id="cueFirst">Back to the start</button></div>
+      <p class="mono" id="cueState"></p>
+      <p class="note">In Show mode, tap once (or press Space) for the next cue. Double-tap still goes back to editing.</p>
+    </div>
+    <div class="group" id="timelineGroup" hidden>
+      <h3>Timeline</h3>
+      <div class="timeline" id="timeline" aria-label="Soundtrack timeline: tap to jump"></div>
+      <p class="note">Cues set to start at a time follow the soundtrack, also when it loops or you jump.</p>
+    </div>
+    <div class="group">
+      <h3>Cues</h3>
+      <div id="cueList" class="cues"></div>
+      <div class="row"><button class="btn" id="cueAdd">Add cue from the current look</button></div>
+      <p class="note">A cue remembers what every surface shows. Change the surfaces in Content, then add or save a cue. A cue can start on a tap, some seconds or beats after the previous one, or at a time in the song.</p>
     </div>
   </section>
 
