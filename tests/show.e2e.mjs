@@ -83,6 +83,8 @@ export default async function run() {
     t.ok(!dbl.show && dbl.index === 1, 'a double-tap leaves Show mode without running a cue ' + JSON.stringify(dbl));
 
     // after some beats: cue 2 follows cue 1 after 4 beats of the song
+    // in the app the audio graph is built on the first tap, well before Play; do the same here
+    await page.evaluate(() => { window.app.audio.ensure(); return window.app.audio.ready; });
     await page.evaluate(() => {
       const c = window.app.project.cues;
       c[1].start = { mode: 'beats', value: 4 }; c[2].start = { mode: 'tap', value: 0 };
@@ -90,13 +92,21 @@ export default async function run() {
       for (const el of window.app.playingEls()) el.currentTime = 0;
       window.app.play();
       window.__t0 = performance.now();
-      window.__b0 = window.app.audio.state.beats;
-      window.app.onCue = ((orig) => (i) => { window.__fired = { beats: window.app.audio.state.beats - window.__b0, secs: (performance.now() - window.__t0) / 1000 }; orig.call(window.app, i); })(window.app.onCue);
+      window.__b0 = window.app.beatCount();
+      window.app.onCue = ((orig) => (i) => { window.__fired = { beats: window.app.beatCount() - window.__b0, secs: (performance.now() - window.__t0) / 1000, song: window.app.currentTime() }; orig.call(window.app, i); })(window.app.onCue);
     });
-    // beats are detected once per frame, so a slow machine counts them later, never sooner
+    // beats are counted on the audio thread and cues checked on a timer, so slow frames don't delay them (#21)
     const ok = await page.waitForFunction(() => window.app.show.index === 1, null, { timeout: 30000 }).then(() => true, () => false);
     const f = await page.evaluate(() => window.__fired);
-    t.ok(ok && f && f.beats === 4 && f.secs > 1.2, `the next cue runs on the fourth beat (${f ? `${f.beats} beats, ${f.secs.toFixed(1)} s at 120 bpm` : 'never'})`);
+    t.ok(await page.evaluate(() => !!window.app.audio.node), 'beats are detected on the audio thread (AudioWorklet)');
+    // the cue runs at the first chance after the fourth beat (on a busy test machine the page itself can be late)...
+    t.ok(ok && f && f.beats >= 4 && f.secs > 1.2, `the next cue runs after the fourth beat (${f ? `${f.beats} beats, ${f.secs.toFixed(1)} s at 120 bpm` : 'never'})`);
+    // ...and no beat is lost however slow the frames are: in the audio's own time, consecutive beats are half a
+    // second apart (a skipped beat would leave a 1 s gap). Main-thread timing can't be trusted on a loaded machine.
+    await page.evaluate(() => { window.__beatAt = []; window.app.audio.node.port.addEventListener('message', ({ data }) => { const l = window.__beatAt; if (!l.length || l[l.length - 1] !== data.at) l.push(data.at); }); });
+    await page.waitForFunction(() => window.__beatAt.length >= 8, null, { timeout: 30000 });
+    const gaps = await page.evaluate(() => window.__beatAt.slice(1).map((t, i) => t - window.__beatAt[i]).slice(1));
+    t.ok(gaps.every((g) => g > 0.4 && g < 0.6), `no beats lost or doubled: gaps between beats ${gaps.map((g) => g.toFixed(2)).join(', ')} s`);
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();

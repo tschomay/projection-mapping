@@ -51,7 +51,7 @@ export class ShowRunner {
     this.fade = transition && changed && t.type !== 'cut' && t.dur > 0 ? { from, type: t.type, dur: t.dur, start: now } : null;
     this.index = index;
     this.enteredAt = now;
-    this.enteredBeats = this.app.audio.state.beats;
+    this.enteredBeats = this.app.beatCount();
     this.app.onCue(index);
   }
 

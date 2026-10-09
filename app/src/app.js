@@ -37,6 +37,10 @@ class App {
     this.t0 = performance.now();
     this.show = new ShowRunner(this);
     this.remoteBeats = 0;     // beats heard by a connected output, which plays the sound
+    // an output display plays the sound, so it reports each beat to the editor as the audio thread counts it
+    this.audio.onbeat = () => { if (IS_OUTPUT && this.playing) this.post({ type: 'beat' }); };
+    // cues that start by themselves are checked on a timer, not per frame, so a slow frame can't delay them
+    if (!IS_OUTPUT) setInterval(() => this.cueTick(), 10);
     this.media.onchange = () => { this.dirty = true; if (!IS_OUTPUT) this.renderMediaUI(); };
 
     if (IS_OUTPUT) this.initOutput(); else this.initEditor();
@@ -111,11 +115,6 @@ class App {
     if (this.dirty) this.sync();
     const sounding = this.playing && !!this.soundtrackEl() && !(this.output.connected && !IS_OUTPUT);
     const a = this.audio.update(now, sounding);
-    if (!IS_OUTPUT) {
-      // cues that start by themselves; with an output connected, it plays the sound and reports the beats
-      const beats = this.output.connected ? { active: true, beats: this.remoteBeats } : a;
-      this.show.tick(now, beats, this.soundtrackEl() ? this.currentTime() : null, this.playing);
-    } else if (a.beats !== this.lastBeats) { this.lastBeats = a.beats; if (a.active) this.post({ type: 'beat' }); }
     const mix = this.show.mix(now);
     if (mix === null && this.wasMixing) this.sync();   // the transition just ended
     this.wasMixing = mix !== null;
@@ -128,6 +127,14 @@ class App {
       if (this.playing && this.output.connected && now - (this.lastTimeSync || 0) > 1000) { this.lastTimeSync = now; this.broadcast(true); }
     }
     requestAnimationFrame((t) => this.frameLoop(t));
+  }
+
+  // beats so far, from wherever the sound is playing (this device, or a connected output)
+  beatCount() { return this.output.connected ? this.remoteBeats : this.audio.beats; }
+
+  cueTick() {
+    const sounding = this.output.connected || (this.playing && !!this.soundtrackEl()) || !!this.audio.mic;
+    this.show.tick(performance.now(), { active: sounding, beats: this.beatCount() }, this.soundtrackEl() ? this.currentTime() : null, this.playing);
   }
 
   // ---------- playback ----------
