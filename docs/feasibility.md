@@ -230,6 +230,7 @@ Measured in the sandbox:
 | From the camera scan, default scene (5 runs) | 0.4–3.5° | within 0.4–6.4° | 8–21 cm*; 3–4 of 4 boxes found |
 | From the camera scan, random scenes (first version) | within 2° in 8 of 20 | unreliable | unreliable |
 | From the camera scan, random scenes, with the wall-floor line and the throw ratio | within 2° in 28 of 30, median 0.3° | within about 1° | |
+| Same, with the app's capture pipeline shared into the sandbox (#19) | within 2° in 27 of 30, median 0.4° | within about 1° | |
 
 \*Includes the never-lit back corners and boxes partly outside the frame.
 

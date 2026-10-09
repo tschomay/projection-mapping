@@ -1,4 +1,5 @@
-// Finding flat surfaces with a camera (structured light), ported from the sandbox (sim/index.html).
+// Finding flat surfaces with a camera (structured light). This is the only copy: tools/build-sim.mjs inlines it into
+// the sandbox (sim/index.html), and the tests check the two are in sync.
 // The projector shows black, white, then Gray-code stripes and their inverses; a camera beside it photographs each.
 // Decoding gives, for every camera pixel, the projector cell that lit it. Points on one plane are related by a
 // single homography between projector and camera images, so sequential RANSAC over that mapping finds the planes,
@@ -232,6 +233,13 @@ export function decodeAndSegment(shots, { camW, camH, W, H, minContrast = 20, se
   const relation = new Map();
   pairErr.forEach((es, key) => { es.sort((x, y) => x - y); relation.set(key, { crease: es[es.length >> 1] < 3, n: es.length }); });
   const rel = (a, b) => relation.get(Math.min(a, b) + ',' + Math.max(a, b));
+  // faces joined by creases belong to one object (the 2D-to-3D solve fits one box per object)
+  const obj = out.map((_, i) => i), ofind = (i) => (obj[i] === i ? i : (obj[i] = ofind(obj[i])));
+  relation.forEach((r, key) => {
+    const [a, b] = key.split(',').map(Number);
+    if (r.crease && r.n >= 8 && !out[a].background && !out[b].background) obj[ofind(a)] = ofind(b);
+  });
+  out.forEach((r, i) => { r.object = ofind(i); });
   const degenerate = out.length > 0 && Math.max(...out.map((r) => r.cells.length)) > nValid * 0.85;
   return { regions: out, decoded, nValid, plabel, rel, degenerate, GW, GH };
 }
@@ -350,7 +358,7 @@ export function regionToSurface(region, idx, res) {
   if (shoelace(pins) > 0) pins.reverse();
   let k0 = 0; pins.forEach((p, k) => { if (p[1] - p[0] > pins[k0][1] - pins[k0][0]) k0 = k; });
   const P = [0, 1, 2, 3].map((k) => pins[(k0 + k) % 4]);
-  const surf = { pins: P, parts: [{ op: 1, pts: SHAPES.square() }] };
+  const surf = { pins: P, parts: [{ op: 1, pts: SHAPES.square() }], object: region.object };
   // partly hidden or not four-sided: use the traced outline instead of the full quad
   if (region.cells.length * CELL * CELL < Math.abs(shoelace(P)) * 0.92) {
     const start = region.cells.reduce((a, c) => Math.min(a, c));
@@ -363,6 +371,48 @@ export function regionToSurface(region, idx, res) {
     }
   }
   return surf;
+}
+
+// The line where the wall meets the floor: projector pixels where two wall/floor planes meet at a crease. Its
+// place in the room is known (y = 0, z = 0), so the 2D-to-3D solve uses it to pin the projector's pitch and roll.
+// Other wall/floor-like planes meet the floor too (the bottom of a big box face). Those edges are in front of the
+// wall, so lower in the projector's image: keep the highest point in each column, then the one straight line
+// through most of them (it's a straight line in the room, so it's straight in the image). Null if too little shows.
+export function wallFloorLine(res) {
+  if (!res) return null;
+  const { GW, GH } = res;
+  const pts = [], bg = res.regions.map((r) => r.background);
+  const at = (c) => [(c % GW) * CELL + CELL / 2, ((c / GW) | 0) * CELL + CELL / 2];
+  for (let c = 0; c < GW * GH; c++) {
+    const a = res.plabel[c]; if (a < 0 || !bg[a]) continue;
+    for (const n of [c % GW < GW - 1 ? c + 1 : -1, c + GW < GW * GH ? c + GW : -1]) {
+      if (n < 0) continue;
+      const b = res.plabel[n]; if (b < 0 || b === a || !bg[b]) continue;
+      const rel = res.rel(a, b);
+      if (rel && rel.crease) { const p = at(c), q = at(n); pts.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]); }
+    }
+  }
+  const top = new Map();
+  for (const p of pts) { const k = Math.round(p[0] / 8); if (!top.has(k) || p[1] < top.get(k)[1]) top.set(k, p); }
+  const cand = [...top.values()];
+  if (cand.length < 8) return null;
+  // Every pair of candidates defines a line (at most a few hundred candidates, one per 8-pixel column, so trying
+  // them all is quick and never misses). Keep lines that run wide enough to say something about roll, and of those
+  // the one most candidates lie on; on a tie the higher one, which is further away: the wall, not a box's foot.
+  const span = (pts) => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]));
+  const meanY = (pts) => pts.reduce((t, p) => t + p[1], 0) / pts.length;
+  let best = [];
+  for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
+    const a = cand[i], b = cand[j];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 40) continue;
+    const inl = cand.filter((p) => Math.abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / len < 5);
+    if (inl.length < 8 || span(inl) < 300) continue;
+    if (inl.length > best.length || (inl.length === best.length && meanY(inl) < meanY(best))) best = inl;
+  }
+  if (!best.length) return null;
+  best.sort((a, b) => a[0] - b[0]);
+  const step = Math.max(1, Math.floor(best.length / 40));
+  return best.filter((_, i) => i % step === 0);
 }
 
 // corners that nearly coincide become one shared corner, so neighbouring faces share their edge exactly
@@ -382,7 +432,10 @@ export function weldPins(surfaces, tol) {
 // The whole analysis: photos -> surfaces in the app's format (normalized pins), plus stats for the UI.
 export function surfacesFromShots(shots, { camW, camH, W, H, keepBackground = false, minContrast = 20 }) {
   const res = decodeAndSegment(shots, { camW, camH, W, H, minContrast });
-  const raw = res.regions.map((r, i) => (keepBackground || !r.background ? regionToSurface(r, i, res) : null)).filter(Boolean);
+  // largest first, so if there are more than can be shown, the small ones are the ones left out
+  const order = res.regions.map((r, i) => i).filter((i) => keepBackground || !res.regions[i].background)
+    .sort((a, b) => res.regions[b].cells.length - res.regions[a].cells.length);
+  const raw = order.map((i) => regionToSurface(res.regions[i], i, res)).filter(Boolean);
   weldPins(raw, 10);
   const surfaces = raw.slice(0, MAX_SURF).map((s) => ({
     id: Math.random().toString(36).slice(2, 10),
@@ -392,6 +445,7 @@ export function surfacesFromShots(shots, { camW, camH, W, H, keepBackground = fa
   }));
   return {
     surfaces,
+    found: raw.length,            // can be more than surfaces.length: the renderer shows up to MAX_SURF
     planes: res.regions.length,
     background: res.regions.filter((r) => r.background).length,
     decoded: res.decoded,

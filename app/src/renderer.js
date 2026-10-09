@@ -4,7 +4,10 @@
 import { EFFECTS } from './effects.js';
 import { meshEvaluator, meshInverse } from './geometry.js';
 
-export const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_VERTS = 2048, MAX_MEDIA = 4, EDGE_MARGIN = 64;
+export const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_MEDIA = 4, EDGE_MARGIN = 64;
+// outline points for all surfaces, in a texture POLY_W wide (WebGL2 only promises 2048-wide textures)
+const POLY_W = 1024, POLY_H = 8;
+export const MAX_VERTS = POLY_W * POLY_H;
 // bent surfaces: per surface, a WARP_RES x WARP_RES table of uv corrections over homography space [-0.5, 1.5]^2
 const WARP_RES = 96, WARP_LO = -0.5, WARP_SPAN = 2;
 
@@ -92,10 +95,12 @@ void main() {
       if (px.x >= bb.x && px.x <= bb.z && px.y >= bb.y && px.y <= bb.w) {
         int v0 = int(part.x), vc = int(part.y);
         bool pin = false; float md = 1e6;
-        vec2 a = texelFetch(uPoly, ivec2(v0 + vc - 1, 0), 0).xy;
+        int ia = v0 + vc - 1;
+        vec2 a = texelFetch(uPoly, ivec2(ia % ${POLY_W}, ia / ${POLY_W}), 0).xy;
         for (int k = 0; k < ${MAX_PART_VERTS}; k++) {
           if (k >= vc) break;
-          vec2 b = texelFetch(uPoly, ivec2(v0 + k, 0), 0).xy;
+          int ib = v0 + k;
+          vec2 b = texelFetch(uPoly, ivec2(ib % ${POLY_W}, ib / ${POLY_W}), 0).xy;
           if ((b.y > px.y) != (a.y > px.y) && px.x < (a.x - b.x) * (px.y - b.y) / (a.y - b.y) + b.x) pin = !pin;
           md = min(md, segDist(px, a, b));
           a = b;
@@ -155,7 +160,7 @@ export class Renderer {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     this.poly = new Float32Array(MAX_VERTS * 4);
     this.polyTex = this.makeTexture(gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_VERTS, 1, 0, gl.RGBA, gl.FLOAT, this.poly);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, POLY_W, POLY_H, 0, gl.RGBA, gl.FLOAT, this.poly);
     this.mediaTex = Array.from({ length: MAX_MEDIA }, () => {
       const t = this.makeTexture(gl.LINEAR);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
@@ -230,16 +235,17 @@ export class Renderer {
   }
 
   // geoms: output of surfaceGeom per surface (frame pixels); fx: [effectIndex, mediaSlot, space, fit] per surface;
-  // fxFrom: the same for the previous look while a cue transition runs
+  // fxFrom: the same for the previous look while a cue transition runs.
+  // Returns what fitted: { surfaces drawn, of how many, droppedParts } so the app can say when a limit is reached.
   setSurfaces(geoms, fx, fxFrom = fx) {
     const S = this.surf;
-    let vi = 0, pi = 0;
+    let vi = 0, pi = 0, droppedParts = 0;
     const n = Math.min(geoms.length, MAX_SURF);
     for (let si = 0; si < n; si++) {
       const g = geoms[si], first = pi;
       for (const part of g.parts) {
         const pts = part.outline || part.px;
-        if (pi >= MAX_PARTS || vi + pts.length > MAX_VERTS) break;
+        if (pi >= MAX_PARTS || vi + pts.length > MAX_VERTS || pts.length > MAX_PART_VERTS) { droppedParts++; continue; }
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         for (const [x, y] of pts) {
           this.poly[vi * 4] = x; this.poly[vi * 4 + 1] = y; vi++;
@@ -259,7 +265,8 @@ export class Renderer {
     S.count = n;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.polyTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_VERTS, 1, gl.RGBA, gl.FLOAT, this.poly);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, POLY_W, POLY_H, gl.RGBA, gl.FLOAT, this.poly);
+    return { surfaces: n, of: geoms.length, droppedParts };
   }
 
   // the uv correction table for a bent surface, rebuilt only when its mesh changes (not when its corners move)

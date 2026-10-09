@@ -42,6 +42,7 @@ export default async function run() {
     t.ok(await ed.evaluate(() => !document.getElementById('toast').hidden), 'Show-mode hint on first Show');
     await ed.keyboard.press('Escape');
     await ed.waitForFunction(() => !document.body.classList.contains('show'));
+    await ed.waitForFunction(() => document.getElementById('toast').hidden, null, { timeout: 10000 });   // the first hint has gone
     await ed.click('#showBtn');
     t.ok(await ed.evaluate(() => document.getElementById('toast').hidden || !/Double-tap/.test(document.getElementById('toast').textContent)), 'no hint once Show mode has been left');
     await ed.keyboard.press('Escape');
@@ -77,6 +78,17 @@ export default async function run() {
     await ed.evaluate(() => { window.app.editor.select(0); window.app.editor.nudge(40, 0); });
     const want = await ed.evaluate(() => window.app.project.surfaces[0].pins[0][0]);
     t.ok(await rx.waitForFunction((w) => Math.abs(window.app.project.surfaces[0].pins[0][0] - w) < 1e-9, want, { timeout: 60000 }).then(() => true, () => false), 'live edits reach the receiver');
+    // a bigger file (3 MB, more chunks than the sender keeps in flight): paced by acknowledgements, arrives intact
+    const big = Buffer.alloc(3 * 1024 * 1024);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 2654435761 >>> 24) & 255;
+    const sum = (bytes) => { let h = 0; for (let i = 0; i < bytes.length; i += 97) h = (h * 31 + bytes[i]) >>> 0; return h; };
+    await ed.setInputFiles('#addMedia', { name: 'big.png', mimeType: 'image/png', buffer: big });
+    const bigId = await ed.waitForFunction(() => window.app.media.list().find((m) => m.name === 'big.png')?.id, null, { timeout: 30000 }).then((h) => h.jsonValue());
+    const bigSize = await rx.waitForFunction((id) => { const m = window.app.media.get(id); return m && m.file ? m.file.size : 0; }, bigId, { timeout: 240000 }).then((h) => h.jsonValue(), () => 0);
+    t.ok(bigSize === big.length, `a 3 MB file reaches the receiver (${bigSize} bytes)`);
+    const rxSum = await rx.evaluate(async ([id, step]) => { const b = new Uint8Array(await window.app.media.get(id).file.arrayBuffer()); let h = 0; for (let i = 0; i < b.length; i += step) h = (h * 31 + b[i]) >>> 0; return h; }, [bigId, 97]);
+    t.ok(rxSum === sum(big), 'and arrives byte for byte');
+    t.ok(await ed.waitForFunction(() => /big\.png is on the screen/.test(document.getElementById('toast').textContent), null, { timeout: 30000 }).then(() => true, () => false), 'the editor shows the transfer finishing');
     await ed.evaluate(() => document.getElementById('presentBtn').click());
     t.ok(await ed.evaluate(() => !window.app.presenting && document.getElementById('presentBtn').textContent === 'Present to a screen'), 'stop presenting');
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));

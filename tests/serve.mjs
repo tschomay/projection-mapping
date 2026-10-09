@@ -17,7 +17,7 @@ export function serveApp() {
       res.end(body);
     } catch { res.writeHead(404); res.end(); }
   });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${server.address().port}/`, close: () => server.close() })));
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${server.address().port}/?lowres`, close: () => server.close() })));
 }
 
 // playwright from tests/node_modules, or from PLAYWRIGHT_PATH (a preinstalled copy)
