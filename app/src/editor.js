@@ -11,9 +11,10 @@ export class Editor {
     this.canvas = overlay;
     this.ctx = overlay.getContext('2d');
     this.sel = -1;            // selected surface index
-    this.mode = 'warp';       // 'warp' (corner pins) or 'points' (outline vertices)
+    this.mode = 'warp';       // 'warp' (corner pins), 'points' (outline vertices) or 'mesh' (bend grid points)
     this.selPin = -1;
     this.selVert = null;      // { j, k }
+    this.selMesh = -1;        // bend grid point
     this.drag = null;
     this.snap = true;
     overlay.addEventListener('pointerdown', (e) => this.down(e));
@@ -38,14 +39,14 @@ export class Editor {
     let best = null, bd = this.handleR() * 0.8;
     this.geoms.forEach((g, si) => {
       if (si === this.sel) return;
-      for (const q of g.pins.concat(...g.parts.map((pt) => pt.px))) { const d = dist(p, q); if (d < bd) { bd = d; best = q; } }
+      for (const q of g.pins.concat(...g.parts.map((pt) => pt.outline))) { const d = dist(p, q); if (d < bd) { bd = d; best = q; } }
     });
     return best ? [best[0], best[1]] : p;
   }
 
   surfaceAt(x, y) { for (let i = this.geoms.length - 1; i >= 0; i--) if (insideSurface(this.geoms[i], x, y)) return i; return -1; }
 
-  select(i) { this.sel = i; this.selPin = -1; this.selVert = null; this.app.changed({ geometry: false }); }
+  select(i) { this.sel = i; this.selPin = -1; this.selVert = null; this.selMesh = -1; this.app.changed({ geometry: false }); }
 
   down(e) {
     this.canvas.setPointerCapture(e.pointerId);
@@ -55,6 +56,11 @@ export class Editor {
     if (s && this.mode === 'warp') {
       const k = g.pins.findIndex((q) => dist(q, p) <= r);
       if (k >= 0) { this.drag = { type: 'pin', k }; this.selPin = k; this.app.changed({ geometry: false }); return; }
+    }
+    if (s && this.mode === 'mesh' && g.meshPx) {
+      let k = -1, bd = r;
+      g.meshPx.forEach((q, i) => { const d = dist(q, p); if (d <= bd) { bd = d; k = i; } });
+      if (k >= 0) { this.drag = { type: 'mesh', k }; this.selMesh = k; this.app.changed({ geometry: false }); return; }
     }
     if (s && this.mode === 'points') {
       for (let j = g.parts.length - 1; j >= 0; j--) {
@@ -66,24 +72,24 @@ export class Editor {
         for (let k = 0; k < px.length; k++) {
           const a = px[k], b = px[(k + 1) % px.length];
           if (s.parts[j].pts.length < MAX_PART_VERTS && dist([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], p) <= r * 0.7) {
-            s.parts[j].pts.splice(k + 1, 0, hApply(g.Hi, ...p));
+            s.parts[j].pts.splice(k + 1, 0, g.toUV(...p));
             this.drag = { type: 'vert', j, k: k + 1 }; this.selVert = { j, k: k + 1 };
             this.app.changed(); return;
           }
         }
       }
       for (let j = g.parts.length - 1; j >= 0; j--) {
-        if (pointInPoly(p[0], p[1], g.parts[j].px)) {
-          this.drag = { type: 'part', j, start: hApply(g.Hi, ...p), pts: s.parts[j].pts.map((q) => [...q]) };
+        if (pointInPoly(p[0], p[1], g.parts[j].outline)) {
+          this.drag = { type: 'part', j, start: g.toUV(...p), pts: s.parts[j].pts.map((q) => [...q]) };
           return;
         }
       }
     }
     const hit = this.surfaceAt(...p);
     if (hit >= 0) {
-      if (hit !== this.sel) { this.sel = hit; this.selPin = -1; this.selVert = null; }
+      if (hit !== this.sel) { this.sel = hit; this.selPin = -1; this.selVert = null; this.selMesh = -1; }
       this.drag = { type: 'move', start: p, pins: this.surfaces[hit].pins.map((q) => [...q]) };
-    } else { this.sel = -1; this.selPin = -1; this.selVert = null; }
+    } else { this.sel = -1; this.selPin = -1; this.selVert = null; this.selMesh = -1; }
     this.app.changed({ geometry: false });
   }
 
@@ -93,9 +99,10 @@ export class Editor {
     if (!s) return;
     const d = this.drag;
     if (d.type === 'pin') s.pins[d.k] = this.norm(this.snapPoint(p));
-    else if (d.type === 'vert') s.parts[d.j].pts[d.k] = hApply(g.Hi, ...this.snapPoint(p));
+    else if (d.type === 'vert') s.parts[d.j].pts[d.k] = g.toUV(...this.snapPoint(p));
+    else if (d.type === 'mesh') s.mesh.pts[d.k] = hApply(g.Hi, ...p);
     else if (d.type === 'part') {
-      const [u, v] = hApply(g.Hi, ...p);
+      const [u, v] = g.toUV(...p);
       s.parts[d.j].pts = d.pts.map(([a, b]) => [a + u - d.start[0], b + v - d.start[1]]);
     } else if (d.type === 'move') {
       const [W, H] = this.app.frame, dx = (p[0] - d.start[0]) / W, dy = (p[1] - d.start[1]) / H;
@@ -149,7 +156,10 @@ export class Editor {
     if (this.mode === 'warp' && this.selPin >= 0) { const q = s.pins[this.selPin]; s.pins[this.selPin] = [q[0] + dx / W, q[1] + dy / H]; }
     else if (this.mode === 'points' && this.selVert) {
       const q = g.parts[this.selVert.j].px[this.selVert.k];
-      s.parts[this.selVert.j].pts[this.selVert.k] = hApply(g.Hi, q[0] + dx, q[1] + dy);
+      s.parts[this.selVert.j].pts[this.selVert.k] = g.toUV(q[0] + dx, q[1] + dy);
+    } else if (this.mode === 'mesh' && this.selMesh >= 0 && s.mesh) {
+      const q = g.meshPx[this.selMesh];
+      s.mesh.pts[this.selMesh] = hApply(g.Hi, q[0] + dx, q[1] + dy);
     } else s.pins = s.pins.map(([x, y]) => [x + dx / W, y + dy / H]);
     this.app.changed({ save: true });
   }
@@ -157,6 +167,7 @@ export class Editor {
     if (this.sel < 0) return '';
     if (this.mode === 'warp' && this.selPin >= 0) return 'corner';
     if (this.mode === 'points' && this.selVert) return 'point';
+    if (this.mode === 'mesh' && this.selMesh >= 0) return 'bend point';
     return 'surface';
   }
 
@@ -174,7 +185,7 @@ export class Editor {
         ctx.setLineDash(part.op < 0 ? [6 * dpr, 4 * dpr] : []);
         ctx.strokeStyle = sel ? '#ffb547' : 'rgba(255,255,255,0.5)';
         ctx.lineWidth = (sel ? 2 : 1.25) * dpr;
-        path(part.px); ctx.stroke();
+        path(part.outline); ctx.stroke();
       }
       ctx.setLineDash([]);
       // surface number, so tiny surfaces can be found from the list too
@@ -189,6 +200,18 @@ export class Editor {
           ctx.beginPath(); ctx.arc(x * sx, y * sy, hr, 0, Math.PI * 2);
           ctx.fillStyle = k === this.selPin ? '#ffffff' : 'rgba(255,181,71,0.9)'; ctx.fill();
           ctx.strokeStyle = '#0d1016'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+        });
+      } else if (this.mode === 'mesh') {
+        if (!g.mesh) return;
+        // the bend grid as curves, then its points
+        const [nx, ny] = g.mesh.n, line = (f) => { ctx.beginPath(); for (let t = 0; t <= 24; t++) { const [x, y] = f(t / 24); t ? ctx.lineTo(x * sx, y * sy) : ctx.moveTo(x * sx, y * sy); } ctx.stroke(); };
+        ctx.strokeStyle = 'rgba(255,181,71,0.45)'; ctx.lineWidth = dpr;
+        for (let i = 0; i <= nx; i++) line((t) => g.toFrame(i / nx, t));
+        for (let j = 0; j <= ny; j++) line((t) => g.toFrame(t, j / ny));
+        g.meshPx.forEach(([x, y], k) => {
+          ctx.beginPath(); ctx.arc(x * sx, y * sy, hr * 0.7, 0, Math.PI * 2);
+          ctx.fillStyle = k === this.selMesh ? '#ffffff' : 'rgba(255,181,71,0.9)'; ctx.fill();
+          ctx.strokeStyle = '#0d1016'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
         });
       } else {
         g.parts.forEach((part, j) => {

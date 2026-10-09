@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9; bending for #6).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -14,7 +14,9 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
 3. **Map.** In *Tools → Surfaces*, add a square, circle or triangle. It's
    projected too, so drag it onto a real flat surface, then drag its four
    corners onto the surface's corners. Use the nudge pad for the last pixel.
-   *Edit points* adds, moves and removes outline points. *Combine* adds shapes
+   *Points* adds, moves and removes outline points. *Bend* puts a grid on the
+   surface whose points you drag onto a curved or bowed object; *Soft edge*
+   feathers the outline. *Combine* adds shapes
    to a surface or cuts holes in it.
    **Or let the camera find them:** *Tools → Surfaces → Find surfaces with
    the camera*. Prop the phone 30 cm to 1 m to the side of the projector,

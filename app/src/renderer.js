@@ -2,8 +2,11 @@
 // topmost surface containing it (point-in-polygon against each part, combined as a signed distance), maps the
 // pixel into that surface's uv space through its inverse homography, and shades it with the surface's content.
 import { EFFECTS } from './effects.js';
+import { meshEvaluator, meshInverse } from './geometry.js';
 
 export const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_VERTS = 2048, MAX_MEDIA = 4, EDGE_MARGIN = 64;
+// bent surfaces: per surface, a WARP_RES x WARP_RES table of uv corrections over homography space [-0.5, 1.5]^2
+const WARP_RES = 96, WARP_LO = -0.5, WARP_SPAN = 2;
 
 const VERT = `#version 300 es
 in vec2 position;
@@ -20,6 +23,8 @@ uniform mat3 uHinv[${MAX_SURF}];
 uniform vec4 uSurfInfo[${MAX_SURF}];   // first part, part count, width px, height px
 uniform vec4 uSurfFx[${MAX_SURF}];     // effect index (-1 = media), media slot, space (0 surface, 1 frame), fit (0 fill, 1 fit, 2 stretch)
 uniform vec4 uSurfFxFrom[${MAX_SURF}]; // the previous look during a cue transition
+uniform vec4 uSurfExtra[${MAX_SURF}];  // bent (1/0), feather in frame pixels
+uniform sampler2D uWarp;               // uv corrections for bent surfaces, one ${WARP_RES}-texel square per surface
 uniform float uMix;                    // transition progress 0..1, or -1 when none is running
 uniform int uMixType;                  // 0 crossfade, 1 cut, 2 wipe left to right across the frame
 uniform vec4 uPart[${MAX_PARTS}];      // first vertex, vertex count, op (+1 add, -1 cut)
@@ -102,14 +107,19 @@ void main() {
     if (D < 0.5) {
       Surf2 s;
       vec3 h = uHinv[si] * vec3(px, 1.0);
-      s.uv = h.xy / h.z; s.px = px; s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
+      s.uv = h.xy / h.z; s.px = px;
+      vec4 ex = uSurfExtra[si];
+      if (ex.x > 0.5) {
+        vec2 q = clamp((s.uv - ${WARP_LO.toFixed(1)}) / ${WARP_SPAN.toFixed(1)}, 0.0, 1.0) * ${(WARP_RES - 1).toFixed(1)} + 0.5;
+        s.uv += texture(uWarp, vec2((float(si) * ${WARP_RES.toFixed(1)} + q.x) / ${(WARP_RES * MAX_SURF).toFixed(1)}, q.y / ${WARP_RES.toFixed(1)})).xy;
+      } s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
       s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
       col = clamp(content(uSurfFx[si], s, uTime), 0.0, 1.0);
       if (uMix >= 0.0) {
         float w = uMixType == 0 ? uMix : uMixType == 1 ? step(0.5, uMix) : smoothstep(s.screen.x + 0.04, s.screen.x - 0.04, uMix * 1.16 - 0.08);
         if (w < 1.0) col = mix(clamp(content(uSurfFxFrom[si], s, uTime), 0.0, 1.0), col, w);
       }
-      col *= clamp(0.5 - D, 0.0, 1.0);
+      col *= ex.y > 0.5 ? smoothstep(0.0, ex.y, 0.5 - D) : clamp(0.5 - D, 0.0, 1.0);   // feathered or crisp edge
       break;
     }
   }
@@ -152,7 +162,11 @@ export class Renderer {
       return t;
     });
     this.media = new Array(MAX_MEDIA).fill(null);   // { el, aspect, ready, isVideo, uploaded }
-    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), extra: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    this.warpTex = this.makeTexture(gl.LINEAR);
+    this.warpData = new Float32Array(WARP_RES * MAX_SURF * WARP_RES * 2);
+    this.warpKeys = new Array(MAX_SURF).fill('');
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, WARP_RES * MAX_SURF, WARP_RES, 0, gl.RG, gl.FLOAT, this.warpData);
     this.effects = EFFECTS;
     this.program = this.compile(buildFragment());
   }
@@ -210,7 +224,7 @@ export class Renderer {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     const u = {};
-    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uSurfExtra', 'uWarp', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
     this.u = u;
     return p;
   }
@@ -224,25 +238,47 @@ export class Renderer {
     for (let si = 0; si < n; si++) {
       const g = geoms[si], first = pi;
       for (const part of g.parts) {
-        if (pi >= MAX_PARTS || vi + part.px.length > MAX_VERTS) break;
+        const pts = part.outline || part.px;
+        if (pi >= MAX_PARTS || vi + pts.length > MAX_VERTS) break;
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-        for (const [x, y] of part.px) {
+        for (const [x, y] of pts) {
           this.poly[vi * 4] = x; this.poly[vi * 4 + 1] = y; vi++;
           x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
         }
-        S.part.set([vi - part.px.length, part.px.length, part.op, 0], pi * 4);
+        S.part.set([vi - pts.length, pts.length, part.op, 0], pi * 4);
         S.box.set([x0 - EDGE_MARGIN, y0 - EDGE_MARGIN, x1 + EDGE_MARGIN, y1 + EDGE_MARGIN], pi * 4);
         pi++;
       }
       S.hinv.set(g.Hi, si * 9);
       S.info.set([first, pi - first, g.size[0], g.size[1]], si * 4);
       S.fx.set(fx[si], si * 4);
+      S.extra.set([g.mesh ? 1 : 0, g.feather || 0, 0, 0], si * 4);
+      if (g.mesh) this.updateWarp(si, g.mesh);
       S.fxFrom.set(fxFrom[si], si * 4);
     }
     S.count = n;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.polyTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_VERTS, 1, gl.RGBA, gl.FLOAT, this.poly);
+  }
+
+  // the uv correction table for a bent surface, rebuilt only when its mesh changes (not when its corners move)
+  updateWarp(si, mesh) {
+    const key = JSON.stringify(mesh);
+    if (this.warpKeys[si] === key) return;
+    this.warpKeys[si] = key;
+    const row = WARP_RES * MAX_SURF, d = this.warpData, f = meshEvaluator(mesh);
+    let guess = null;
+    for (let y = 0; y < WARP_RES; y++) for (let x = 0; x < WARP_RES; x++) {
+      const q = [WARP_LO + x / (WARP_RES - 1) * WARP_SPAN, WARP_LO + y / (WARP_RES - 1) * WARP_SPAN];
+      const c = meshInverse(f, q, x ? guess : q);
+      guess = c;
+      const o = (y * row + si * WARP_RES + x) * 2;
+      d[o] = c[0] - q[0]; d[o + 1] = c[1] - q[1];
+    }
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.warpTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, row, WARP_RES, gl.RG, gl.FLOAT, d);
   }
 
   // el: HTMLVideoElement or HTMLImageElement (or null)
@@ -281,6 +317,7 @@ export class Renderer {
     gl.uniform4fv(u.uSurfInfo, S.info);
     gl.uniform4fv(u.uSurfFx, S.fx);
     gl.uniform4fv(u.uSurfFxFrom, S.fxFrom);
+    gl.uniform4fv(u.uSurfExtra, S.extra);
     gl.uniform1f(u.uMix, mix ? mix.amount : -1);
     gl.uniform1i(u.uMixType, mix ? mix.type : 0);
     gl.uniform4fv(u.uPart, S.part);
@@ -291,6 +328,7 @@ export class Renderer {
     gl.uniform4f(u.uAudio, audio.bass, audio.mid, audio.treble, audio.level);
     gl.uniform1f(u.uBeat, audio.beat); gl.uniform1f(u.uBeats, audio.beats); gl.uniform1f(u.uHasAudio, audio.active ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.polyTex); gl.uniform1i(u.uPoly, 0);
+    gl.activeTexture(gl.TEXTURE1 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.warpTex); gl.uniform1i(u.uWarp, 1 + MAX_MEDIA);
     for (let i = 0; i < MAX_MEDIA; i++) { gl.activeTexture(gl.TEXTURE1 + i); gl.bindTexture(gl.TEXTURE_2D, this.mediaTex[i]); gl.uniform1i(u['uMedia' + i], 1 + i); }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

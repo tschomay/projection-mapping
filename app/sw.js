@@ -1,6 +1,6 @@
 // Offline support: a show often happens where there's no reliable internet.
 // The app shell is cached on install; fonts are cached the first time they load. Bump VERSION on release.
-const VERSION = 'surface-mapper-v6';
+const VERSION = 'surface-mapper-v7';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   './src/app.js', './src/renderer.js', './src/effects.js', './src/geometry.js', './src/editor.js', './src/audio.js', './src/media.js', './src/store.js', './src/link.js', './src/capture.js', './src/camera.js', './src/diagnostics.js', './src/show.js', './src/ai.js'];
 

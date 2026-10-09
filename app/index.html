@@ -181,8 +181,15 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     </div>
     <div class="group">
       <h3>Handles</h3>
-      <div class="seg" id="modeSeg"><button data-mode="warp" aria-pressed="true">Warp corners</button><button data-mode="points" aria-pressed="false">Edit points</button></div>
+      <div class="seg" id="modeSeg"><button data-mode="warp" aria-pressed="true">Corners</button><button data-mode="points" aria-pressed="false">Points</button><button data-mode="mesh" aria-pressed="false">Bend</button></div>
       <p class="note" id="modeHint"></p>
+    </div>
+    <div class="group">
+      <h3>Bend and soften</h3>
+      <div class="row"><label class="note" for="meshSize">Bend grid</label>
+        <select id="meshSize"><option value="0">Off (flat)</option><option value="2">2 × 2</option><option value="3">3 × 3</option><option value="4">4 × 4</option><option value="6">6 × 6</option><option value="8">8 × 8</option></select></div>
+      <div class="row"><label class="note" for="feather">Soft edge</label><input type="range" id="feather" min="0" max="60" step="1" value="0" style="flex:1"><span class="mono" id="featherOut">0 px</span></div>
+      <p class="note">For walls that bow, fabric and other gently curved things. Turning the grid off makes the surface flat again.</p>
     </div>
     <div class="group">
       <h3>Combine</h3>

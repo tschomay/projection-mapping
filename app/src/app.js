@@ -4,7 +4,7 @@
 // driven by sound.
 import { Renderer, MAX_MEDIA } from './renderer.js';
 import { EFFECTS } from './effects.js';
-import { surfaceGeom, newSurface } from './geometry.js';
+import { surfaceGeom, newSurface, flatMesh, meshEvaluator } from './geometry.js';
 import { Editor } from './editor.js';
 import { AudioEngine } from './audio.js';
 import { MediaLibrary } from './media.js';
@@ -720,7 +720,14 @@ class App {
     document.querySelectorAll('[data-add]').forEach((b) => {
       b.onclick = () => { this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length)); this.toast('Drag it onto a real surface, then drag its corners into place.'); };
     });
-    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => { this.editor.mode = b.dataset.mode; this.editor.selVert = null; this.editor.selPin = -1; this.changed({ geometry: false, save: false }); }; });
+    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => {
+      const ed = this.editor, s = this.project.surfaces[ed.sel];
+      ed.mode = b.dataset.mode; ed.selVert = null; ed.selPin = -1; ed.selMesh = -1;
+      if (ed.mode === 'mesh' && s && !s.mesh) { this.setMesh(s, 3); return; }   // a grid to bend, to start with
+      this.changed({ geometry: false, save: false });
+    }; });
+    $('meshSize').onchange = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) this.setMesh(s, +e.target.value); };
+    $('feather').oninput = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) { s.feather = +e.target.value; $('featherOut').textContent = s.feather + ' px'; this.changed(); } };
     $('partAdd').onclick = () => this.editor.addPart($('partShape').value, 1);
     $('partCut').onclick = () => this.editor.addPart($('partShape').value, -1);
     $('delPoint').onclick = () => { const err = this.editor.deletePoint(); if (err) this.toast(err); };
@@ -877,11 +884,29 @@ class App {
     const has = ed.sel >= 0;
     for (const id of ['partAdd', 'partCut', 'dupSurface', 'delSurface']) $(id).disabled = !has;
     $('delPoint').disabled = !(has && ed.mode === 'points' && ed.selVert);
+    const s = this.project.surfaces[ed.sel];
+    $('meshSize').disabled = $('feather').disabled = !has;
+    $('meshSize').value = s && s.mesh ? String(s.mesh.n[0]) : '0';
+    $('feather').value = s ? s.feather || 0 : 0;
+    $('featherOut').textContent = (s ? s.feather || 0 : 0) + ' px';
     $('modeHint').textContent = !has ? 'Tap a surface to select it.'
       : ed.mode === 'warp' ? 'Drag the four corner dots onto the real surface\'s corners. Drag inside to move it.'
+      : ed.mode === 'mesh' ? 'Set the corners first. Then drag the grid points so the outline and content follow a curved or bowed surface.'
       : 'Drag a square to move a point. Drag a ring on an edge to add one. Double-tap a point to remove it. Drag inside a shape to move just that shape.';
     this.renderNudge();
   }
+  // give a surface an n x n bend grid (keeping its current shape), or none
+  setMesh(s, n) {
+    if (!n) { delete s.mesh; if (this.editor.mode === 'mesh') this.editor.mode = 'warp'; }
+    else {
+      const old = s.mesh, m = flatMesh(n, n);
+      if (old) { const f = meshEvaluator(old); m.pts = m.pts.map(([u, v]) => f(u, v)); }
+      s.mesh = m;
+    }
+    this.editor.selMesh = -1;
+    this.changed();
+  }
+
   renderNudge() {
     const t = this.editor && !document.body.classList.contains('show') ? this.editor.nudgeTarget() : '';
     const pad = $('nudge');
