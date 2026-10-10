@@ -79,8 +79,14 @@ class App {
 
   sync() {
     const [W, H] = this.frame;
-    // the project's own effects join the built-in ones (recompiles only when they change)
-    const err = this.renderer.setEffects((this.project.effects || []).map((e) => ({ id: e.id, code: namespaced(e.id, e.code) })));
+    // the effects in use (on the surfaces, in any cue, or fading out) are compiled; recompiles only when that
+    // set or the project's own effects change, so cues never wait for a compile mid-show
+    const used = new Set();
+    const note = (c) => { if (c && c.kind !== 'media') used.add(c.effect || 'outline'); };
+    for (const s of this.project.surfaces) note(s.content);
+    for (const cue of this.project.cues || []) Object.values(cue.looks || {}).forEach(note);
+    if (this.show.fade) Object.values(this.show.fade.from).forEach(note);
+    const err = this.renderer.setEffects((this.project.effects || []).map((e) => ({ id: e.id, code: namespaced(e.id, e.code) })), used);
     if (err && !IS_OUTPUT) this.toast('One of this project\'s own effects no longer compiles here.');
     this.geoms = this.project.surfaces.map((s) => surfaceGeom(s, W, H));
     // media used by surfaces get the four texture slots, in order of first use
@@ -216,6 +222,7 @@ class App {
     const ok = store.saveProject(this.project);
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
+    this.refreshSendLink();
   }
 
   // media worth keeping with the project: on a surface now, in any cue's look, the soundtrack, or the design photo
@@ -405,7 +412,7 @@ class App {
     // open the last project, or start one
     const idx = store.listProjects();
     const last = idx.current && store.loadProject(idx.current);
-    this.openProject(last || store.newProject());
+    this.opening = this.openProject(last || store.newProject());
 
     $('toolsBtn').onclick = () => this.toggleDrawer();
     $('closeDrawer').onclick = () => this.toggleDrawer(false);
@@ -480,8 +487,9 @@ class App {
 // each drawer pane's wiring and rendering lives in its own module under ui/
 Object.assign(App.prototype, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI);
 
-// offline support when served over http(s); unavailable in embedded previews, which is fine
-if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+// offline support when served over http(s); unavailable in embedded previews, which is fine, and not used
+// inside a Claude artifact, where the platform serves the files
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.claude) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

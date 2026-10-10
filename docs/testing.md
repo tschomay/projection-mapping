@@ -29,6 +29,8 @@ in the issue listed, or paste the *Check this device* report there.
       or lock after a few minutes; double-tap brings the editor back.
 - [ ] Reload: the mapping is exactly as it was.
 - [ ] *Export file*, then *Import file* on another device (#14).
+- [ ] Only the effects in use are built into the shader now, so the first
+      time you pick an effect there may be a short hitch. Is it noticeable?
 
 ### Media and sound (#12, #13)
 - [ ] Add a video from the gallery to a surface. Play: it's in perspective on
@@ -55,10 +57,25 @@ in the issue listed, or paste the *Check this device* report there.
       in on the beat count you set? (#13, #21)
 - [ ] Reload: cues and any media used only in a cue are still there.
 
-### AI effects (#9; needs an Anthropic API key)
-- [ ] *Content → Describe a look*, paste your key, *Save key*.
+### Halloween effects and the studio
+- [ ] *Content → Halloween*: Bats, Glowing eyes, Ghostly fog, Lightning and
+      Candle glow each look right on the phone, and the frame rate stays
+      smooth with two or three surfaces showing them.
+- [ ] Open the [studio artifact](https://claude.ai/artifact/QDTC5ZPeQj6U5AHwMxJieL)
+      in the Claude app on the phone. *Describe a look* shows no key box and
+      says it uses your Claude plan. Write an effect; Claude asks once.
+- [ ] In the studio, *Project → Open in Surface Mapper*: the app opens with
+      the same surfaces, effects and cues, as a new project.
+- [ ] In the app, *Project → Share a link* on the phone: the share sheet
+      opens; send it to another device and open it there.
+
+### AI effects (#9; needs a Gemini or Anthropic API key)
+- [ ] *Content → Describe a look*, paste a Gemini key (AIza…) from Google AI
+      Studio, *Save key*. The button says *Write it with Gemini*.
 - [ ] Describe a look; within about a minute an effect appears marked ✦ and
       shows on the surfaces. Try one that should follow the beat.
+- [ ] In Google AI Studio's usage page, note what one effect cost (expected:
+      a few thousand tokens, 1 to 3 cents, or free on the free tier).
 - [ ] Try something heavy ("lots of swirling particles"): if the phone
       can't keep up, the previous look should come back on its own.
 - [ ] *Export file*: the file has no key in it. *Forget my key* removes it.

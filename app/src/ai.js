@@ -1,13 +1,34 @@
-// AI-written effects (roadmap #9): describe a look, and Claude writes a new effect for the mapped surfaces.
-// The app calls the Claude API straight from the browser with the user's own API key, kept on this device only
-// (never in project files). The SDK loads from a CDN the first time it's needed, so the rest of the app still
-// works offline.
+// AI-written effects (roadmap #9): describe a look, and an AI model writes a new effect for the mapped surfaces.
+// Three ways to reach a model, tried in this order:
+// - Running as a Claude artifact: the viewer's own Claude plan, through the artifact runtime's `sample`
+//   capability. No key; Claude asks the viewer once before the first request.
+// - A Gemini API key (AIza…): Google's Interactions API, called straight from the browser.
+// - An Anthropic API key (sk-ant-…): the Claude API through the official SDK, loaded from a CDN when first needed.
+// Keys stay on this device only (never in project files), and the rest of the app still works offline.
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.127.0/+esm';
 const MODEL = 'claude-opus-5-5';
-const KEY_STORE = 'pm.anthropicKey';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+const GEMINI_MODEL = 'gemini-3.8-flash';
+const KEY_STORES = { anthropic: 'pm.anthropicKey', gemini: 'pm.geminiKey' };
 
-export function getKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch { return ''; } }
-export function setKey(k) { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); return true; } catch { return false; } }
+export const keyKind = (k) => /^sk-ant-/.test(k) ? 'anthropic' : /^AIza[\w-]{30,}$/.test(k) ? 'gemini' : null;
+const load = (name) => { try { return localStorage.getItem(name) || ''; } catch { return ''; } };
+export function getKey() { return load(KEY_STORES.gemini) || load(KEY_STORES.anthropic); }
+// saving a key replaces any other; an empty key forgets both
+export function setKey(k) {
+  try {
+    for (const name of Object.values(KEY_STORES)) localStorage.removeItem(name);
+    if (k) localStorage.setItem(KEY_STORES[keyKind(k)], k);
+    return true;
+  } catch { return false; }
+}
+
+// the viewer's Claude plan when the app runs as a Claude artifact, else null (decided at once outside one)
+let planPromise = null;
+export function claudePlan() {
+  if (!window.claude?.use) return Promise.resolve(null);
+  return planPromise ||= Promise.resolve(window.claude.use('sample')).catch(() => null);
+}
 
 const SYSTEM = `You write visual effects for Surface Mapper, a projection mapping app. A projector lights real objects; the app maps flat "surfaces" onto them, and every surface runs an effect: a GLSL ES 3.00 function that returns the colour for one pixel.
 
@@ -60,61 +81,138 @@ export function extractCode(text) {
   return /vec3\s+fx_custom\s*\(/.test(code) ? code : null;
 }
 
+// --- the three backends. ask(turns, signal) takes [{ role: 'user'|'assistant', content, raw? }] and returns
+// { text, raw }; raw is the reply as the API gave it, handed back unchanged in a repair round.
+
 let sdk = null;
-async function client(apiKey) {
+async function anthropicBackend(apiKey) {
   if (!sdk) {
     try { sdk = (await import(SDK_URL)).default; } catch { throw new Error("Couldn't load the Claude SDK. Check the internet connection."); }
   }
-  return new sdk({ apiKey, dangerouslyAllowBrowser: true });   // the user's own key, on their own device
+  const c = new sdk({ apiKey, dangerouslyAllowBrowser: true });   // the user's own key, on their own device
+  return {
+    name: 'Claude',
+    async ask(turns, signal) {
+      const stream = c.beta.messages.stream({
+        model: MODEL,
+        max_tokens: 16000,
+        system: SYSTEM,
+        output_config: { effort: 'medium' },
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        messages: turns.map((m) => ({ role: m.role, content: m.raw || m.content })),
+      }, { signal });
+      const msg = await stream.finalMessage();
+      if (msg.stop_reason === 'refusal') throw new Error('Claude declined that request. Try describing the look differently.');
+      return { text: msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n'), raw: msg.content };
+    },
+    explain(err) {
+      if (err instanceof sdk.AuthenticationError) return 'That API key was refused. Check it in Content → Describe a look.';
+      if (err instanceof sdk.RateLimitError) return 'Rate limited by the API. Wait a moment and try again.';
+      if (err instanceof sdk.APIConnectionError) return "Couldn't reach the Claude API. Check the internet connection.";
+      if (err instanceof sdk.APIError) return `The API returned an error${err.status ? ' (' + err.status + ')' : ''}: ${err.message}`;
+      return null;
+    },
+  };
 }
 
-async function ask(c, messages, signal) {
-  const stream = c.beta.messages.stream({
-    model: MODEL,
-    max_tokens: 16000,
-    system: SYSTEM,
-    output_config: { effort: 'medium' },
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    messages,
-  }, { signal });
-  const msg = await stream.finalMessage();
-  if (msg.stop_reason === 'refusal') throw new Error("Claude declined that request. Try describing the look differently.");
-  return msg;
+// The artifact runtime's sample(): no system prompt and no memory, so the instructions lead the first turn.
+const PLAN_ERRORS = {
+  not_granted: 'Claude needs your OK to write effects. Reload and allow it when asked.',
+  rate_limited: 'Too many requests just now. Wait a minute and try again.',
+  queue_overflow: 'Too many requests just now. Wait a minute and try again.',
+  refused: 'Claude declined that request. Try describing the look differently.',
+  sampling_disabled: "Writing with Claude is turned off for this account, so it can't write effects here.",
+  capability_disabled: "Writing with Claude is turned off for this account, so it can't write effects here.",
+  session_expired: 'Your Claude session expired. Reload the page and sign in again.',
+  empty_completion: 'Claude sent back an empty answer. Try again.',
+  upstream_error: "Couldn't reach Claude just now. Try again in a moment.",
+};
+function planBackend(sample) {
+  return {
+    name: 'Claude',
+    async ask(turns, signal) {
+      const input = turns.map((m, i) => ({ role: m.role, content: i === 0 ? `${SYSTEM}\n\n${m.content}` : m.content }));
+      const { text } = await sample(input, { signal, modelTier: 'default' });
+      return { text };
+    },
+    explain(err) { return err && typeof err.code === 'string' ? PLAN_ERRORS[err.code] || `Claude couldn't write it (${err.code}).` : null; },
+  };
 }
 
-const textOf = (msg) => msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+// Gemini through the Interactions API, one stateless request per round (store: false keeps nothing on
+// Google's side); a repair round sends the earlier turns again as text.
+class GeminiError extends Error {}
+function geminiBackend(apiKey) {
+  return {
+    name: 'Gemini',
+    async ask(turns, signal) {
+      const input = turns.length === 1 ? turns[0].content
+        : turns.map((m) => `${m.role === 'user' ? 'USER' : 'YOU'}:\n${m.content}`).join('\n\n');
+      let res;
+      try {
+        res = await fetch(GEMINI_URL, {
+          method: 'POST', signal,
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({ model: GEMINI_MODEL, input, system_instruction: SYSTEM, store: false, generation_config: { max_output_tokens: 16000, thinking_level: 'medium' } }),
+        });
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        throw new GeminiError("Couldn't reach the Gemini API. Check the internet connection.");
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const e = (Array.isArray(body) ? body[0] : body)?.error || {};
+        const reason = (e.details || []).map((d) => d.reason).find(Boolean);
+        if (reason === 'API_KEY_INVALID' || res.status === 401 || res.status === 403) throw new GeminiError('That Gemini API key was refused. Check it in Content → Describe a look.');
+        if (res.status === 429) throw new GeminiError('Gemini says the quota is used up for now. Wait a minute, or check your plan in Google AI Studio.');
+        throw new GeminiError(`The Gemini API returned an error (${res.status}): ${e.message || res.statusText}`);
+      }
+      const text = geminiText(body);
+      if (!text) {
+        const why = body.errors?.[0]?.message || body.status;
+        throw new GeminiError(`Gemini didn't write anything${why ? ' (' + why + ')' : ''}. Try describing the look differently.`);
+      }
+      return { text };
+    },
+    explain: (err) => err instanceof GeminiError ? err.message : null,
+  };
+}
+// the model's text from an Interaction: model_output steps (thought steps are skipped)
+export function geminiText(body) {
+  const steps = body.steps || body.outputs || [];
+  return steps.flatMap((s) => s.type === 'model_output' ? (s.content || []) : s.type === 'text' ? [s] : [])
+    .filter((c) => c.type === 'text' && c.text).map((c) => c.text).join('\n');
+}
 
 // Ask for an effect; compile(code) returns null or the compiler log. One repair round on a compile error.
-// Returns { code, note, repaired }.
-export async function generateEffect({ apiKey, request, context, compile, signal, progress = () => {} }) {
-  if (!apiKey) throw new Error('Add your Anthropic API key first.');
-  const c = await client(apiKey);
-  const messages = [{ role: 'user', content: `${context}\n\nThe look I want: ${request}` }];
-  let msg;
+// Uses the Claude plan when given one (sample), else the saved key. Returns { code, note, repaired }.
+export async function generateEffect({ sample = null, apiKey, request, context, compile, signal, progress = () => {} }) {
+  const kind = sample ? 'plan' : keyKind(apiKey || '');
+  if (!kind) throw new Error('Add a Gemini or Anthropic API key first.');
+  let backend = null;
   try {
+    backend = kind === 'plan' ? planBackend(sample) : kind === 'gemini' ? geminiBackend(apiKey) : await anthropicBackend(apiKey);
+    const turns = [{ role: 'user', content: `${context}\n\nThe look I want: ${request}` }];
     progress('Writing the effect…');
-    msg = await ask(c, messages, signal);
-    let code = extractCode(textOf(msg));
-    if (!code) throw new Error("Claude's reply didn't contain an effect. Try again.");
+    let reply = await backend.ask(turns, signal);
+    let code = extractCode(reply.text);
+    if (!code) throw new Error(`${backend.name}'s reply didn't contain an effect. Try again.`);
+    const note = reply.text.split('```')[0].trim();
     const log = compile(code);
-    if (!log) return { code, note: textOf(msg).split('```')[0].trim(), repaired: false };
-    const note = textOf(msg).split('```')[0].trim();
+    if (!log) return { code, note, repaired: false };
     progress('Fixing a compile error…');
-    messages.push({ role: 'assistant', content: msg.content });   // append-only: the reply as it came back
-    messages.push({ role: 'user', content: `That failed to compile with:\n${log}\nReturn the corrected function in one \`\`\`glsl block.` });
-    msg = await ask(c, messages, signal);
-    code = extractCode(textOf(msg));
+    turns.push({ role: 'assistant', content: reply.text, raw: reply.raw });   // append-only: the reply as it came back
+    turns.push({ role: 'user', content: `That failed to compile with:\n${log}\nReturn the corrected function in one \`\`\`glsl block.` });
+    reply = await backend.ask(turns, signal);
+    code = extractCode(reply.text);
     const log2 = code ? compile(code) : 'no code in the reply';
     if (log2) throw new Error("The effect still didn't compile after one repair:\n" + log2.split('\n').slice(0, 3).join('\n'));
     return { code, note, repaired: true };
   } catch (err) {
-    if (err.name === 'AbortError' || signal?.aborted) throw new Error('Cancelled.');
-    if (sdk && err instanceof sdk.AuthenticationError) throw new Error('That API key was refused. Check it in Content → Describe a look.');
-    if (sdk && err instanceof sdk.RateLimitError) throw new Error('Rate limited by the API. Wait a moment and try again.');
-    if (sdk && err instanceof sdk.APIConnectionError) throw new Error("Couldn't reach the Claude API. Check the internet connection.");
-    if (sdk && err instanceof sdk.APIError) throw new Error(`The API returned an error${err.status ? ' (' + err.status + ')' : ''}: ${err.message}`);
-    throw err;
+    if (err.name === 'AbortError' || err.code === 'cancelled' || signal?.aborted) throw new Error('Cancelled.');
+    const msg = backend?.explain(err);
+    throw msg ? new Error(msg) : err;
   }
 }
 

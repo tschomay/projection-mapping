@@ -176,10 +176,12 @@ export class Renderer {
     this.program = this.compile(buildFragment());
   }
 
-  // built-in effects plus the project's own (AI-written) ones; each custom effect is { id, code }.
+  // built-in effects plus the project's own (AI-written) ones; each custom effect is { id, code }. Only the
+  // effects in `used` (ids) are compiled, with the alignment grid and Off always there: a GPU pays for every
+  // effect in the shader, used or not, so a long list of unused effects would slow every frame.
   // Returns null, or the compiler log (the previous effects stay in place).
-  setEffects(custom = []) {
-    const all = EFFECTS.concat(custom);
+  setEffects(custom = [], used = null) {
+    const all = EFFECTS.concat(custom).filter((e) => !used || used.has(e.id) || e.id === 'outline' || e.id === 'off');
     if (all.map((e) => e.id).join() === this.effects.map((e) => e.id).join() && all.every((e, i) => e.code === this.effects[i].code)) return null;
     const old = { program: this.program, u: this.u };
     try {

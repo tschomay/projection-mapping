@@ -1,8 +1,9 @@
 // Project pane: projects, import and export, the design photo, the device check, connecting the projector.
 // Methods mixed into App (see app.js), so `this` is the app.
 import { deviceReport, cameraReport, reportText } from '../diagnostics.js';
-import { $ } from '../env.js';
+import { $, COARSE } from '../env.js';
 import * as store from '../store.js';
+import { projectLink, readProjectLink, APP_URL } from '../share.js';
 
 export const projectUI = {
   initProjectUI() {
@@ -18,6 +19,17 @@ export const projectUI = {
       this.toast('Project deleted.');
     };
     $('exportProj').onclick = () => this.exportProject();
+    // Inside a Claude artifact this is a real link to the installable app, kept up to date as the project is
+    // saved (scripts there can't open windows for most viewers); elsewhere it shares or copies a link.
+    const send = $('sendLink');
+    if (window.claude) {
+      send.textContent = 'Open in Surface Mapper';
+      send.onclick = () => { $('linkStatus').textContent = (this.project.media || []).length ? 'Opened in Surface Mapper. Videos and images stay here; add them again there.' : 'Opened in Surface Mapper.'; };
+      this.refreshSendLink();
+    } else {
+      send.onclick = (e) => { e.preventDefault(); this.sendLink(); };
+    }
+    this.importLink();
     $('importProj').onchange = async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
@@ -35,7 +47,8 @@ export const projectUI = {
     for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
     $('closeConnect').onclick = () => sheet.close();
     sheet.addEventListener('close', () => store.setFlag('connectSeen'));
-    if (!store.getFlag('connectSeen') && sheet.showModal) sheet.showModal();
+    // (not in the Claude artifact studio, which is for designing; the show itself runs in the installed app)
+    if (!store.getFlag('connectSeen') && sheet.showModal && !window.claude) sheet.showModal();
   },
 
   async exportProject() {
@@ -51,6 +64,49 @@ export const projectUI = {
     a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
     a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  },
+
+  async refreshSendLink() {
+    if (!window.claude) return;
+    try { $('sendLink').href = await projectLink(this.project, APP_URL); } catch { $('sendLink').hidden = true; }
+  },
+
+  // one tap: the project as a link (see share.js), shared or copied
+  async sendLink() {
+    this.save();
+    const status = $('linkStatus');
+    let url;
+    try {
+      url = await projectLink(this.project, location.origin + location.pathname);
+    } catch {
+      status.textContent = "This browser can't make project links. Use Export file instead."; return;
+    }
+    const after = (this.project.media || []).length ? ' Videos and images stay here; add them again there.' : '';
+    if (navigator.share && COARSE) {
+      try { await navigator.share({ title: this.project.name, url }); status.textContent = 'Link shared.' + after; return; } catch (err) { if (err.name === 'AbortError') return; }
+    }
+    let copied = false;
+    try { await navigator.clipboard.writeText(url); copied = true; } catch { /* show the link instead */ }
+    status.innerHTML = '';
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'the link';
+    status.append(copied ? 'Link copied: ' : 'Your link: ', a, '.' + after);
+  },
+
+  // a project arriving in a link: open it as a new project, then drop the fragment so a reload doesn't repeat it
+  async importLink() {
+    if (!location.hash.startsWith('#import=')) return;
+    const hash = location.hash;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const p = store.parseProject(await readProjectLink(hash));
+      await this.opening;
+      await this.openProject(p);
+      this.save();
+      this.toast(`Opened "${p.name}" from the link.` + ((p.media || []).length ? ' Add its videos and images again on this device.' : ''), 5000);
+    } catch (err) {
+      this.toast(err.message || "That link couldn't be read.", 5000);
+    }
   },
 
   renderProjectList() {
