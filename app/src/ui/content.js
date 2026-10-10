@@ -2,7 +2,7 @@
 // Methods mixed into App (see app.js), so `this` is the app.
 import { MAX_MEDIA } from '../renderer.js';
 import { EFFECTS } from '../effects.js';
-import { generateEffect, describeSurfaces, getKey, setKey, namespaced } from '../ai.js';
+import { generateEffect, describeSurfaces, getKey, setKey, keyKind, claudePlan, namespaced } from '../ai.js';
 import { $ } from '../env.js';
 
 export const contentUI = {
@@ -34,7 +34,11 @@ export const contentUI = {
   renderEffectList() {
     const own = this.project.effects || [];
     const esc = (t) => String(t).replace(/[<&"]/g, '');
-    $('effectList').innerHTML = EFFECTS.map((e) => `<button class="chip" data-effect="${e.id}">${e.name}</button>`).join('') +
+    let group = '';
+    $('effectList').innerHTML = EFFECTS.map((e) => {
+      const head = (e.group || '') !== group && (group = e.group || '') ? `<span class="chip-group">${group}</span>` : '';
+      return head + `<button class="chip" data-effect="${e.id}">${e.name}</button>`;
+    }).join('') +
       own.map((e) => `<span class="chip own" data-effect="${e.id}" role="button" tabindex="0" title="${esc(e.prompt || '')}">✦ ${esc(e.name)}<button data-del aria-label="Delete ${esc(e.name)}">×</button></span>`).join('');
     this.renderContentUI();
   },
@@ -47,16 +51,24 @@ export const contentUI = {
 
   initAI() {
     const status = $('aiStatus');
-    const showKey = () => { const has = !!getKey(); $('aiKeyRow').hidden = has; $('aiKeyForget').hidden = !has; $('aiGo').disabled = !has; };
+    this.aiPlan = null;   // the viewer's Claude plan, when running as a Claude artifact
+    this.aiReady = () => !!(this.aiPlan || getKey());
+    const showKey = () => {
+      const k = getKey(), plan = !!this.aiPlan;
+      $('aiKeyRow').hidden = plan || !!k; $('aiKeyForget').hidden = plan || !k; $('aiKeyNote').hidden = plan; $('aiPlanNote').hidden = !plan;
+      $('aiGo').disabled = !this.aiReady();
+      $('aiGo').textContent = !plan && keyKind(k) === 'gemini' ? 'Write it with Gemini' : 'Write it with Claude';
+    };
     $('aiKeySave').onclick = () => {
       const k = $('aiKey').value.trim();
-      if (!/^sk-ant-/.test(k)) { status.textContent = 'That doesn\'t look like an Anthropic API key (they start with sk-ant-).'; return; }
+      if (!keyKind(k)) { status.textContent = "That doesn't look like an API key. Gemini keys start with AIza, Anthropic keys with sk-ant-."; return; }
       setKey(k); $('aiKey').value = ''; showKey(); status.textContent = 'Key saved on this device.';
     };
     $('aiKeyForget').onclick = () => { setKey(''); showKey(); status.textContent = 'Key removed from this device.'; };
     $('aiGo').onclick = () => this.runAI();
     $('aiCancel').onclick = () => this.aiAbort?.abort();
     showKey();
+    claudePlan().then((sample) => { if (sample) { this.aiPlan = sample; showKey(); } });
   },
 
   async runAI() {
@@ -68,7 +80,7 @@ export const contentUI = {
     $('aiGo').disabled = true; $('aiCancel').hidden = false;
     try {
       const res = await generateEffect({
-        apiKey: getKey(), request, signal: this.aiAbort.signal,
+        sample: this.aiPlan, apiKey: getKey(), request, signal: this.aiAbort.signal,
         context: describeSurfaces(this.project.surfaces, this.geoms, this.frame),
         compile: (code) => this.renderer.tryEffect(id, namespaced(id, code)),
         progress: (t) => { status.textContent = t; },
@@ -85,7 +97,7 @@ export const contentUI = {
     } catch (err) {
       status.textContent = err.message;
     } finally {
-      $('aiGo').disabled = !getKey(); $('aiCancel').hidden = true;
+      $('aiGo').disabled = !this.aiReady(); $('aiCancel').hidden = true;
     }
   },
 

@@ -1,6 +1,9 @@
-// AI-written effects (roadmap #9) without calling the real API: the SDK module the app loads from the CDN is
-// replaced by a fake that records each request and answers from a script. Checks the request (model, fallbacks,
-// the surfaces described), the one compile-repair round, applying the effect, refusals, and the key handling.
+// AI-written effects (roadmap #9) without calling any real API. Three ways in:
+// - an Anthropic key: the SDK module the app loads from the CDN is replaced by a fake that records each request
+//   and answers from a script. Checks the request (model, fallbacks, the surfaces described), the one
+//   compile-repair round, applying the effect, refusals, and the key handling.
+// - a Gemini key: the Interactions API endpoint is answered by a route.
+// - running as a Claude artifact: window.claude is stubbed with a fake sample() capability.
 import { serveApp, loadPlaywright, BROWSER_ARGS, reporter } from './serve.mjs';
 
 const FAKE_SDK = `
@@ -77,7 +80,64 @@ export default async function run() {
     t.ok(await page.evaluate(() => !window.app.project.effects.length && window.app.project.surfaces.every((s) => s.content.effect === 'outline')), 'deleting the effect resets the surfaces using it');
     await page.click('#aiKeyForget');
     t.ok(await page.evaluate(() => !localStorage.getItem('pm.anthropicKey') && document.getElementById('aiGo').disabled), 'Forget my key removes it');
+
+    // ---- a Gemini key, through the Interactions API ----
+    const gemini = [];
+    const geminiReplies = [];
+    await ctx.route(/generativelanguage\.googleapis\.com\/v1beta\/interactions/, (route) => {
+      const req = route.request();
+      gemini.push({ body: JSON.parse(req.postData()), key: req.headers()['x-goog-api-key'] });
+      const r = geminiReplies.shift();
+      route.fulfill({ status: r.status || 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(r.body) });
+    });
+    const interaction = (text) => ({ body: { id: 'v1_x', object: 'interaction', status: 'completed', steps: [{ type: 'thought', signature: 'abc' }, { type: 'model_output', content: [{ type: 'text', text }] }] } });
+    await page.fill('#aiKey', 'AIzaSyTest_0123456789abcdefghijklmnopq'); await page.click('#aiKeySave');
+    t.ok(await page.evaluate(() => !document.getElementById('aiGo').disabled && /Gemini/.test(document.getElementById('aiGo').textContent) && localStorage.getItem('pm.geminiKey') && !localStorage.getItem('pm.anthropicKey')), 'a Gemini key is recognised and replaces any other key');
+    geminiReplies.push(interaction(BROKEN), interaction(FIXED));
+    await page.fill('#aiPrompt', 'green rings'); await page.click('#aiGo');
+    await page.waitForFunction(() => document.getElementById('aiCancel').hidden, null, { timeout: 30000 });
+    const [g1, g2] = gemini;
+    t.ok(g1 && g1.key.startsWith('AIza') && g1.body.model === 'gemini-3.8-flash' && g1.body.store === false && /fx_custom/.test(g1.body.system_instruction) && /green rings/.test(g1.body.input), 'the Gemini request names the model, sends the instructions, keeps nothing stored');
+    t.ok(g2 && /float r = c_ring\(s\.uv\)/.test(g2.body.input) && /ERROR/i.test(g2.body.input), 'the repair round sends the broken code and the compiler log');
+    const gs = await page.evaluate(() => [window.app.project.effects.length, document.getElementById('aiStatus').textContent]);
+    t.ok(gs[0] === 1 && /Fixed a compile error/.test(gs[1]), 'the repaired Gemini effect is added: ' + gs.join(' / '));
+    geminiReplies.push({ status: 400, body: { error: { code: 400, message: 'API key not valid.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } } });
+    await page.fill('#aiPrompt', 'another'); await page.click('#aiGo');
+    await page.waitForFunction(() => /refused/.test(document.getElementById('aiStatus').textContent), null, { timeout: 10000 }).then(() => t.ok(true, 'a refused Gemini key is reported'), () => t.ok(false, 'a refused Gemini key is reported'));
+    await page.click('#aiKeyForget');
+
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+
+    // ---- as a Claude artifact: the viewer's plan, no key ----
+    const ctx2 = await browser.newContext({ viewport: { width: 844, height: 390 } });
+    await ctx2.addInitScript(() => {
+      window.__samples = []; window.__sampleReplies = [];
+      const sample = async (input, opts) => {
+        window.__samples.push({ input, modelTier: opts?.modelTier });
+        const r = window.__sampleReplies.shift();
+        if (r && r.code) throw r;
+        return { text: r, truncated: false };
+      };
+      window.claude = { use: async (name) => (name === 'sample' ? sample : null) };
+    });
+    const page2 = await ctx2.newPage();
+    page2.on('pageerror', (e) => errors.push(e.message));
+    await page2.goto(server.url);
+    await page2.waitForFunction(() => window.app && window.app.editor && !document.getElementById('aiGo').disabled, null, { timeout: 10000 });
+    await page2.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); window.app.selectTab('content'); document.querySelector('[data-add="square"]').click(); });
+    t.ok(await page2.evaluate(() => document.getElementById('aiKeyRow').hidden && !document.getElementById('aiPlanNote').hidden && document.getElementById('aiKeyNote').hidden), 'in an artifact there is no key to enter; the note says it uses the Claude plan');
+    t.ok(await page2.evaluate(() => !navigator.serviceWorker || navigator.serviceWorker.getRegistrations().then((r) => !r.length)), 'no offline cache inside an artifact');
+    await page2.evaluate(([a, b]) => { window.__sampleReplies.push(a, b); }, [BROKEN, FIXED]);
+    await page2.fill('#aiPrompt', 'blue rings'); await page2.click('#aiGo');
+    await page2.waitForFunction(() => document.getElementById('aiCancel').hidden, null, { timeout: 30000 });
+    const sp = await page2.evaluate(() => ({ s: window.__samples, n: window.app.project.effects.length }));
+    t.ok(sp.n === 1 && sp.s.length === 2, 'the effect is written through sample(), with one repair');
+    t.ok(Array.isArray(sp.s[0].input) && /fx_custom/.test(sp.s[0].input[0].content) && /blue rings/.test(sp.s[0].input[0].content) && sp.s[0].modelTier === 'default', 'the instructions lead the first turn (sample has no system prompt)');
+    t.ok(sp.s[1].input.length === 3 && sp.s[1].input[1].role === 'assistant' && /ERROR/i.test(sp.s[1].input[2].content), 'the repair sends the conversation so far');
+    await page2.evaluate(() => { window.__sampleReplies.push({ code: 'not_granted', message: 'declined' }); });
+    await page2.fill('#aiPrompt', 'red'); await page2.click('#aiGo');
+    await page2.waitForFunction(() => /needs your OK/.test(document.getElementById('aiStatus').textContent), null, { timeout: 10000 }).then(() => t.ok(true, 'a declined consent is explained'), () => t.ok(false, 'a declined consent is explained'));
+    t.ok(!errors.length, 'no page errors in the artifact' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();
   }

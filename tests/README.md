@@ -21,10 +21,11 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
 | `show.e2e.mjs` | Cues and timeline: three cues in sync with a generated 120 bpm song, jumping back, a tap in Show mode, and a cue that follows four beats. |
-| `ai.e2e.mjs` | AI-written effects with a fake SDK in place of the CDN module: the request (model, effort, refusal fallback, the surfaces described), one compile-repair round, applying the effect, a refusal, and key handling. No API key or network needed. |
+| `ai.e2e.mjs` | AI-written effects without any real API. With an Anthropic key, a fake SDK in place of the CDN module: the request (model, effort, refusal fallback, the surfaces described), one compile-repair round, applying the effect, a refusal, and key handling. With a Gemini key, a routed Interactions API: the request, the repair round, a refused key. As a Claude artifact, a stubbed `window.claude` sample(): no key box, the instructions in the first turn, the repair, declined consent. |
 | `mesh.e2e.mjs` | Bending a surface with its grid and softening its edge, read back from the rendered frame: the outline and content follow the bend, no seams between cells, the feather, and point editing through the bend. |
 | `limits.e2e.mjs` | Renderer limits: more than 2,048 outline points still draw; a 17th surface is refused; too many surfaces or shapes are reported in the Surfaces pane. |
 | `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. |
+| `share.e2e.mjs` | Project links: *Share a link* copies a link, a fresh browser opens it with surfaces, effects and cues, saves it and clears the fragment; a damaged link; in an artifact, *Open in Surface Mapper* is a plain link that follows edits. |
 | `scan.e2e.mjs` | *Find surfaces with the camera* end to end, with a fake camera that films the synthetic room lit by the app's patterns, with a lag like a mirrored projector. |
 
 `scene.mjs` is the synthetic room; `serve.mjs` serves `app/` on a free port and

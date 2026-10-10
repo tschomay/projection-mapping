@@ -10,6 +10,8 @@ viewpoint, so they come out pre-warped and continuous across edges.
 - [`docs/hardware.md`](docs/hardware.md): what to expect from a cheap
   projector indoors and outdoors, which projector and phone features matter,
   and outdoor practicalities.
+- [`docs/halloween.md`](docs/halloween.md): **a one-night setup**, bats on a
+  kitchen cabinet with a phone and a projector in about 15 minutes.
 - [`docs/testing.md`](docs/testing.md): **what to test on a real phone, TV and
   projector**, as a checklist, with where to report results.
 - [`docs/connecting.md`](docs/connecting.md): the ways a phone or laptop
@@ -20,7 +22,9 @@ viewpoint, so they come out pre-warped and continuous across edges.
 - [`app/`](app/README.md): **Surface Mapper**, the phone-first app. Trace
   surfaces on the projector frame, fill them with effects, video and images,
   and drive them with sound. Static files; deploys to Vercel as-is (see
-  `vercel.json`). Live at https://surface-mapper-alpha.vercel.app.
+  `vercel.json`). Live at https://surface-mapper-alpha.vercel.app. The same
+  app runs as a Claude artifact, the [studio](https://claude.ai/artifact/QDTC5ZPeQj6U5AHwMxJieL),
+  where AI effects use the viewer's Claude plan instead of an API key.
 - [`tests/`](tests/README.md): checks for the app, including a synthetic room
   and camera for testing surface capture without a projector. They run on every
   push.
