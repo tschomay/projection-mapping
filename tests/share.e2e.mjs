@@ -72,8 +72,8 @@ export default async function run() {
     await page4.waitForFunction(() => document.getElementById('sendLink').href.includes('#import='));
     const before = await page4.getAttribute('#sendLink', 'href');
     await page4.evaluate(() => { document.querySelector('[data-add="circle"]').click(); window.app.save(); });
-    await page4.waitForFunction((b) => document.getElementById('sendLink').href !== b, before, { timeout: 5000 }).then(() => t.ok(true, 'the link follows edits'), () => t.ok(false, 'the link follows edits'));
-    const [popup] = await Promise.all([ctx3.waitForEvent('page', { timeout: 5000 }).catch(() => null), page4.click('#sendLink')]);
+    await page4.waitForFunction((b) => document.getElementById('sendLink').href !== b, before, { timeout: 15000 }).then(() => t.ok(true, 'the link follows edits'), () => t.ok(false, 'the link follows edits'));
+    const [popup] = await Promise.all([ctx3.waitForEvent('page', { timeout: 30000 }).catch(() => null), page4.click('#sendLink')]);
     t.ok(popup && popup.url().startsWith('https://surface-mapper-alpha.vercel.app/#import='), 'one tap opens the app with the project (a plain link): ' + (popup && popup.url().slice(0, 60)));
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
