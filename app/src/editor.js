@@ -1,6 +1,6 @@
 // Touch-first editing of 2D surfaces on the projector frame.
 // Works in frame pixels (see App.frame); stores pins normalized so a project survives a change of screen.
-import { SHAPES, hApply, pointInPoly, insideSurface, dist } from './geometry.js';
+import { SHAPES, hApply, pointInPoly, insideSurface, dist, inputRect } from './geometry.js';
 import { MAX_PART_VERTS, MAX_SURF, MAX_PARTS } from './renderer.js';
 
 const HANDLE_CSS_PX = 22;   // touch target radius
@@ -17,6 +17,7 @@ export class Editor {
     this.selMesh = -1;        // bend grid point
     this.drag = null;
     this.snap = true;
+    this.compose = false;     // arranging which part of the composition each surface shows (roadmap #7)
     overlay.addEventListener('pointerdown', (e) => this.down(e));
     overlay.addEventListener('pointermove', (e) => this.move(e));
     overlay.addEventListener('pointerup', () => this.up());
@@ -52,6 +53,7 @@ export class Editor {
     this.canvas.setPointerCapture(e.pointerId);
     this.app.gesture();
     const p = this.toFrame(e), r = this.handleR();
+    if (this.compose) { this.composeDown(p, r); return; }
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (s && this.mode === 'warp') {
       const k = g.pins.findIndex((q) => dist(q, p) <= r);
@@ -98,6 +100,7 @@ export class Editor {
     const p = this.toFrame(e), s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (!s) return;
     const d = this.drag;
+    if (d.type === 'rect' || d.type === 'rcorner') { this.composeMove(s, d, p); return; }
     if (d.type === 'pin') s.pins[d.k] = this.norm(this.snapPoint(p));
     else if (d.type === 'vert') s.parts[d.j].pts[d.k] = g.toUV(...this.snapPoint(p));
     else if (d.type === 'mesh') s.mesh.pts[d.k] = hApply(g.Hi, ...p);
@@ -114,7 +117,7 @@ export class Editor {
   up() { if (this.drag) { this.drag = null; this.app.changed({ geometry: false, save: true }); } }
 
   dbl(e) {
-    if (this.mode !== 'points' || !this.surfaces[this.sel]) return;
+    if (this.compose || this.mode !== 'points' || !this.surfaces[this.sel]) return;
     const p = this.toFrame(e), g = this.geoms[this.sel];
     for (let j = 0; j < g.parts.length; j++) {
       const k = g.parts[j].px.findIndex((q) => dist(q, p) <= this.handleR());
@@ -158,7 +161,8 @@ export class Editor {
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (!s) return;
     const [W, H] = this.app.frame;
-    if (this.mode === 'warp' && this.selPin >= 0) { const q = s.pins[this.selPin]; s.pins[this.selPin] = [q[0] + dx / W, q[1] + dy / H]; }
+    if (this.compose) { const r = inputRect(s); s.input = { ...r, x: r.x + dx / W, y: r.y - dy / H }; }
+    else if (this.mode === 'warp' && this.selPin >= 0) { const q = s.pins[this.selPin]; s.pins[this.selPin] = [q[0] + dx / W, q[1] + dy / H]; }
     else if (this.mode === 'points' && this.selVert) {
       const q = g.parts[this.selVert.j].px[this.selVert.k];
       s.parts[this.selVert.j].pts[this.selVert.k] = g.toUV(q[0] + dx, q[1] + dy);
@@ -170,10 +174,86 @@ export class Editor {
   }
   nudgeTarget() {
     if (this.sel < 0) return '';
+    if (this.compose) return 'content rectangle';
     if (this.mode === 'warp' && this.selPin >= 0) return 'corner';
     if (this.mode === 'points' && this.selVert) return 'point';
     if (this.mode === 'mesh' && this.selMesh >= 0) return 'bend point';
     return 'surface';
+  }
+
+  // ---- arranging the composition: each surface's input rectangle, drawn over the whole frame ----
+  // a rectangle in screen units (y up) as frame pixels: left, top, width, height
+  rectPx(r) { const [W, H] = this.app.frame; return [r.x * W, (1 - r.y - r.h) * H, r.w * W, r.h * H]; }
+
+  composeDown(p, r) {
+    const inside = (i) => { const [x, y, w, h] = this.rectPx(inputRect(this.surfaces[i])); return p[0] >= x && p[0] <= x + w && p[1] >= y && p[1] <= y + h; };
+    const s = this.surfaces[this.sel];
+    if (s) {
+      const [x, y, w, h] = this.rectPx(inputRect(s)), c = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+      const k = c.findIndex((q) => dist(q, p) <= r);
+      if (k >= 0) { this.drag = { type: 'rcorner', fixed: c[(k + 2) % 4] }; return; }
+    }
+    // the selected rectangle first, so one under another can still be moved
+    let hit = this.sel >= 0 && inside(this.sel) ? this.sel : -1;
+    for (let i = this.surfaces.length - 1; hit < 0 && i >= 0; i--) if (inside(i)) hit = i;
+    if (hit >= 0) {
+      this.sel = hit;
+      this.drag = { type: 'rect', start: p, rect: { ...inputRect(this.surfaces[hit]) } };
+    }
+    this.app.changed({ geometry: false });
+  }
+
+  composeMove(s, d, p) {
+    const [W, H] = this.app.frame;
+    if (d.type === 'rect') s.input = { ...d.rect, x: d.rect.x + (p[0] - d.start[0]) / W, y: d.rect.y - (p[1] - d.start[1]) / H };
+    else {
+      const min = 0.02;
+      const x0 = Math.min(p[0], d.fixed[0]) / W, x1 = Math.max(p[0], d.fixed[0]) / W;
+      const top = Math.min(p[1], d.fixed[1]) / H, bottom = Math.max(p[1], d.fixed[1]) / H;
+      s.input = { x: x0, y: 1 - bottom, w: Math.max(x1 - x0, min), h: Math.max(bottom - top, min) };
+    }
+    this.app.changed();
+  }
+
+  drawCompose(ctx, sx, sy, dpr) {
+    const c = this.canvas, [W, H] = this.app.frame;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, c.width, c.height);
+    // the composition itself, where it can be drawn: the frame-wide video or image, placed as the renderer does
+    const src = this.app.composeSource();
+    if (src) {
+      const el = src.el, mw = el.videoWidth || el.naturalWidth, mh = el.videoHeight || el.naturalHeight;
+      if (mw && mh) {
+        const r = (mw / mh) / (W / H);
+        let w = c.width, h = c.height;
+        if (src.fit === 'fill') { if (r > 1) w *= r; else h /= r; } else if (src.fit === 'fit') { if (r > 1) h /= r; else w *= r; }
+        ctx.save(); ctx.globalAlpha = 0.55;
+        try { ctx.drawImage(el, (c.width - w) / 2, (c.height - h) / 2, w, h); } catch { /* not decodable yet */ }
+        ctx.restore();
+      }
+    }
+    const label = (text, x, y, color) => {
+      ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = color; ctx.fillText(text, x, y);
+    };
+    const hr = HANDLE_CSS_PX * dpr * 0.45;
+    this.surfaces.forEach((s, si) => {
+      const sel = si === this.sel, g = this.geoms[si];
+      // the surface where it really is, faintly, and the rectangle of the composition it shows
+      if (g) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = dpr;
+        for (const part of g.parts) { ctx.beginPath(); part.outline.forEach(([x, y], k) => (k ? ctx.lineTo(x * sx, y * sy) : ctx.moveTo(x * sx, y * sy))); ctx.closePath(); ctx.stroke(); }
+      }
+      const [x, y, w, h] = this.rectPx(inputRect(s));
+      ctx.setLineDash(s.input ? [] : [6 * dpr, 4 * dpr]);
+      ctx.strokeStyle = sel ? '#ffb547' : 'rgba(255,255,255,0.8)'; ctx.lineWidth = (sel ? 2.5 : 1.5) * dpr;
+      ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
+      ctx.setLineDash([]);
+      label(String(si + 1), (x + w / 2) * sx, (y + h / 2) * sy, sel ? '#ffb547' : '#ffffff');
+      if (sel) for (const [cx, cy] of [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]) {
+        ctx.beginPath(); ctx.arc(cx * sx, cy * sy, hr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,181,71,0.9)'; ctx.fill(); ctx.strokeStyle = '#0d1016'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+      }
+    });
   }
 
   // ---- drawing (edit mode only; when mirroring, these handles are projected too, which helps alignment) ----
@@ -183,6 +263,7 @@ export class Editor {
     const ctx = this.ctx, [W, H] = this.app.frame, sx = c.width / W, sy = c.height / H;
     ctx.clearRect(0, 0, c.width, c.height);
     const path = (pts) => { ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(x * sx, y * sy) : ctx.moveTo(x * sx, y * sy))); ctx.closePath(); };
+    if (this.compose) { this.drawCompose(ctx, sx, sy, dpr); return; }
     const hr = HANDLE_CSS_PX * dpr * 0.45;
     this.geoms.forEach((g, si) => {
       const sel = si === this.sel;

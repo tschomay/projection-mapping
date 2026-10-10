@@ -190,6 +190,7 @@ class App {
 
   // ---------- Show mode ----------
   setShow(on) {
+    if (on && this.editor.compose) this.setCompose(false);
     document.body.classList.toggle('show', on);
     if (on) {
       this.gesture();
@@ -443,7 +444,7 @@ class App {
       const step = e.shiftKey ? 10 : 1;
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (d && this.editor.sel >= 0) { e.preventDefault(); this.editor.nudge(...d); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && this.editor.mode === 'points' && this.editor.selVert) { e.preventDefault(); const err = this.editor.deletePoint(); if (err) this.toast(err); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.editor.mode === 'points' && this.editor.selVert && !this.editor.compose) { e.preventDefault(); const err = this.editor.deletePoint(); if (err) this.toast(err); }
     });
 
     if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };

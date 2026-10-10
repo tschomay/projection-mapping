@@ -88,6 +88,15 @@ in the issue listed, or paste the *Check this device* report there.
 - [ ] Limits (#23): try a 17th surface; it should be refused with a message.
       Bending many surfaces at 8 × 8 should still draw them all.
 
+### Arrange content and ISF (#7, #10)
+- [ ] Add a video, set it to *One image across all* on three surfaces. *Content → Arrange content*:
+      drag and resize the rectangles so the three surfaces show the video in a different order. Is it easy
+      to grab a rectangle and its corners with a finger?
+- [ ] *Export this effect as ISF* on a surface showing Plasma, and open the file in an ISF host you have
+      (VDMX, MadMapper, Resolume via Wire, or the online editor at https://editor.isf.video). Does it run?
+- [ ] *Import ISF file* with a generator from https://editor.isf.video or the VIDVOX ISF-Files repository
+      (one without an image input). Does it show on the surface? Note any that fail in #10.
+
 ### Design on a photo
 - [ ] *Project → Design on a photo* with a photo of your set taken from
       where the projector will stand. Trace surfaces on it, try content and

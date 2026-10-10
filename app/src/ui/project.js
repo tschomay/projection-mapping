@@ -55,13 +55,17 @@ export const projectUI = {
     this.save();
     const text = JSON.stringify(this.project, null, 2);
     const filename = (this.project.name || 'mapping').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.json';
-    // inside a Claude artifact, downloads go through the platform; elsewhere a plain download link works
+    await this.download(filename, text, 'application/json');
+  },
+
+  // save a text file on the device: through the platform inside a Claude artifact, else a plain download link
+  async download(filename, text, type) {
     try {
       const dl = window.claude && (await window.claude.use('downloads'));
       if (dl) { await dl.save({ filename, data: text }); return; }
     } catch { /* fall through */ }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.href = URL.createObjectURL(new Blob([text], { type }));
     a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   },

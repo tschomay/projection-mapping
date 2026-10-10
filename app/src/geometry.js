@@ -128,6 +128,7 @@ export function surfaceGeom(s, W, H, maxVerts = 128) {
     }),
     size: [(dist(pins[0], pins[1]) + dist(pins[3], pins[2])) / 2, (dist(pins[0], pins[3]) + dist(pins[1], pins[2])) / 2],
     feather: s.feather || 0,
+    input: s.input && s.input.w > 0 && s.input.h > 0 ? s.input : null,
   };
 }
 
@@ -149,4 +150,16 @@ export function newSurface(shape, index) {
     parts: [{ op: 1, pts: SHAPES[shape]() }],
     content: { kind: 'effect', effect: 'outline' },
   };
+}
+
+// ---- composition canvas (roadmap #7) ----
+// A surface may carry s.input = { x, y, w, h }: the rectangle of the composition (the frame-wide content: "one
+// image across all" media and effects that use s.screen) that it shows, in screen units (0..1, y up). Without
+// one, a surface shows the part of the composition it covers. This is that default, as a rectangle: the box
+// around its corner pins.
+export function inputRect(s) {
+  if (s.input && s.input.w > 0 && s.input.h > 0) return s.input;
+  const xs = s.pins.map((p) => p[0]), ys = s.pins.map((p) => 1 - p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }

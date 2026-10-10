@@ -1,8 +1,10 @@
-// Content pane: effects (built-in and AI-written), the user's videos and images, and how media sits on a surface.
+// Content pane: effects (built-in, AI-written and ISF), the user's videos and images, how media sits on a surface,
+// and arranging the composition across surfaces.
 // Methods mixed into App (see app.js), so `this` is the app.
 import { MAX_MEDIA } from '../renderer.js';
 import { EFFECTS } from '../effects.js';
 import { generateEffect, describeSurfaces, getKey, setKey, keyKind, claudePlan, namespaced } from '../ai.js';
+import { toISF, fromISF, isfFilename } from '../isf.js';
 import { $ } from '../env.js';
 
 export const contentUI = {
@@ -14,6 +16,8 @@ export const contentUI = {
     });
     this.renderEffectList();
     this.initAI();
+    this.initISF();
+    this.initCompose();
     $('addMedia').onchange = async (e) => {
       for (const f of e.target.files) {
         try { const m = await this.media.add(f); if (this.editor.sel >= 0) this.setContent({ kind: 'media', mediaId: m.id, fit: 'fill', space: 'surface' }); } catch (err) { this.toast(err.message); }
@@ -99,6 +103,63 @@ export const contentUI = {
     } finally {
       $('aiGo').disabled = !this.aiReady(); $('aiCancel').hidden = true;
     }
+  },
+
+  // ISF files (roadmap #10): export the selected surface's effect, import a generator as one of the project's effects
+  initISF() {
+    $('exportISF').onclick = () => {
+      const s = this.project.surfaces[this.editor.sel], c = s?.content;
+      if (!c || c.kind !== 'effect') { this.toast('Select a surface that shows an effect, then export it.'); return; }
+      const e = EFFECTS.find((x) => x.id === (c.effect || 'outline')) || (this.project.effects || []).find((x) => x.id === c.effect);
+      if (!e) return;
+      this.download(isfFilename(e.name), toISF(e), 'text/plain');
+      this.toast(`"${e.name}" saved as an ISF file, for MadMapper, VDMX, Resolume and other VJ apps.`, 4000);
+    };
+    $('importISF').onchange = async (ev) => {
+      const f = ev.target.files[0]; ev.target.value = '';
+      if (!f) return;
+      try {
+        const { name, code } = fromISF(await f.text(), f.name);
+        const id = 'u' + Math.random().toString(36).slice(2, 8);
+        const log = this.renderer.tryEffect(id, namespaced(id, code));
+        if (log) throw new Error(`"${f.name}" doesn't compile here: ${log.split('\n').find((l) => l.trim()) || log}`);
+        (this.project.effects ||= []).push({ id, name, prompt: `Imported from ${f.name}`, code, source: 'isf' });
+        const s = this.project.surfaces[this.editor.sel];
+        if (s) s.content = { kind: 'effect', effect: id };
+        this.changed(); this.renderEffectList();
+        this.toast(`Imported "${name}"${s ? ` onto surface ${this.editor.sel + 1}` : ''}. It's in the effect list with a ✦.`, 4000);
+        if (s) this.watchFrameRate(() => { s.content = { kind: 'effect', effect: 'outline' }; this.changed(); }, name);
+      } catch (err) { this.toast(err.message, 6000); }
+    };
+  },
+
+  // the composition canvas (roadmap #7): which rectangle of the frame-wide content each surface shows
+  initCompose() {
+    $('composeBtn').onclick = () => this.setCompose(!this.editor.compose);
+    $('composeDone').onclick = () => this.setCompose(false);
+    $('composeReset').onclick = () => {
+      const s = this.project.surfaces[this.editor.sel];
+      if (!s) { this.toast('Select a surface first.'); return; }
+      delete s.input; this.changed();
+    };
+  },
+
+  setCompose(on) {
+    const ed = this.editor;
+    if (on && !this.project.surfaces.length) { this.toast('Add a surface first.'); return; }
+    ed.compose = on; ed.drag = null;
+    $('composeBar').hidden = !on;
+    $('composeBtn').setAttribute('aria-pressed', String(on));
+    if (on) { this.toggleDrawer(false); if (ed.sel < 0) ed.select(0); }
+    this.renderNudge();
+    this.changed({ geometry: false, save: false });
+  },
+
+  // what to draw under the rectangles while arranging: the frame-wide video or image on the selected surface, or any
+  composeSource() {
+    const looks = [this.project.surfaces[this.editor.sel]?.content].concat(this.project.surfaces.map((s) => s.content));
+    const c = looks.find((l) => l && l.kind === 'media' && l.space === 'frame' && this.media.get(l.mediaId)?.kind !== 'audio');
+    return c ? { el: this.media.get(c.mediaId).el, fit: c.fit || 'fill' } : null;
   },
 
   // guardrail: if a new effect makes the frame rate collapse, put the previous look back
