@@ -1,8 +1,8 @@
 // Offline support: a show often happens where there's no reliable internet.
 // The app shell is cached on install; fonts are cached the first time they load. VERSION and SHELL are written by
 // tools/sw.mjs (run it after adding or changing app files; the tests check it, and Vercel runs it on deploy).
-const VERSION = 'surface-mapper-281fac8482';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './src/ai.js', './src/app.js', './src/audio.js', './src/beat-worklet.js', './src/camera.js', './src/capture.js', './src/diagnostics.js', './src/editor.js', './src/effects.js', './src/env.js', './src/geometry.js', './src/link.js', './src/media.js', './src/renderer.js', './src/share.js', './src/show.js', './src/store.js', './src/ui/content.js', './src/ui/cues.js', './src/ui/project.js', './src/ui/scan.js', './src/ui/sound.js', './src/ui/surfaces.js'];
+const VERSION = 'surface-mapper-3fe26e9169';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './src/ai.js', './src/app.js', './src/audio.js', './src/beat-worklet.js', './src/camera.js', './src/capture.js', './src/diagnostics.js', './src/editor.js', './src/effects.js', './src/env.js', './src/geometry.js', './src/isf.js', './src/link.js', './src/media.js', './src/renderer.js', './src/share.js', './src/show.js', './src/store.js', './src/ui/content.js', './src/ui/cues.js', './src/ui/project.js', './src/ui/scan.js', './src/ui/sound.js', './src/ui/surfaces.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

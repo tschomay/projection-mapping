@@ -15,29 +15,8 @@ const VERT = `#version 300 es
 in vec2 position;
 void main() { gl_Position = vec4(position, 0.0, 1.0); }`;
 
-const HEAD = `#version 300 es
-precision highp float; precision highp int; precision highp sampler2D;
-uniform float uTime;
-uniform vec2 uRes;        // logical frame size in pixels
-uniform vec2 uView;       // size of the buffer being drawn
-uniform sampler2D uPoly;
-uniform int uSurfCount;
-uniform mat3 uHinv[${MAX_SURF}];
-uniform vec4 uSurfInfo[${MAX_SURF}];   // first part, part count, width px, height px
-uniform vec4 uSurfFx[${MAX_SURF}];     // effect index (-1 = media), media slot, space (0 surface, 1 frame), fit (0 fill, 1 fit, 2 stretch)
-uniform vec4 uSurfFxFrom[${MAX_SURF}]; // the previous look during a cue transition
-uniform vec4 uSurfExtra[${MAX_SURF}];  // bent (1/0), feather in frame pixels
-uniform sampler2D uWarp;               // uv corrections for bent surfaces, one ${WARP_RES}-texel square per surface
-uniform float uMix;                    // transition progress 0..1, or -1 when none is running
-uniform int uMixType;                  // 0 crossfade, 1 cut, 2 wipe left to right across the frame
-uniform vec4 uPart[${MAX_PARTS}];      // first vertex, vertex count, op (+1 add, -1 cut)
-uniform vec4 uPartBox[${MAX_PARTS}];
-uniform sampler2D uMedia0; uniform sampler2D uMedia1; uniform sampler2D uMedia2; uniform sampler2D uMedia3;
-uniform vec4 uMediaInfo[${MAX_MEDIA}]; // aspect, ready
-uniform vec4 uAudio;                   // bass, mid, treble, level (0..1)
-uniform float uBeat, uBeats, uHasAudio;
-out vec4 outColor;
-
+// what an effect sees: the Surf2 fields and the helpers. Also the start of an exported ISF file (isf.js).
+export const SURF_API = `
 struct Surf2 {
   vec2 uv;      // 0..1 between the surface's corner pins (u right, v up), perspective-correct on a flat surface
   vec2 px;      // frame pixel, (0,0) top-left
@@ -58,6 +37,31 @@ float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a
 vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
 vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
 `;
+
+const HEAD = `#version 300 es
+precision highp float; precision highp int; precision highp sampler2D;
+uniform float uTime;
+uniform vec2 uRes;        // logical frame size in pixels
+uniform vec2 uView;       // size of the buffer being drawn
+uniform sampler2D uPoly;
+uniform int uSurfCount;
+uniform mat3 uHinv[${MAX_SURF}];
+uniform vec4 uSurfInfo[${MAX_SURF}];   // first part, part count, width px, height px
+uniform vec4 uSurfFx[${MAX_SURF}];     // effect index (-1 = media), media slot, space (0 surface, 1 frame), fit (0 fill, 1 fit, 2 stretch)
+uniform vec4 uSurfFxFrom[${MAX_SURF}]; // the previous look during a cue transition
+uniform vec4 uSurfExtra[${MAX_SURF}];  // bent (1/0), feather in frame pixels
+uniform sampler2D uWarp;               // uv corrections for bent surfaces, one ${WARP_RES}-texel square per surface
+uniform sampler2D uInput;              // per surface: the composition rectangle it shows (x, y, w, h in screen units), w = 0 for none
+uniform float uMix;                    // transition progress 0..1, or -1 when none is running
+uniform int uMixType;                  // 0 crossfade, 1 cut, 2 wipe left to right across the frame
+uniform vec4 uPart[${MAX_PARTS}];      // first vertex, vertex count, op (+1 add, -1 cut)
+uniform vec4 uPartBox[${MAX_PARTS}];
+uniform sampler2D uMedia0; uniform sampler2D uMedia1; uniform sampler2D uMedia2; uniform sampler2D uMedia3;
+uniform vec4 uMediaInfo[${MAX_MEDIA}]; // aspect, ready
+uniform vec4 uAudio;                   // bass, mid, treble, level (0..1)
+uniform float uBeat, uBeats, uHasAudio;
+out vec4 outColor;
+` + SURF_API;
 
 const MAIN = `
 vec3 sampleMedia(int slot, vec2 uv) {
@@ -117,7 +121,10 @@ void main() {
       if (ex.x > 0.5) {
         vec2 q = clamp((s.uv - ${WARP_LO.toFixed(1)}) / ${WARP_SPAN.toFixed(1)}, 0.0, 1.0) * ${(WARP_RES - 1).toFixed(1)} + 0.5;
         s.uv += texture(uWarp, vec2((float(si) * ${WARP_RES.toFixed(1)} + q.x) / ${(WARP_RES * MAX_SURF).toFixed(1)}, q.y / ${WARP_RES.toFixed(1)})).xy;
-      } s.screen = vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
+      }
+      // screen: where the pixel sits in the frame, or in the composition rectangle this surface takes (#7)
+      vec4 inp = texelFetch(uInput, ivec2(si, 0), 0);
+      s.screen = inp.z > 0.0 ? inp.xy + s.uv * inp.zw : vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
       s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
       col = clamp(content(uSurfFx[si], s, uTime), 0.0, 1.0);
       if (uMix >= 0.0) {
@@ -172,6 +179,10 @@ export class Renderer {
     this.warpData = new Float32Array(WARP_RES * MAX_SURF * WARP_RES * 2);
     this.warpKeys = new Array(MAX_SURF).fill('');
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, WARP_RES * MAX_SURF, WARP_RES, 0, gl.RG, gl.FLOAT, this.warpData);
+    // (a texture, not a uniform array: the fragment shader's uniforms are already near WebGL2's guaranteed 224 vectors)
+    this.inputTex = this.makeTexture(gl.NEAREST);
+    this.inputData = new Float32Array(MAX_SURF * 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SURF, 1, 0, gl.RGBA, gl.FLOAT, this.inputData);
     this.effects = EFFECTS;
     this.program = this.compile(buildFragment());
   }
@@ -231,12 +242,12 @@ export class Renderer {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     const u = {};
-    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uSurfExtra', 'uWarp', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uSurfExtra', 'uWarp', 'uInput', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
     this.u = u;
     return p;
   }
 
-  // geoms: output of surfaceGeom per surface (frame pixels); fx: [effectIndex, mediaSlot, space, fit] per surface;
+  // geoms: output of surfaceGeom per surface (frame pixels, plus the composition rectangle as input); fx: [effectIndex, mediaSlot, space, fit] per surface;
   // fxFrom: the same for the previous look while a cue transition runs.
   // Returns what fitted: { surfaces drawn, of how many, droppedParts } so the app can say when a limit is reached.
   setSurfaces(geoms, fx, fxFrom = fx) {
@@ -262,12 +273,16 @@ export class Renderer {
       S.fx.set(fx[si], si * 4);
       S.extra.set([g.mesh ? 1 : 0, g.feather || 0, 0, 0], si * 4);
       if (g.mesh) this.updateWarp(si, g.mesh);
+      const r = g.input;
+      this.inputData.set(r ? [r.x, r.y, r.w, r.h] : [0, 0, 0, 0], si * 4);
       S.fxFrom.set(fxFrom[si], si * 4);
     }
     S.count = n;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.polyTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, POLY_W, POLY_H, gl.RGBA, gl.FLOAT, this.poly);
+    gl.bindTexture(gl.TEXTURE_2D, this.inputTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SURF, 1, gl.RGBA, gl.FLOAT, this.inputData);
     return { surfaces: n, of: geoms.length, droppedParts };
   }
 
@@ -338,6 +353,7 @@ export class Renderer {
     gl.uniform1f(u.uBeat, audio.beat); gl.uniform1f(u.uBeats, audio.beats); gl.uniform1f(u.uHasAudio, audio.active ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.polyTex); gl.uniform1i(u.uPoly, 0);
     gl.activeTexture(gl.TEXTURE1 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.warpTex); gl.uniform1i(u.uWarp, 1 + MAX_MEDIA);
+    gl.activeTexture(gl.TEXTURE2 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.inputTex); gl.uniform1i(u.uInput, 2 + MAX_MEDIA);
     for (let i = 0; i < MAX_MEDIA; i++) { gl.activeTexture(gl.TEXTURE1 + i); gl.bindTexture(gl.TEXTURE_2D, this.mediaTex[i]); gl.uniform1i(u['uMedia' + i], 1 + i); }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

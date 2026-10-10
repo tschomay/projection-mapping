@@ -92,6 +92,8 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #nudge button { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; padding: 0; display: grid; place-items: center; }
 #nudge button svg { width: 18px; height: 18px; }
 #nudgeStep { font: 11px var(--mono); }
+#composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
+#composeBar span { font-size: 13px; }
 #toast { left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #12161ef0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; max-width: min(90vw, 460px); text-align: center; pointer-events: none; transition: opacity .3s; z-index: 5; }
 body.show #toast:not([hidden]) { display: block !important; }
 #gate { position: fixed; inset: 0; display: grid; place-items: center; background: #000c; z-index: 6; text-align: center; padding: 24px; }
@@ -236,6 +238,16 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
       <div class="seg" id="fitSeg"><button data-fit="fill" aria-pressed="true">Fill</button><button data-fit="fit" aria-pressed="false">Fit</button><button data-fit="stretch" aria-pressed="false">Stretch</button></div>
       <div class="seg" id="spaceSeg"><button data-space="surface" aria-pressed="true">Own copy</button><button data-space="frame" aria-pressed="false">One image across all</button></div>
       <p class="note">"One image across all" lays the media over the whole frame, so it runs continuously across surfaces that share it.</p>
+    </div>
+    <div class="group">
+      <h3>Arrange across surfaces</h3>
+      <div class="row"><button class="btn" id="composeBtn" aria-pressed="false">Arrange content</button><button class="btn" id="composeReset">Back to where it sits</button></div>
+      <p class="note">"One image across all" and the effects that flow across the frame (Screen sweep, Plasma, Bats, Fog) are laid out on one composition. By default each surface shows the part it covers; <i>Arrange content</i> lets you pick any rectangle of it for each surface, so one video can run across surfaces in any order.</p>
+    </div>
+    <div class="group">
+      <h3>ISF: effects for and from VJ apps</h3>
+      <div class="row"><button class="btn" id="exportISF">Export this effect as ISF</button><label class="btn file">Import ISF file<input type="file" id="importISF"></label></div>
+      <p class="note">ISF files (.fs) run in MadMapper, VDMX, Resolume and other VJ apps. Import works for generators: files without image or audio inputs.</p>
     </div>
     <div class="row"><button class="btn" id="applyAll">Use on every surface</button></div>
   </section>
@@ -401,6 +413,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
   </div>
 </dialog>
 
+<div id="composeBar" class="ui" hidden><span>Arranging: drag a rectangle to pick what that surface shows, its corners to resize</span><button class="btn primary" id="composeDone">Done</button></div>
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
 <div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>
 

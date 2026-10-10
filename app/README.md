@@ -1,6 +1,6 @@
 # Surface Mapper
 
-The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9; bending for #6).
+The phone-first projection mapping app (roadmap #1; MVP for #11, #12, #13, #14; connecting for #2; camera capture for #3; cues for #8; AI effects for #9; bending for #6; arranging content for #7; ISF for #10).
 Plain static files: HTML, ES modules and WebGL2, with no build step.
 
 ## Using it
@@ -29,7 +29,9 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    *Describe a look* and an AI model writes a new effect for your surfaces:
    on your Claude plan in the studio artifact, or with your own Gemini or
    Anthropic API key here (stored only on the device). Media follows the surface's perspective. *One image across all*
-   runs one video continuously across several surfaces.
+   runs one video continuously across several surfaces. *Arrange content* picks which rectangle of that
+   frame-wide content each surface shows (see below). *Import ISF file* brings in a generator from another VJ
+   app; *Export this effect as ISF* goes the other way.
 5. **Sound.** In *Tools → Sound*, pick a soundtrack: a video's own sound or an
    audio file. "Beat sequence", "Pulse to music" and "Tiles" follow the beat.
    You can react to the microphone instead.
@@ -64,6 +66,48 @@ for every path and what's been tested.
 window*. Chrome puts it on the projector if you allow window placement;
 otherwise drag it there. Click it once. That window shows only the output and
 plays the sound; keep editing in the main window.
+
+## Arranging content across surfaces
+
+Frame-wide content, meaning media set to *One image across all* and the effects that use `s.screen` (Screen
+sweep, Plasma, Bats, Fog, Lightning), is laid out on one **composition** the size of the frame. By default each
+surface shows the part of it that it covers, so content runs on continuously across neighbouring surfaces.
+
+*Content → Arrange content* shows the composition (with the video or image under it) and one rectangle per
+surface: the part of the composition that surface shows. Drag a rectangle to move it, its corners to resize
+it; the nudge pad moves it a pixel at a time. The surfaces themselves don't move. So three boxes on a
+shelf can show one video's left, middle and right in any order, or one small surface can show the whole
+video. *Back to where it sits* returns a surface to the default. Per-surface media (*Own copy*) and
+effects that use the surface's own `uv` aren't affected.
+
+## ISF
+
+[ISF](https://isf.video) is the shader format MadMapper, VDMX, Resolume (through Wire), Synesthesia and
+others load.
+
+**Export** (*Content → Export this effect as ISF*, with a surface selected) saves its effect as an ISF 2
+generator (`.fs`): the effect code unchanged, plus an adapter that fills `Surf2` from ISF's built-ins. It is
+plain GLSL ES 1.00, the strictest dialect hosts use; the tests compile every built-in effect that way.
+
+| In the app | In the exported file |
+|---|---|
+| `t` | `TIME` |
+| `s.uv`, `s.screen` | both `isf_FragNormCoord`: the host's canvas is the surface |
+| `s.px`, `s.size`, `uRes` | from `gl_FragCoord` and `RENDERSIZE` |
+| `s.edge` | distance to the canvas border, not to the surface's outline |
+| `uAudio`, `uBeat`, `uBeats`, `uHasAudio` | inputs `audioBass`, `audioMid`, `audioTreble`, `audioLevel`, `audioBeat`, `audioBeatCount`, `hasAudio`; wire them to the host's audio analysis |
+| `s.id`, `s.count` | inputs `surfaceId`, `surfaceCount` |
+
+What doesn't carry over: the surface's real shape (outline, cut-outs, soft edge and bend stay in the app), and
+the continuity of `s.screen` across several surfaces (a host gives each layer its own canvas). The sandbox's
+3D-only fields (world position, normals) have no ISF counterpart.
+
+**Import** (*Content → Import ISF file*) adds an ISF generator to the project's effects (marked ✦), and onto
+the selected surface. The surface is the ISF canvas: `isf_FragNormCoord` runs between its corner pins and
+`RENDERSIZE` is its size. Inputs are fixed at their defaults. The file's names are renamed so they can't
+collide with the app's or another effect's, and code behind `#ifndef GL_ES` is left out. Not imported yet:
+image and audio inputs (filters, audio-reactive ISF), several passes or persistent buffers, and imported
+images. Desktop-only GLSL that GLSL ES 3.00 rejects is reported with the compiler's message.
 
 ## Deploying
 
@@ -100,12 +144,13 @@ microphone, full screen and second screens don't work inside an artifact.
 | `src/renderer.js` | WebGL2 renderer: one fragment shader for all surfaces, effects and media |
 | `src/effects.js` | Built-in effects (GLSL); audio uniforms are documented at the top |
 | `src/geometry.js` | Homographies, shapes, hit-testing |
-| `src/editor.js` | Touch editing: corners, points, combine and cut, snapping, nudging |
+| `src/editor.js` | Touch editing: corners, points, combine and cut, snapping, nudging, arranging content rectangles |
 | `src/audio.js` | Web Audio analysis: bass, mid, treble, level, beat |
 | `src/media.js` | The user's videos, images and audio (object URLs, IndexedDB) |
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
 | `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
+| `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
 | `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
 | `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper* |
 | `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |

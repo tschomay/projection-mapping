@@ -26,6 +26,8 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `limits.e2e.mjs` | Renderer limits: more than 2,048 outline points still draw; a 17th surface is refused; too many surfaces or shapes are reported in the Surfaces pane. |
 | `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. |
 | `share.e2e.mjs` | Project links: *Share a link* copies a link, a fresh browser opens it with surfaces, effects and cues, saves it and clears the fragment; a damaged link; in an artifact, *Open in Surface Mapper* is a plain link that follows edits. |
+| `isf.test.mjs` | ISF in Node: an exported effect's header, inputs and main(); an imported generator's renamed names, inputs fixed at their defaults, `#ifndef GL_ES` code left out; files that are refused (image or audio inputs, several passes). Uses `fixtures/rings.fs`. |
+| `isf.e2e.mjs` | ISF and the composition canvas in the app: every built-in effect exported as ISF compiles and draws in a minimal ISF host (WebGL1); *Export this effect as ISF* downloads the file; importing a generator, and the exported file again, draws on a surface; an image filter is refused. *Arrange content*: dragging a surface's rectangle moves and resizes what it shows, for effects and for "one image across all" media. |
 | `scan.e2e.mjs` | *Find surfaces with the camera* end to end, with a fake camera that films the synthetic room lit by the app's patterns, with a lag like a mirrored projector. |
 
 `scene.mjs` is the synthetic room; `serve.mjs` serves `app/` on a free port and

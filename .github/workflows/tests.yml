@@ -24,7 +24,7 @@ jobs:
       matrix:
         suites:
           - check.e2e,ai.e2e,mesh.e2e,limits.e2e,photo.e2e
-          - link.e2e,show.e2e,share.e2e
+          - link.e2e,show.e2e,share.e2e,isf.e2e
           - scan.e2e
     defaults:
       run:
