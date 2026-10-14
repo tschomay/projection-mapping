@@ -95,6 +95,7 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #nudgeStep { font: 11px var(--mono); }
 #composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
 #composeBar span, #pickBar span { font-size: 13px; }
+#pickBar .seg { flex: none; }
 #pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
 #photoVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #photoStatus, #alignNote { white-space: pre-line; margin: 8px 0 0; }
@@ -190,7 +191,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     <div class="group">
       <h3>Or pick them on a photo</h3>
       <div class="row"><button class="btn" id="pickBtn" aria-pressed="false">Tap things on the photo</button></div>
-      <p class="note" id="pickNote">Picture frames, wainscoting panels, doors: tap one on the design photo and it becomes a surface, its corners on the photo's corners. Good for flat things on a wall, which the stripes can't tell apart. Needs a photo from the projector (<i>Project → Design on a photo</i>).</p>
+      <p class="note" id="pickNote">Picture frames, wainscoting panels, doors: tap one on the design photo and it becomes a surface, its corners on the photo's corners. Good for flat things on a wall, which the stripes can't tell apart. <i>Any shape</i> outlines round and odd-shaped things too, with a 14 MB model downloaded the first time. Needs a photo from the projector (<i>Project → Design on a photo</i>).</p>
     </div>
     <div class="group">
       <h3>Surfaces</h3>
@@ -447,7 +448,10 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
   </div>
 </dialog>
 
-<div id="pickBar" class="ui" hidden><span>Tap a frame, panel or door on the photo. Tap it again for the one around it.</span><button class="btn primary" id="pickDone">Done</button></div>
+<div id="pickBar" class="ui" hidden>
+  <div class="seg" id="pickKind"><button data-kind="rect" aria-pressed="true">Rectangles</button><button data-kind="any" aria-pressed="false">Any shape</button></div>
+  <span id="pickHint">Tap a frame, panel or door on the photo. Tap it again for the one around it.</span><button class="btn primary" id="pickDone">Done</button>
+</div>
 <div id="composeBar" class="ui" hidden><span>Arranging: drag a rectangle to pick what that surface shows, its corners to resize</span><button class="btn primary" id="composeDone">Done</button></div>
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
 <div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>

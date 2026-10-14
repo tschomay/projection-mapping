@@ -1,10 +1,13 @@
 // The design photo lined up with the projector frame (issue #34), and surfaces picked on it with a tap (#35):
 // taking the photo from beside the projector's lens, dragging the frame's corners on it, and turning a tapped
-// picture frame, panel or door into a surface. Methods mixed into App (see app.js), so `this` is the app.
+// picture frame, panel or door into a surface, or any shape (#37: a mirror, a wreath) through a segmentation model or
+// a colour fill. Methods mixed into App (see app.js), so `this` is the app.
 import { Camera, CaptureError, listCameras, runFramePhoto } from '../camera.js';
 import { coverQuad, cssMatrix, frameQuad, photoToFrame, framePointToPhoto, photoPointToFrame } from '../photo.js';
 import { analysePhoto, quadsAt } from '../regions.js';
-import { newSurface } from '../geometry.js';
+import { colourFill, maskToSurface } from '../outline.js';
+import { loadSegmenter } from '../segment.js';
+import { newSurface, SHAPES } from '../geometry.js';
 import { $ } from '../env.js';
 
 const ANALYSIS_W = 1024;   // the photo is searched for rectangles at most this wide
@@ -16,6 +19,8 @@ export const photoUI = {
     this.initAlign();
     $('pickBtn').onclick = () => this.setPick(!this.editor.pick);
     $('pickDone').onclick = () => this.setPick(false);
+    this.pickKind = 'rect';
+    document.querySelectorAll('#pickKind button').forEach((b) => { b.onclick = () => this.setPickKind(b.dataset.kind); });
   },
 
   // the design photo's frame quad: stored, or what simply covering the frame shows
@@ -187,6 +192,46 @@ export const photoUI = {
     this.renderSurfaceUI();
   },
 
+  // Rectangles (edges and lines, instant) or any shape (the segmentation model, or the colour fill without it)
+  setPickKind(kind) {
+    this.pickKind = kind; this.pickLast = null;
+    document.querySelectorAll('#pickKind button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+    $('pickHint').textContent = kind === 'any' ? 'Tap a mirror, a wreath, anything. Tap it again for a bigger outline.' : 'Tap a frame, panel or door on the photo. Tap it again for the one around it.';
+    // start the download, and then encoding the photo, now rather than on the first tap
+    if (kind === 'any') this.segmenter().then((seg) => { const P = seg && this.photoPixels(); if (P) seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {}); });
+  },
+
+  // the segmentation model, loading it the first time (with progress shown); null where it can't load
+  segmenter() {
+    if (this.segFailed) return Promise.resolve(null);
+    if (!this.segLoad) {
+      let shown = -1;
+      this.segLoad = loadSegmenter((share) => {
+        const pc = Math.floor(share * 100);
+        if (pc !== shown && this.pickKind === 'any') { shown = pc; this.toast(`Loading the outline model (about 14 MB, only once): ${pc}%`, 20000); }
+      }).then((seg) => { if (this.pickKind === 'any') this.toast('Outline model ready. Tap something on the photo.'); return seg; }, () => {
+        this.segFailed = true; this.segLoad = null;
+        this.toast('The outline model can\'t load here (offline, or blocked), so a colour fill finds outlines instead. It works best on plainly coloured things.', 6000);
+        return null;
+      });
+    }
+    return this.segLoad;
+  },
+
+  // surface geometry for any shape around photo pixel (x, y): the model's masks, or the colour fill's
+  async shapesAt(P, x, y, quad) {
+    const [W, H] = this.frame;
+    const toFrame = ([px, py]) => { const [u, v] = photoPointToFrame(quad, px / P.w, py / P.h); return [u * W, v * H]; };
+    const seg = await this.segmenter();
+    let masks = [];
+    if (seg) {
+      const t = setTimeout(() => this.toast('Looking at the photo: the first time takes a while on a phone…', 30000), 400);
+      try { await seg.embed(P.rgba, P.w, P.h, P.mediaId); masks = await seg.masksAt(x, y); } catch { /* the model failed on this device: the colour fill below */ } finally { clearTimeout(t); }
+    }
+    if (!masks.length) masks = colourFill(P.rgba, P.w, P.h, x, y, P.A);
+    return masks.map((m) => maskToSurface(m.mask, P.w, P.h, x, y, toFrame, W, H)).filter(Boolean);
+  },
+
   // the photo's edges and lines, worked out once per photo
   photoPixels() {
     const b = this.project.backdrop, m = b && this.media.get(b.mediaId);
@@ -196,37 +241,52 @@ export const photoUI = {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(m.el, 0, 0, w, h);
-    this.photoAnalysis = { mediaId: m.id, w, h, A: analysePhoto(ctx.getImageData(0, 0, w, h).data, w, h) };
+    const rgba = ctx.getImageData(0, 0, w, h).data;
+    this.photoAnalysis = { mediaId: m.id, w, h, rgba, A: analysePhoto(rgba, w, h) };
     return this.photoAnalysis;
   },
 
-  // a tap at frame pixel p: the rectangle around it on the photo becomes a surface; tapping the same spot again
-  // swaps it for the next one out
-  pickAt(p) {
+  // a tap at frame pixel p: the rectangle (or shape) around it on the photo becomes a surface; tapping the same spot
+  // again swaps it for the next one out
+  async pickAt(p) {
+    if (this.picking) return;
     const P = this.photoPixels();
     if (!P) { this.toast('The photo isn\'t loaded yet.'); return; }
     const [W, H] = this.frame, quad = this.backdropQuad();
     const [u, v] = framePointToPhoto(quad, p[0] / W, p[1] / H);
     if (u < 0 || v < 0 || u > 1 || v > 1) { this.toast('That spot is outside the photo.'); return; }
-    const last = this.pickLast, again = last && Math.hypot(p[0] - last.p[0], p[1] - last.p[1]) < W * 0.015;
-    const found = again ? last.found : quadsAt(P.A, u * P.w, v * P.h);
+    const last = this.pickLast, again = last && last.kind === this.pickKind && Math.hypot(p[0] - last.p[0], p[1] - last.p[1]) < W * 0.015;
+    let found = again ? last.found : null;
+    if (!found) {
+      if (this.pickKind === 'any') {
+        this.picking = true;
+        try { found = await this.shapesAt(P, u * P.w, v * P.h, quad); } catch (err) { this.toast('Finding the outline failed: ' + (err.message || err)); return; } finally { this.picking = false; }
+      } else {
+        // corners on the photo -> the frame; pins run bottom-left, bottom-right, top-right, top-left
+        found = quadsAt(P.A, u * P.w, v * P.h).map((f) => {
+          const c = f.quad.map(([x, y]) => photoPointToFrame(quad, x / P.w, y / P.h));
+          return { pins: [c[3], c[2], c[1], c[0]], parts: [{ op: 1, pts: SHAPES.square() }] };
+        });
+      }
+    }
     const idx = again ? last.idx + 1 : 0;
-    if (!found.length) { this.toast('No rectangle found there. Tap nearer the middle of a frame or panel, or add a surface by hand.', 4000); this.pickLast = null; return; }
+    if (!found.length) {
+      this.toast(this.pickKind === 'any' ? 'No outline found there. Try tapping nearer its middle.' : 'No rectangle found there. Tap nearer the middle of a frame or panel, or try Any shape.', 4000);
+      this.pickLast = null; return;
+    }
     if (idx >= found.length) { this.toast('Nothing bigger around this spot. Tap somewhere else.'); return; }
-    // corners on the photo -> the frame; pins run bottom-left, bottom-right, top-right, top-left
-    const corners = found[idx].quad.map(([x, y]) => photoPointToFrame(quad, x / P.w, y / P.h));
-    const pins = [corners[3], corners[2], corners[1], corners[0]];
+    const { pins, parts } = found[idx];
     const surfaces = this.project.surfaces, prev = again ? surfaces.findIndex((s) => s.id === last.id) : -1;
     let id;
     if (prev >= 0) {
-      surfaces[prev].pins = pins; id = last.id;
+      Object.assign(surfaces[prev], { pins, parts: structuredClone(parts) }); delete surfaces[prev].mesh; id = last.id;
       this.editor.select(prev); this.changed();
     } else {
       const s = newSurface('square', surfaces.length);
-      s.pins = pins; id = s.id;
+      Object.assign(s, { pins, parts: structuredClone(parts) }); id = s.id;
       if (!this.editor.addSurface(s)) return;
     }
-    this.pickLast = { p, found, idx, id };
+    this.pickLast = { p, found, idx, id, kind: this.pickKind };
     const n = surfaces.findIndex((s) => s.id === id) + 1;
     this.toast(idx + 1 < found.length ? `Surface ${n}. Tap the same spot again for the one around it.` : `Surface ${n}.`);
   },

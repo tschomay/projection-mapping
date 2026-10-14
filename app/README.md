@@ -29,7 +29,11 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    from the projector (*Project → Design on a photo → Take it from the
    projector*), then *Tools → Surfaces → Tap things on the photo* and tap one.
    Its corners become the surface's corners; tap the same spot again for the
-   rectangle around it (the artwork, then its mat, then the frame).
+   rectangle around it (the artwork, then its mat, then the frame). Switch
+   the bar to *Any shape* for round and odd-shaped things (a mirror, a
+   wreath): the surface takes the outline itself, which *Points* can then
+   tweak. It uses a small Segment Anything model (about 14 MB, downloaded
+   once); where that can't load, a colour fill finds the outline instead.
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
    the phone (*Halloween* has bats, eyes, fog, lightning and candle glow). Or
    *Describe a look* and an AI model writes a new effect for your surfaces:
@@ -142,7 +146,8 @@ a copy of the page without the install bits, plus the modules, and a
 capabilities `sample` and `downloads`. There, *Describe a look* runs on the
 viewer's Claude plan, and *Project → Open in Surface Mapper* hands the project
 to the deployed app (`APP_URL` in `src/share.js`). Camera capture, the
-microphone, full screen and second screens don't work inside an artifact.
+microphone, full screen and second screens don't work inside an artifact, and
+*Any shape* uses the colour fill there (the model's host is out of reach).
 
 ## Layout
 
@@ -162,6 +167,8 @@ microphone, full screen and second screens don't work inside an artifact.
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled, and the photo from the projector |
 | `src/photo.js` | Lining a photo up with the projector frame: the frame found in a black and a white photo, the homography, its CSS |
 | `src/regions.js` | Rectangles in a photo from a tap: edges, Hough lines, the quads around the tap, innermost first |
+| `src/segment.js` | Any shape from a tap: SlimSAM (Segment Anything) through transformers.js, loaded from a CDN on first use |
+| `src/outline.js` | A mask as a surface: traced, simplified, given pins; and the colour fill used without the model |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
 | `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
 | `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper* |
