@@ -96,6 +96,9 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
 #composeBar span, #pickBar span { font-size: 13px; }
 #pickBar .seg { flex: none; }
+#pickTune { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+#pickTune label { display: flex; align-items: center; gap: 6px; }
+#pickTune input { width: clamp(70px, 14vw, 160px); }
 #pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
 #photoVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #photoStatus, #alignNote { white-space: pre-line; margin: 8px 0 0; }
@@ -450,7 +453,11 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
 
 <div id="pickBar" class="ui" hidden>
   <div class="seg" id="pickKind"><button data-kind="rect" aria-pressed="true">Rectangles</button><button data-kind="any" aria-pressed="false">Any shape</button></div>
-  <span id="pickHint">Tap a frame, panel or door on the photo. Tap it again for the one around it.</span><button class="btn primary" id="pickDone">Done</button>
+  <div id="pickTune" hidden>
+    <label title="How faint an edge still stops the shape. Higher keeps it smaller, inside fainter lines.">Sensitivity <input type="range" id="pickSense" min="0" max="1" step="0.05" value="0.5"></label>
+    <label id="pickSimpleRow" title="Lower follows every detail; higher straightens edges and keeps only the main corners.">Simplify <input type="range" id="pickSimple" min="0" max="1" step="0.05" value="0.4"></label>
+  </div>
+  <button class="btn primary" id="pickDone">Done</button>
 </div>
 <div id="composeBar" class="ui" hidden><span>Arranging: drag a rectangle to pick what that surface shows, its corners to resize</span><button class="btn primary" id="composeDone">Done</button></div>
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>

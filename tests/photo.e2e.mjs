@@ -98,6 +98,7 @@ async function cameraPhoto(browser, server, t) {
   const errors = [];
   const page = await (await browser.newContext({ viewport: { width: 844, height: 390 } })).newPage();
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (process.env.DEBUG_E2E) console.log('[page]', m.text()); });
   await page.addInitScript(fakeCamera(buildWall.toString()));
   await page.goto(server.url);
   await page.waitForFunction(() => window.app && window.app.editor);
@@ -147,7 +148,7 @@ async function cameraPhoto(browser, server, t) {
     return s ? Math.max(...tl.map(([x, y], k) => Math.hypot(x * W - f[k][0], y * H - f[k][1]))) : Infinity;
   }, [i, name]);
   await tapAt('art1');
-  await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 10000 }).catch(async (e) => { console.log(errors, await page.evaluate(() => ({ toast: document.getElementById('toast').textContent, pick: window.app.editor.pick, bar: document.getElementById('pickBar').getBoundingClientRect().toJSON() }))); throw e; });
   const e1 = await errTo(0, 'art1');
   t.ok(e1 < 6, `a tap on a picture makes a surface on it, corners within 6 px (${e1.toFixed(1)})`);
   await tapAt('art1');

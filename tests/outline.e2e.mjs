@@ -23,8 +23,9 @@ export const AutoProcessor = { async from_pretrained() {
     const [x, y] = pts.data, all = Object.values(window.__wall.shapes).concat(Object.values(window.__wall.rects)).map((r) => r.cam);
     const sx = w / window.__wall.camW, sy = h / window.__wall.camH;
     const hits = all.filter((P) => inPoly(x / sx, y / sy, P)).slice(0, 3);
-    const data = new Uint8Array(3 * w * h);
-    hits.forEach((P, k) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (inPoly((i + 0.5) / sx, (j + 0.5) / sy, P)) data[k * w * h + j * w + i] = 1; });
+    // scores, like the real model's: positive inside, negative outside
+    const data = new Float32Array(3 * w * h).fill(-4);
+    hits.forEach((P, k) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (inPoly((i + 0.5) / sx, (j + 0.5) / sy, P)) data[k * w * h + j * w + i] = 4; });
     return [{ dims: [1, 3, h, w], data }];
   };
   return p; } };
@@ -79,9 +80,9 @@ export default async function run() {
     await page.goto(server.url);
     await setUp(page);
     const early = await page.waitForFunction(() => window.__fakeEncoded === 1, null, { timeout: 15000 }).then(() => true, () => false);
-    const st = await page.evaluate(() => ({ model: window.__fakeModel, hint: document.getElementById('pickHint').textContent, toast: document.getElementById('toast').textContent }));
+    const st = await page.evaluate(() => ({ model: window.__fakeModel, toast: document.getElementById('toast').textContent }));
     t.ok(st.model?.id === 'Xenova/slimsam-77-uniform' && st.model.dtype === 'q8', 'Any shape loads the quantized SlimSAM model');
-    t.ok(/mirror/.test(st.hint) && /ready|Loading/.test(st.toast), 'and says what to tap and how loading went');
+    t.ok(/ready|Loading/.test(st.toast), 'and says how loading went');
     t.ok(early, 'the photo is encoded as soon as the model is ready, before any tap');
     await tapShape(page, 'glass');
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });

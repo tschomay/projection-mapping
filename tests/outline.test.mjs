@@ -31,8 +31,17 @@ export default async function run() {
   // a big disc: simplified to the outline limit, still round, and a surface with the disc as its shape
   const R = 150, w = 400, disc = new Uint8Array(w * w);
   for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) if (Math.hypot(x + 0.5 - 200, y + 0.5 - 200) < R) disc[y * w + x] = 1;
-  const poly = maskPolygon(disc, w, w);
+  const poly = maskPolygon(disc, w, w, { simple: 0 });
   t.ok(poly.length <= MAX_OUTLINE && Math.abs(Math.abs(polyArea(poly)) / (Math.PI * R * R) - 1) < 0.01, `a disc becomes ${poly.length} points within 1% of its area`);
+
+  // simplicity (issue #39): a square turned 20 degrees has a pixel staircase along every side. Detailed keeps it, simple
+  // straightens it to about its four corners, and every setting still matches the square.
+  const sqr = new Uint8Array(w * w), c20 = Math.cos(0.35), s20 = Math.sin(0.35);
+  for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) { const u = (x + 0.5 - 200) * c20 + (y + 0.5 - 200) * s20, v = -(x + 0.5 - 200) * s20 + (y + 0.5 - 200) * c20; if (Math.abs(u) < 90 && Math.abs(v) < 90) sqr[y * w + x] = 1; }
+  const truthSq = [[-90, -90], [90, -90], [90, 90], [-90, 90]].map(([u, v]) => [200 + u * c20 - v * s20, 200 + u * s20 + v * c20]);
+  const counts = [0, 0.4, 1].map((simple) => { const pl = maskPolygon(sqr, w, w, { simple }); return { n: pl.length, iou: iou(pl, truthSq) }; });
+  t.ok(counts[0].n > 3 * counts[1].n && counts[2].n <= 6, `a slanted square: ${counts.map((c) => c.n).join(' → ')} points from detailed to simple`);
+  t.ok(counts.every((c) => c.iou > 0.97), `and its outline matches at every setting (IoU ${counts.map((c) => c.iou.toFixed(3)).join(', ')})`);
   const s = outlineToSurface(poly, 1280, 720);
   const back = surfaceGeom(s, 1280, 720).parts[0].outline;
   t.ok(!s.quad && iou(back, poly) > 0.99, 'a round outline keeps its shape as the surface\'s points');

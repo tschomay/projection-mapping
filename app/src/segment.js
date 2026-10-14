@@ -48,20 +48,25 @@ class Segmenter {
   }
 
   // masks around photo pixel (x, y), smallest first: each { mask (one byte per pixel), area, score }. Masks that
-  // don't hold the tap, cover most of the photo or barely differ from a smaller one are left out.
-  async masksAt(x, y) {
+  // don't hold the tap, cover most of the photo or barely differ from a smaller one are left out. sense (0..1) moves
+  // the line between in and out on the model's own scores: stricter keeps only what it is surer of, so a mask pulls
+  // back inside weaker boundaries. The scores of the last tap are kept, so moving sense is quick.
+  async masksAt(x, y, { sense = 0.5 } = {}) {
     const { inputs, embeddings } = await this.ready, T = this.T;
-    const [rh, rw] = inputs.reshaped_input_sizes[0], [oh, ow] = inputs.original_sizes[0];
-    const input_points = new T.Tensor('float32', [x * rw / ow, y * rh / oh], [1, 1, 1, 2]);
-    const input_labels = new T.Tensor('int64', [1n], [1, 1, 1]);
-    const out = await this.model({ ...embeddings, input_points, input_labels });
-    const [m] = await this.processor.post_process_masks(out.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
-    const [, k, H, W] = m.dims, n = H * W, scores = Array.from(out.iou_scores.data);
+    if (!this.last || this.last.x !== x || this.last.y !== y || this.last.key !== this.key) {
+      const [rh, rw] = inputs.reshaped_input_sizes[0], [oh, ow] = inputs.original_sizes[0];
+      const input_points = new T.Tensor('float32', [x * rw / ow, y * rh / oh], [1, 1, 1, 2]);
+      const input_labels = new T.Tensor('int64', [1n], [1, 1, 1]);
+      const out = await this.model({ ...embeddings, input_points, input_labels });
+      const [m] = await this.processor.post_process_masks(out.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes, { binarize: false });
+      this.last = { x, y, key: this.key, m, scores: Array.from(out.iou_scores.data) };
+    }
+    const { m, scores } = this.last, [, k, H, W] = m.dims, n = H * W, cut = (sense - 0.5) * 6;
     const at = Math.floor(y) * W + Math.floor(x), found = [];
     for (let j = 0; j < k; j++) {
       const mask = new Uint8Array(n);
       let area = 0;
-      for (let i = 0; i < n; i++) if (m.data[j * n + i]) { mask[i] = 1; area++; }
+      for (let i = 0; i < n; i++) if (m.data[j * n + i] > cut) { mask[i] = 1; area++; }
       if (mask[at] && area < n * 0.5 && scores[j] > 0.5) found.push({ mask, area, score: scores[j] });
     }
     found.sort((a, b) => a.area - b.area);
