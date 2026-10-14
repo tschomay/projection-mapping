@@ -58,7 +58,7 @@ body.capturing #stage { cursor: none; }
 #toolbar .btn { background: #12161ecc; backdrop-filter: blur(6px); }
 #toolbar .btn.primary { background: var(--lamp); }
 
-#drawer { top: 0; right: 0; bottom: 0; width: min(380px, 92vw); background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); }
+#drawer { z-index: 3; top: 0; right: 0; bottom: 0; width: min(380px, 92vw); background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); }
 #drawer header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .tabs { display: flex; flex: 1; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .tabs button { flex: 1; background: transparent; border: 0; padding: 7px 4px; cursor: pointer; color: var(--muted); min-height: 36px; }
