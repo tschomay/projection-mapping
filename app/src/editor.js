@@ -4,6 +4,7 @@ import { SHAPES, hApply, pointInPoly, insideSurface, dist, inputRect } from './g
 import { MAX_PART_VERTS, MAX_SURF, MAX_PARTS } from './renderer.js';
 
 const HANDLE_CSS_PX = 22;   // touch target radius
+const LONG_PRESS_MS = 500, LONG_PRESS_SLOP = 10;   // a finger held this long without moving this far (css px) opens the menu
 
 export class Editor {
   constructor(app, overlay) {
@@ -22,12 +23,20 @@ export class Editor {
     this.touches = new Map(); // fingers (pointers) down: id -> [clientX, clientY]
     this.pinch = null;        // two fingers zooming and panning the view (on the design photo)
     this.tap = null;          // picking: a touch that becomes a tap if it lifts without moving
+    this.press = null;        // a touch that may become a long press: { id, at, p, timer }
+    this.before = null;       // the surfaces as a drag started, for undo
     overlay.addEventListener('pointerdown', (e) => this.pointerDown(e));
     overlay.addEventListener('pointermove', (e) => this.pointerMove(e));
     overlay.addEventListener('pointerup', (e) => this.pointerUp(e));
     overlay.addEventListener('pointercancel', (e) => this.pointerUp(e, true));
     overlay.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
     overlay.addEventListener('dblclick', (e) => this.dbl(e));
+    // right click, or the browser's own long press on Android: the same menu as a long press
+    overlay.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this.pick || this.compose || this.touches.size > 1 || this.handleDrag()) return;
+      this.longPress(this.toFrame(e), [e.clientX, e.clientY]);
+    });
   }
 
   get surfaces() { return this.app.project.surfaces; }
@@ -56,8 +65,10 @@ export class Editor {
 
   // ---- gestures: one finger edits (or, picking, taps); two fingers pinch and pan the view on the design photo ----
   pointerDown(e) {
+    if (e.button === 2) return;   // right click opens the menu (contextmenu) instead
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* a pointer the browser no longer tracks */ }
     this.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (this.touches.size > 1) this.endPress();
     if (this.touches.size === 2 && this.app.canZoom()) {
       this.cancelDrag();
       const [a, b] = [...this.touches.values()];
@@ -67,9 +78,36 @@ export class Editor {
     if (this.touches.size > 1) return;
     this.app.gesture();
     if (this.pick) { this.tap = { id: e.pointerId, at: [e.clientX, e.clientY], p: this.toFrame(e), view: { ...this.app.view } }; return; }
+    // what a drag started from: one undo step if it changes something, and put back if it turns into a pinch
+    const before = this.app.snapshot();
     this.down(e);
-    // what a drag started from, to put back if it turns into a pinch
-    this.dragFrom = this.drag && this.surfaces[this.sel] ? { i: this.sel, s: structuredClone(this.surfaces[this.sel]) } : null;
+    this.before = this.drag ? before : null;
+    // not while dragging a corner or point: holding one still before a careful move is normal
+    if (!this.compose && !this.handleDrag()) {
+      const p = this.toFrame(e), id = e.pointerId, at = [e.clientX, e.clientY];
+      this.press = { id, at, timer: setTimeout(() => { if (this.press?.id === id) this.longPress(p, at); }, LONG_PRESS_MS) };
+    }
+  }
+
+  handleDrag() { return !!this.drag && this.drag.type !== 'move' && this.drag.type !== 'part'; }
+  endPress() { if (this.press) { clearTimeout(this.press.timer); this.press = null; } }
+
+  // a finger held still on a surface (or on nothing): undo any drag it started, select it, and open its menu
+  longPress(p, at) {
+    this.endPress();
+    if (this.drag) this.cancelDrag();
+    if (this.app.menuOpen?.()) return;
+    const s = this.surfaces[this.sel], g = this.geoms[this.sel], r = this.handleR();
+    let i = -1, vert = null;
+    if (s && g) {
+      if (this.mode === 'points') for (let j = 0; j < g.parts.length && !vert; j++) { const k = g.parts[j].px.findIndex((q) => dist(q, p) <= r); if (k >= 0) vert = { j, k }; }
+      if (vert || (this.mode === 'warp' && g.pins.some((q) => dist(q, p) <= r))) i = this.sel;
+    }
+    if (i < 0) i = this.surfaceAt(...p);
+    if (i >= 0 && i !== this.sel) this.select(i);
+    if (vert) { this.selVert = vert; this.app.changed({ geometry: false, save: false }); }
+    navigator.vibrate?.(12);
+    this.app.surfaceMenu(i, at, p, vert);
   }
 
   pointerMove(e) {
@@ -88,10 +126,12 @@ export class Editor {
       if (this.tap.moved && this.app.view.s > 1) this.app.zoomView(this.tap.view, this.tap.at, [e.clientX, e.clientY], 1);
       return;
     }
+    if (this.press?.id === e.pointerId && Math.hypot(e.clientX - this.press.at[0], e.clientY - this.press.at[1]) > LONG_PRESS_SLOP) this.endPress();
     if (this.touches.size === 1) this.move(e);
   }
 
   pointerUp(e, cancelled = false) {
+    if (this.press?.id === e.pointerId) this.endPress();
     this.touches.delete(e.pointerId);
     if (this.pinch) { if (!this.touches.size) this.pinch = null; return; }
     if (this.tap && this.tap.id === e.pointerId) {
@@ -102,13 +142,12 @@ export class Editor {
     this.up();
   }
 
-  // a drag interrupted by a second finger: put the surface back as it was
+  // a drag interrupted by a second finger or a long press: put the surfaces back as they were
   cancelDrag() {
     this.tap = null;
     if (!this.drag) return;
-    const f = this.dragFrom;
-    if (f && this.surfaces[f.i]) this.surfaces[f.i] = f.s;
-    this.drag = null; this.dragFrom = null;
+    if (this.before) this.app.project.surfaces = this.before.surfaces;
+    this.drag = null; this.before = null;
     this.app.changed();
   }
 
@@ -183,7 +222,12 @@ export class Editor {
     this.app.changed();
   }
 
-  up() { if (this.drag) { this.drag = null; this.app.changed({ geometry: false, save: true }); } }
+  up() {
+    if (!this.drag) return;
+    this.drag = null;
+    this.app.commit(this.before); this.before = null;
+    this.app.changed({ geometry: false, save: true });
+  }
 
   dbl(e) {
     if (this.compose || this.mode !== 'points' || !this.surfaces[this.sel]) return;
@@ -197,6 +241,7 @@ export class Editor {
   // ---- commands ----
   addSurface(surface) {
     if (this.surfaces.length >= MAX_SURF) { this.app.toast(`Up to ${MAX_SURF} surfaces can be projected. Combine shapes into one surface to cover more.`); return false; }
+    this.app.checkpoint();
     this.surfaces.push(surface); this.select(this.surfaces.length - 1); this.app.changed();
     return true;
   }
@@ -204,6 +249,7 @@ export class Editor {
     const s = this.surfaces[this.sel];
     if (!s || s.parts.length >= 8) return false;
     if (this.surfaces.reduce((a, x) => a + x.parts.length, 0) >= MAX_PARTS) { this.app.toast(`Up to ${MAX_PARTS} shapes in all can be projected.`); return false; }
+    this.app.checkpoint();
     s.parts.push({ op, pts: SHAPES[shape]().map(([u, v]) => [0.3 + 0.4 * u, 0.3 + 0.4 * v]) });
     this.mode = 'points'; this.selVert = null;
     this.app.changed();
@@ -213,10 +259,17 @@ export class Editor {
     const s = this.surfaces[this.sel], v = this.selVert;
     if (!s || !v || !s.parts[v.j]) return 'Select a point first.';
     if (s.parts[v.j].pts.length <= 3) return 'A shape needs at least three points. Delete the surface instead.';
+    this.app.checkpoint();
     s.parts[v.j].pts.splice(v.k, 1); this.selVert = null; this.app.changed();
     return null;
   }
-  deleteSurface() { if (this.sel < 0) return; this.surfaces.splice(this.sel, 1); this.select(-1); this.app.changed(); }
+  deleteSurface() {
+    if (this.sel < 0) return;
+    const n = this.sel + 1;
+    this.app.checkpoint();
+    this.surfaces.splice(this.sel, 1); this.select(-1); this.app.changed();
+    this.app.toast(`Surface ${n} deleted.`, 6000, { label: 'Undo', fn: () => this.app.undo() });
+  }
   duplicateSurface() {
     const s = this.surfaces[this.sel];
     if (!s) return;
@@ -230,6 +283,7 @@ export class Editor {
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (!s) return;
     const [W, H] = this.app.frame;
+    this.app.checkpoint('nudge');
     if (this.compose) { const r = inputRect(s); s.input = { ...r, x: r.x + dx / W, y: r.y - dy / H }; }
     else if (this.mode === 'warp' && this.selPin >= 0) { const q = s.pins[this.selPin]; s.pins[this.selPin] = [q[0] + dx / W, q[1] + dy / H]; }
     else if (this.mode === 'points' && this.selVert) {

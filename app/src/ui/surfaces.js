@@ -9,14 +9,9 @@ export const surfacesUI = {
     document.querySelectorAll('[data-add]').forEach((b) => {
       b.onclick = () => { if (this.editor.addSurface(newSurface(b.dataset.add, this.project.surfaces.length))) this.toast('Drag it onto a real surface, then drag its corners into place.'); };
     });
-    document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => {
-      const ed = this.editor, s = this.project.surfaces[ed.sel];
-      ed.mode = b.dataset.mode; ed.selVert = null; ed.selPin = -1; ed.selMesh = -1;
-      if (ed.mode === 'mesh' && s && !s.mesh) { this.setMesh(s, 3); return; }   // a grid to bend, to start with
-      this.changed({ geometry: false, save: false });
-    }; });
+    document.querySelectorAll('#modeSeg button, #quickMode button').forEach((b) => { b.onclick = () => this.setMode(b.dataset.mode); });
     $('meshSize').onchange = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) this.setMesh(s, +e.target.value); };
-    $('feather').oninput = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) { s.feather = +e.target.value; $('featherOut').textContent = s.feather + ' px'; this.changed(); } };
+    $('feather').oninput = (e) => { const s = this.project.surfaces[this.editor.sel]; if (s) { this.checkpoint('feather'); s.feather = +e.target.value; $('featherOut').textContent = s.feather + ' px'; this.changed(); } };
     $('partAdd').onclick = () => this.editor.addPart($('partShape').value, 1);
     $('partCut').onclick = () => this.editor.addPart($('partShape').value, -1);
     $('delPoint').onclick = () => { const err = this.editor.deletePoint(); if (err) this.toast(err); };
@@ -53,7 +48,7 @@ export const surfacesUI = {
     if (lim) $('limitNote').textContent = lim.surfaces < lim.of
       ? `Only the first ${MAX_SURF} surfaces can be shown; surfaces ${MAX_SURF + 1} to ${lim.of} aren't projected. Delete or combine some.`
       : `Too many shapes or outline points to show them all: ${lim.droppedParts} shape${lim.droppedParts === 1 ? ' isn\'t' : 's aren\'t'} projected. Delete some combined shapes, or use a smaller bend grid.`;
-    document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
+    document.querySelectorAll('#modeSeg button, #quickMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
     $('pickBtn').setAttribute('aria-pressed', String(!!ed.pick));
     $('pickBtn').disabled = !(this.project.backdrop?.show);
     const has = ed.sel >= 0;
@@ -69,10 +64,12 @@ export const surfacesUI = {
       : ed.mode === 'mesh' ? 'Set the corners first. Then drag the grid points so the outline and content follow a curved or bowed surface.'
       : 'Drag a square to move a point. Drag a ring on an edge to add one. Double-tap a point to remove it. Drag inside a shape to move just that shape.';
     this.renderNudge();
+    this.renderQuickBar();
   },
 
   // give a surface an n x n bend grid (keeping its current shape), or none
   setMesh(s, n) {
+    this.checkpoint();
     if (!n) { delete s.mesh; if (this.editor.mode === 'mesh') this.editor.mode = 'warp'; }
     else {
       const old = s.mesh, m = flatMesh(n, n);

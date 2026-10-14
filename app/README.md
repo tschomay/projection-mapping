@@ -18,6 +18,21 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    surface whose points you drag onto a curved or bowed object; *Soft edge*
    feathers the outline. *Combine* adds shapes
    to a surface or cuts holes in it.
+   **Without opening Tools:** *Add* in the top bar adds a shape; tap a surface
+   and a bar along the bottom switches between *Corners*, *Points* and *Bend*,
+   and copies, deletes or joins it (*More* opens the full Surfaces pane).
+   Long-press a surface (or right-click it) for the same as a menu; long-press
+   empty space to add a shape right there. **Undo** (top bar, or Ctrl+Z) takes
+   back any change to the surfaces' shapes, one step at a time: drags, nudges,
+   points, bends, deletes, joins, picks. What a surface shows isn't touched.
+   Deleting a surface, joining two, or tapping a picked shape for a bigger one
+   also offers *Undo* in the message that pops up.
+   **Join:** snap two surfaces together (two squares corner to corner, say),
+   select one and tap *Join*. They become one surface with the first one's
+   content running across both. Where they share an edge it disappears, and a
+   joined rectangle gets the outer four corners as its corner pins, so content
+   fills it exactly. Surfaces that only touch at a corner, or overlap, become
+   one surface of two shapes. A bend grid is reset by joining.
    **Or let the camera find them:** *Tools → Surfaces → Find surfaces with
    the camera*. Prop the phone 30 cm to 1 m to the side of the projector,
    back camera facing the set, dim the lights and tap *Start*. The projector

@@ -25,6 +25,17 @@ in the issue listed, or paste the *Check this device* report there.
 - [ ] Add to Home Screen, open it: full screen, landscape, no browser bars.
 - [ ] Add a square, circle and triangle; drag corners, use the nudge pad.
 - [ ] *Points*: add, move and delete outline points. *Combine*: cut a hole.
+- [ ] Without opening Tools: *Add* a square, tap it, use the bottom bar
+      (Corners/Points/Bend, Copy, Delete, More). Is it in the way of the
+      nudge pad or the surfaces you're mapping?
+- [ ] Long-press a surface: the menu opens after about half a second, with a
+      buzz on Android, and doesn't move the surface. Holding a corner still
+      and then dragging it slowly must *not* open the menu. On iPhone, no
+      text-selection callout appears.
+- [ ] Undo after a drag, a nudge, deleting a surface (and *Undo* in the
+      toast), a bigger picked shape.
+- [ ] Snap two squares corner to corner, *Join*: one surface, content running
+      across both, no seam with *Soft edge* turned up.
 - [ ] *Show*: everything but the content disappears; the screen doesn't dim
       or lock after a few minutes; double-tap brings the editor back.
 - [ ] Reload: the mapping is exactly as it was.

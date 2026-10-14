@@ -20,6 +20,7 @@ import { cuesUI } from './ui/cues.js';
 import { projectUI } from './ui/project.js';
 import { scanUI } from './ui/scan.js';
 import { photoUI } from './ui/photo.js';
+import { editUI } from './ui/edit.js';
 
 class App {
   constructor() {
@@ -220,7 +221,7 @@ class App {
     document.body.classList.toggle('show', on);
     if (on) {
       this.gesture();
-      $('drawer').hidden = true; $('toolsBtn').setAttribute('aria-expanded', 'false');
+      this.toggleDrawer(false); this.closeMenu();
       // full screen, then hold landscape on phones so a nudge doesn't rotate the projected frame
       if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
         document.documentElement.requestFullscreen()
@@ -266,6 +267,7 @@ class App {
     if (this.editor?.pick) this.setPick(false);
     p.settings = { snap: true, sensitivity: 1, loop: true, ...(p.settings || {}) };
     this.editor.select(-1);
+    this.clearHistory();
     this.editor.snap = p.settings.snap;
     this.audio.sensitivity = p.settings.sensitivity;
     const missing = await this.media.restore(p.media || []);
@@ -438,6 +440,7 @@ class App {
   initEditor() {
     this.editor = new Editor(this, $('overlay'));
     // open the last project, or start one
+    this.initEditUI();
     const idx = store.listProjects();
     const last = idx.current && store.loadProject(idx.current);
     this.opening = this.openProject(last || store.newProject());
@@ -472,7 +475,11 @@ class App {
       const step = e.shiftKey ? 10 : 1;
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (d && this.editor.sel >= 0) { e.preventDefault(); this.editor.nudge(...d); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && this.editor.mode === 'points' && this.editor.selVert && !this.editor.compose) { e.preventDefault(); const err = this.editor.deletePoint(); if (err) this.toast(err); }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !document.body.classList.contains('show')) { e.preventDefault(); this.undo(); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.editor.sel >= 0 && !this.editor.compose && !document.body.classList.contains('show')) {
+        e.preventDefault();
+        if (this.editor.mode === 'points' && this.editor.selVert) { const err = this.editor.deletePoint(); if (err) this.toast(err); } else this.editor.deleteSurface();
+      }
     });
 
     if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
@@ -486,6 +493,7 @@ class App {
     const d = $('drawer'), open = force ?? d.hidden;
     d.hidden = !open;
     $('toolsBtn').setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('drawer-open', open);
     this.renderNudge();
   }
 
@@ -505,16 +513,34 @@ class App {
     $('sens').value = this.project.settings.sensitivity || 1;
   }
 
-  toast(text, ms = 3200) {
+  // a message for a moment; with an action ({ label, fn }), a button too, such as Undo
+  toast(text, ms = 3200, action = null) {
     const t = $('toast');
     t.textContent = text; t.hidden = false; t.style.opacity = '1';
-    clearTimeout(this.toastT);
-    this.toastT = setTimeout(() => { t.style.opacity = '0'; setTimeout(() => { t.hidden = true; }, 300); }, ms);
+    this.toastAction = action;
+    t.classList.toggle('act', !!action);
+    if (action) {
+      const b = document.createElement('button');
+      b.className = 'btn'; b.textContent = action.label;
+      b.onclick = () => { this.hideToast(); action.fn(); };
+      t.appendChild(b);
+    }
+    clearTimeout(this.toastT); clearTimeout(this.toastHideT);
+    this.toastT = setTimeout(() => this.hideToast(true), ms);
+  }
+
+  hideToast(fade = false) {
+    const t = $('toast');
+    clearTimeout(this.toastT); clearTimeout(this.toastHideT);
+    this.toastAction = null;
+    if (!fade) { t.hidden = true; return; }
+    t.style.opacity = '0';
+    this.toastHideT = setTimeout(() => { t.hidden = true; t.classList.remove('act'); }, 300);
   }
 }
 
 // each drawer pane's wiring and rendering lives in its own module under ui/
-Object.assign(App.prototype, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
+Object.assign(App.prototype, editUI, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
 
 // offline support when served over http(s); unavailable in embedded previews, which is fine, and not used
 // inside a Claude artifact, where the platform serves the files
