@@ -378,14 +378,16 @@ or two with WebGPU.
 wall. White cabinet doors have three or four nested outlines that show only as
 faint shading, next to a textured ceiling whose edges set the detection
 threshold too high for them; a towel hides half an oven window's edge; a mosaic
-backsplash is all grout lines. Measured by hand-labelled taps on four photos
-(two used while tuning, two held out), counting a shape as right at IoU 0.85:
+backsplash is all grout lines. Measured by 32 hand-labelled taps on six photos
+(two used while tuning, four held out; `tests/photos`), counting a shape as
+right at IoU 0.85:
 
-| | First shape right | Within three taps |
-|---|---|---|
-| Model, matched to edge rectangles | 14 of 23 | 18 of 23 |
-| Rectangles from edges alone | 8 of 21 | 10 of 21 |
-| Colour fill alone | 2 of 23 | 5 of 23 |
+| | First shape right | Within three taps | Held out only: first / within three |
+|---|---|---|---|
+| Model, matched to edge rectangles (Rectangles) | 18 of 32 | 23 of 32 | 8 / 11 of 18 |
+| Model, matched to edge rectangles (Any shape) | 17 of 32 | 21 of 32 | 9 / 11 of 18 |
+| Rectangles from edges alone | 8 of 29 | 10 of 29 | 3 / 4 of 16 |
+| Colour fill alone | 2 of 32 | 5 of 32 | 1 / 3 of 18 |
 
 So the model decides what was tapped, and where one of its masks closely
 matches a rectangle found from the photo's edges (IoU 0.8), the rectangle is
@@ -399,7 +401,11 @@ the boundary, finds its straight runs, refits each to the boundary itself and
 puts corners where runs meet, so hard corners stay sharp, slanted edges become
 single lines, and curves keep enough points to stay round. Snapping a mask's
 sides onto nearby edge lines was tried and dropped: with moldings, the nearest
-line is often the neighbouring one.
+line is often the neighbouring one. Putting compact, solid shapes first was
+tried too and made no difference. The commonest miss now is a part coming
+first (the scrollwork on a screen door's glass, the figure in a portrait),
+with the thing itself one tap further; reflections in glass still fool the
+model.
 
 Subdividing the stripe capture's planes with the same kind of photo is still
 to do (see #33).

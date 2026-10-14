@@ -88,8 +88,10 @@ export default async function run() {
     t.ok(st.model?.id === 'Xenova/slimsam-77-uniform' && st.model.dtype === 'q8', 'Any shape loads the quantized SlimSAM model');
     t.ok(/Loading the shape model/.test(st.toast) && /ready/.test(st.toast), 'and says how loading went');
     t.ok(early, 'the photo is encoded as soon as the model is ready, before any tap');
+    t.ok(await page.evaluate(() => document.getElementById('pickTune').hidden), 'the sliders wait for a pick');
     await tapShape(page, 'glass');
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });
+    t.ok(await page.evaluate(() => !document.getElementById('pickTune').hidden && !document.getElementById('pickSimpleRow').hidden), 'then show, Simplify included for outlines');
     const g = await overlap(page, 0, 'glass');
     t.ok(g.iou > 0.9 && g.points > 4, `a tap on the mirror makes a surface with its round outline (IoU ${g.iou.toFixed(3)}, ${g.points} points)`);
     const before = await page.evaluate(() => JSON.stringify(window.app.project.surfaces[0].pins));
@@ -99,6 +101,18 @@ export default async function run() {
     const n = await page.evaluate(() => window.app.project.surfaces.length);
     t.ok(r.iou > 0.9 && n === 1, `tapping again steps out to the mirror with its ring, on the same surface (IoU ${r.iou.toFixed(3)})`);
     t.ok(await page.evaluate(() => window.__fakeEncoded === 1), 'the photo is encoded only once');
+    // Simplify reshapes that same surface: fewer points, still the mirror
+    const pts = () => page.evaluate(() => window.app.project.surfaces[0].parts[0].pts.length);
+    const detailed = await page.evaluate(() => { const s = document.getElementById('pickSimple'); s.value = 0; s.dispatchEvent(new Event('input')); return window.app.project.surfaces[0].parts[0].pts.length; });
+    await page.evaluate(() => { const s = document.getElementById('pickSimple'); s.value = 1; s.dispatchEvent(new Event('input')); });
+    const simple = await pts(), rs = await overlap(page, 0, 'mirror');
+    t.ok(simple < detailed && rs.iou > 0.9 && await page.evaluate(() => window.app.project.surfaces.length) === 1, `Simplify reshapes the same surface (${detailed} → ${simple} points, IoU ${rs.iou.toFixed(3)})`);
+    t.ok(await page.evaluate(() => window.app.project.settings.pickSimple === 1), 'and is saved with the project');
+    // a tap outside it starts a new surface rather than stepping out
+    const away = await page.evaluate(() => { const b = document.getElementById('overlay').getBoundingClientRect(); return [b.left + b.width * 0.08, b.top + b.height * 0.5]; });
+    await page.mouse.click(away[0], away[1]);
+    await page.waitForTimeout(800);
+    t.ok(await page.evaluate(() => window.app.project.surfaces.length !== 1 || /No outline/.test(window.__toasts.at(-1))), 'a tap elsewhere starts a new one');
     await ctx.close();
 
     // without the model
