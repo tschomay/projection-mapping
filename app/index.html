@@ -94,9 +94,28 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #nudge button svg { width: 18px; height: 18px; }
 #nudgeStep { font: 11px var(--mono); }
 #composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
-#composeBar span, #pickBar span { font-size: 13px; }
+#composeBar span { font-size: 13px; }
+#pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px; max-width: calc(100vw - 24px); }
 #pickBar .seg { flex: none; }
-#pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
+#pickTune { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+#pickTune label { display: flex; align-items: center; gap: 6px; }
+#pickTune input { width: clamp(70px, 14vw, 160px); }
+/* a shape being worked out again after a slider moved */
+#pickBusy { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--lamp); flex: none; margin-left: auto; }
+#pickBusy::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--lamp); animation: spin .7s linear infinite; }
+#pickBusy[hidden] { display: flex !important; visibility: hidden; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #pickBusy::before { animation: none; border-color: var(--lamp); } }
+/* narrow screens: full width below the toolbar, the sliders on a row of their own */
+@media (max-width: 760px) {
+  #pickBar { top: calc(58px + env(safe-area-inset-top, 0px)); left: 8px; right: 8px; transform: none; max-width: none; justify-content: space-between; }
+  #pickTune { order: 3; flex-basis: 100%; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }
+  #pickTune label { width: 100%; min-width: 0; box-sizing: border-box; padding: 0 4px; }
+  #pickTune label span { flex: none; width: 76px; }
+  #pickTune input { width: 0; flex: 1 1 0; min-width: 0; margin: 0; }
+}
+/* the nudge pad would cover the photo while picking */
+body.picking #nudge { display: none !important; }
 #photoVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
 #photoStatus, #alignNote { white-space: pre-line; margin: 8px 0 0; }
 #alignView { width: 100%; display: block; border: 1px solid var(--line); border-radius: 6px; background: #000; touch-action: none; margin: 6px 0 8px; }
@@ -163,6 +182,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
   <button class="btn" id="playBtn" hidden>
     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg><span>Play</span></button>
   <button class="btn primary" id="showBtn">Show</button>
+  <button class="btn" id="viewFit" hidden title="Zoom back out to the whole frame">Fit</button>
 </div>
 
 <aside id="drawer" class="ui" hidden aria-label="Tools">
@@ -450,7 +470,12 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
 
 <div id="pickBar" class="ui" hidden>
   <div class="seg" id="pickKind"><button data-kind="rect" aria-pressed="true">Rectangles</button><button data-kind="any" aria-pressed="false">Any shape</button></div>
-  <span id="pickHint">Tap a frame, panel or door on the photo. Tap it again for the one around it.</span><button class="btn primary" id="pickDone">Done</button>
+  <div id="pickTune" hidden>
+    <label title="How faint an edge still stops the shape. Higher keeps it smaller, inside fainter lines."><span>Sensitivity</span> <input type="range" id="pickSense" min="0" max="1" step="0.05" value="0.5"></label>
+    <label id="pickSimpleRow" title="Lower follows every detail; higher straightens edges and keeps only the main corners."><span>Simplify</span> <input type="range" id="pickSimple" min="0" max="1" step="0.05" value="0.4"></label>
+  </div>
+  <span id="pickBusy" role="status" hidden>Updating…</span>
+  <button class="btn primary" id="pickDone">Done</button>
 </div>
 <div id="composeBar" class="ui" hidden><span>Arranging: drag a rectangle to pick what that surface shows, its corners to resize</span><button class="btn primary" id="composeDone">Done</button></div>
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>

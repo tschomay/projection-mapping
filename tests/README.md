@@ -18,7 +18,7 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `sim.test.mjs` | The sandbox's copy of the capture pipeline matches `app/src/capture.js`. If it fails, run `node tools/build-sim.mjs`. |
 | `capture.test.mjs` | The surface-capture pipeline (`app/src/capture.js`) on a synthetic room: a projector, a camera beside it, a wall, a floor and a box. The box faces must come back as three surfaces with the right corners. Node only. |
 | `photo.test.mjs` | A photo from beside the projector's lens, on a synthetic wall with wainscoting and picture frames (`buildWall` in `scene.mjs`): the projector frame found from a black and a white photo, and a tap on each panel and picture giving its rectangle, then the ones around it (artwork, mat, frame). Node only. |
-| `outline.test.mjs` | Any-shape outlines in Node: a mask traced and simplified, a round outline kept as the surface's points and a four-sided one turned into corner pins, and the colour fill outlining the synthetic wall's round mirror (glass, then glass and ring) and a panel. |
+| `outline.test.mjs` | Any-shape outlines in Node: a mask traced and simplified; Simplify straightening a slanted square's staircase, keeping an L's and a hexagon's corners, a disc round and an arch's corners under its curve; a round outline kept as the surface's points and a four-sided one turned into corner pins; the colour fill outlining the synthetic wall's round mirror (glass, then glass and ring) and a panel. |
 | `transfer.test.mjs` | Second-screen file transfer in Node with a slow fake connection: 5 MB arrives intact, never more than 32 chunks in flight, progress reported. |
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
@@ -27,7 +27,7 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `mesh.e2e.mjs` | Bending a surface with its grid and softening its edge, read back from the rendered frame: the outline and content follow the bend, no seams between cells, the feather, and point editing through the bend. |
 | `limits.e2e.mjs` | Renderer limits: more than 2,048 outline points still draw; a 17th surface is refused; too many surfaces or shapes are reported in the Surfaces pane. |
 | `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. Then, with a fake camera filming the synthetic wall: *Take it from the projector* lines the photo up with the frame, its corners can be dragged, and tapping pictures and panels on it makes surfaces on them. |
-| `outline.e2e.mjs` | *Any shape* in the app on the synthetic wall: with a fake transformers.js in place of the CDN module, a tap on the mirror gives a surface with its round outline and a second tap takes in the ring, the photo encoded once; with the model unreachable, the app says so and the colour fill outlines the mirror. |
+| `outline.e2e.mjs` | *Any shape* in the app on the synthetic wall: with a fake transformers.js in place of the CDN module, a tap on the mirror gives a surface with its round outline and a tap inside it takes in the ring, the photo encoded once; the sliders appear after a pick, *Simplify* reshapes the same surface and is saved, and a tap elsewhere starts a new one; with the model unreachable, the app says so and the colour fill outlines the mirror. |
 | `share.e2e.mjs` | Project links: *Share a link* copies a link, a fresh browser opens it with surfaces, effects and cues, saves it and clears the fragment; a damaged link; in an artifact, *Open in Surface Mapper* is a plain link that follows edits. |
 | `isf.test.mjs` | ISF in Node: an exported effect's header, inputs and main(); an imported generator's renamed names, inputs fixed at their defaults, `#ifndef GL_ES` code left out; files that are refused (image or audio inputs, several passes). Uses `fixtures/rings.fs`. |
 | `isf.e2e.mjs` | ISF and the composition canvas in the app: every built-in effect exported as ISF compiles and draws in a minimal ISF host (WebGL1); *Export this effect as ISF* downloads the file; importing a generator, and the exported file again, draws on a surface; an image filter is refused. *Arrange content*: dragging a surface's rectangle moves and resizes what it shows, for effects and for "one image across all" media. |
@@ -67,7 +67,16 @@ SIM_PATH=/path/to/other/index.html ... # compare another version of the sandbox
 
 Each seed takes about a minute under software WebGL.
 
-`bench/segment.bench.mjs` runs the real outline model (SlimSAM, downloaded from
-jsDelivr and Hugging Face, so it needs the network) on the synthetic wall next
-to the colour fill, and prints how well each mask's outline matches the true
-ones (IoU). Behind an HTTPS proxy it passes `HTTPS_PROXY` to the browser.
+`bench/pick.bench.mjs` measures picking on a photo (*Tap things on the photo*)
+against the hand-labelled real photos in `photos/` (see its README): for each
+tap, whether the first shape is right and whether one of the first three is
+(IoU 0.85 or more), with the shape model in both modes, and without it from
+edges and colour fill. It needs the network for the model (`--no-model` skips
+it); behind an HTTPS proxy it passes `HTTPS_PROXY` to the browser. `PHOTOS=dir`
+adds your own labelled photos, kept out of the repository; `--split holdout`
+scores only the photos not used while tuning.
+
+```sh
+node bench/pick.bench.mjs --verbose          # every tap's scores, and totals
+node bench/pick.bench.mjs --sense 0.7        # at another Sensitivity
+```

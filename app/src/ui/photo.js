@@ -4,10 +4,10 @@
 // a colour fill. Methods mixed into App (see app.js), so `this` is the app.
 import { Camera, CaptureError, listCameras, runFramePhoto } from '../camera.js';
 import { coverQuad, cssMatrix, frameQuad, photoToFrame, framePointToPhoto, photoPointToFrame } from '../photo.js';
-import { analysePhoto, quadsAt } from '../regions.js';
-import { colourFill, maskToSurface } from '../outline.js';
+import { analysePhoto } from '../regions.js';
 import { loadSegmenter } from '../segment.js';
-import { newSurface, SHAPES } from '../geometry.js';
+import { findAt, shapesOf, DEFAULTS } from '../pick.js';
+import { newSurface, insideSurface } from '../geometry.js';
 import { $ } from '../env.js';
 
 const ANALYSIS_W = 1024;   // the photo is searched for rectangles at most this wide
@@ -21,6 +21,12 @@ export const photoUI = {
     $('pickDone').onclick = () => this.setPick(false);
     this.pickKind = 'rect';
     document.querySelectorAll('#pickKind button').forEach((b) => { b.onclick = () => this.setPickKind(b.dataset.kind); });
+    // the two tuning sliders reshape the last pick: they slide freely, and the shape is worked out again when the
+    // finger pauses or lifts
+    for (const [id, key] of [['pickSense', 'sense'], ['pickSimple', 'simple']]) {
+      $(id).oninput = (e) => { this.project.settings['pick' + key[0].toUpperCase() + key.slice(1)] = +e.target.value; this.scheduleSave(); this.tuneSoon(key, 300); };
+      $(id).onchange = () => this.tuneSoon(key, 0);
+    }
   },
 
   // the design photo's frame quad: stored, or what simply covering the frame shows
@@ -186,8 +192,12 @@ export const photoUI = {
     if (on && !(m && b.show)) { this.toast('Add a photo from the projector first: Project → Design on a photo.', 4000); on = false; }
     if (on && this.editor.compose) this.setCompose(false);
     this.editor.pick = on;
+    document.body.classList.toggle('picking', on);
     this.pickLast = null;
     $('pickBar').hidden = !on;
+    $('pickSense').value = this.pickSetting('sense'); $('pickSimple').value = this.pickSetting('simple');
+    this.renderPickTune();
+    if (on) { this.pickHint(); this.prepareModel(); }
     if (on) this.toggleDrawer(false);
     this.renderSurfaceUI();
   },
@@ -196,9 +206,9 @@ export const photoUI = {
   setPickKind(kind) {
     this.pickKind = kind; this.pickLast = null;
     document.querySelectorAll('#pickKind button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
-    $('pickHint').textContent = kind === 'any' ? 'Tap a mirror, a wreath, anything. Tap it again for a bigger outline.' : 'Tap a frame, panel or door on the photo. Tap it again for the one around it.';
-    // start the download, and then encoding the photo, now rather than on the first tap
-    if (kind === 'any') this.segmenter().then((seg) => { const P = seg && this.photoPixels(); if (P) seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {}); });
+    this.pickHint();
+    this.renderPickTune();
+    this.prepareModel();
   },
 
   // the segmentation model, loading it the first time (with progress shown); null where it can't load
@@ -208,28 +218,33 @@ export const photoUI = {
       let shown = -1;
       this.segLoad = loadSegmenter((share) => {
         const pc = Math.floor(share * 100);
-        if (pc !== shown && this.pickKind === 'any') { shown = pc; this.toast(`Loading the outline model (about 14 MB, only once): ${pc}%`, 20000); }
-      }).then((seg) => { if (this.pickKind === 'any') this.toast('Outline model ready. Tap something on the photo.'); return seg; }, () => {
+        if (pc !== shown && this.editor.pick) { shown = pc; this.toast(`Loading the shape model (about 14 MB, only once): ${pc}%`, 20000); }
+      }).then((seg) => { if (this.editor.pick) this.toast('Shape model ready.'); return seg; }, () => {
         this.segFailed = true; this.segLoad = null;
-        this.toast('The outline model can\'t load here (offline, or blocked), so a colour fill finds outlines instead. It works best on plainly coloured things.', 6000);
+        if (this.editor.pick) this.toast('The shape model can\'t load here (offline, or blocked), so shapes come from the photo\'s edges and colours instead. They work best on plain, clearly edged things.', 6000);
         return null;
       });
     }
     return this.segLoad;
   },
 
-  // surface geometry for any shape around photo pixel (x, y): the model's masks, or the colour fill's
-  async shapesAt(P, x, y, quad) {
-    const [W, H] = this.frame;
-    const toFrame = ([px, py]) => { const [u, v] = photoPointToFrame(quad, px / P.w, py / P.h); return [u * W, v * H]; };
-    const seg = await this.segmenter();
-    let masks = [];
-    if (seg) {
-      const t = setTimeout(() => this.toast('Looking at the photo: the first time takes a while on a phone…', 30000), 400);
-      try { await seg.embed(P.rgba, P.w, P.h, P.mediaId); masks = await seg.masksAt(x, y); } catch { /* the model failed on this device: the colour fill below */ } finally { clearTimeout(t); }
-    }
-    if (!masks.length) masks = colourFill(P.rgba, P.w, P.h, x, y, P.A);
-    return masks.map((m) => maskToSurface(m.mask, P.w, P.h, x, y, toFrame, W, H)).filter(Boolean);
+  // start the model's download, and then encoding the photo, as soon as picking starts rather than on the first tap
+  prepareModel() {
+    this.segmenter().then((seg) => {
+      if (!seg) return;
+      this.segReady = true;
+      const P = this.photoPixels();
+      if (P) seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {});
+    });
+  },
+  pickHint() {
+    this.toast(this.pickKind === 'any' ? 'Tap a mirror, a wreath, anything. Tap inside it again for a bigger outline.' : 'Tap a frame, panel or door. Tap inside it again for the one around it.', 4000);
+  },
+  pickSetting(key) { return this.project.settings['pick' + key[0].toUpperCase() + key.slice(1)] ?? DEFAULTS[key]; },
+  // the sliders show once there's a pick to tune; Simplify only for outlines
+  renderPickTune() {
+    $('pickTune').hidden = !this.pickLast;
+    $('pickSimpleRow').hidden = this.pickKind !== 'any';
   },
 
   // the photo's edges and lines, worked out once per photo
@@ -246,48 +261,97 @@ export const photoUI = {
     return this.photoAnalysis;
   },
 
-  // a tap at frame pixel p: the rectangle (or shape) around it on the photo becomes a surface; tapping the same spot
-  // again swaps it for the next one out
+  // A tap at frame pixel p: the rectangle (or shape) around it on the photo becomes a surface. A tap inside the
+  // surface just made swaps it for the next one out; anywhere else starts a new one.
   async pickAt(p) {
     if (this.picking) return;
     const P = this.photoPixels();
     if (!P) { this.toast('The photo isn\'t loaded yet.'); return; }
     const [W, H] = this.frame, quad = this.backdropQuad();
+    const last = this.pickLast, at = last ? this.project.surfaces.findIndex((s) => s.id === last.id) : -1;
+    if (at >= 0 && last.kind === this.pickKind && insideSurface(this.geoms[at], p[0], p[1])) {
+      if (last.found.length < 2) { this.toast('Nothing bigger found around it. Tap somewhere else, or move Sensitivity.'); return; }
+      last.idx = (last.idx + 1) % last.found.length;
+      this.applyPick();
+      this.toast(last.idx ? `Surface ${at + 1}: the next one out.` : `Surface ${at + 1}: back to the smallest.`);
+      return;
+    }
     const [u, v] = framePointToPhoto(quad, p[0] / W, p[1] / H);
     if (u < 0 || v < 0 || u > 1 || v > 1) { this.toast('That spot is outside the photo.'); return; }
-    const last = this.pickLast, again = last && last.kind === this.pickKind && Math.hypot(p[0] - last.p[0], p[1] - last.p[1]) < W * 0.015;
-    let found = again ? last.found : null;
-    if (!found) {
-      if (this.pickKind === 'any') {
-        this.picking = true;
-        try { found = await this.shapesAt(P, u * P.w, v * P.h, quad); } catch (err) { this.toast('Finding the outline failed: ' + (err.message || err)); return; } finally { this.picking = false; }
-      } else {
-        // corners on the photo -> the frame; pins run bottom-left, bottom-right, top-right, top-left
-        found = quadsAt(P.A, u * P.w, v * P.h).map((f) => {
-          const c = f.quad.map(([x, y]) => photoPointToFrame(quad, x / P.w, y / P.h));
-          return { pins: [c[3], c[2], c[1], c[0]], parts: [{ op: 1, pts: SHAPES.square() }] };
-        });
-      }
+    const pick = { kind: this.pickKind, P, quad, x: u * P.w, y: v * P.h, idx: 0, id: null };
+    this.picking = true;
+    try { await this.findPick(pick); } catch (err) { this.toast('Finding the outline failed: ' + (err.message || err)); return; } finally { this.picking = false; }
+    if (!pick.found.length) {
+      this.toast(pick.kind === 'any' ? 'No outline found there. Try nearer its middle, or move Sensitivity.' : 'No rectangle found there. Tap nearer the middle of a frame or panel, or try Any shape.', 4000);
+      return;
     }
-    const idx = again ? last.idx + 1 : 0;
-    if (!found.length) {
-      this.toast(this.pickKind === 'any' ? 'No outline found there. Try tapping nearer its middle.' : 'No rectangle found there. Tap nearer the middle of a frame or panel, or try Any shape.', 4000);
-      this.pickLast = null; return;
+    this.pickLast = pick;
+    this.applyPick();
+    this.renderPickTune();
+    const n = this.project.surfaces.findIndex((s) => s.id === pick.id) + 1;
+    this.toast(pick.found.length > 1 ? `Surface ${n}. Tap inside it again for the one around it.` : `Surface ${n}.`);
+  },
+
+  // the candidates for a pick at its photo pixel, with the current sliders: pick.found (surface geometry)
+  // The model is used once it's ready (it's started when picking starts); in rectangle mode a tap doesn't wait for
+  // the download, it uses edges meanwhile.
+  async findPick(pick) {
+    const { P } = pick;
+    let seg = this.segReady ? await this.segLoad : null;
+    if (!seg && pick.kind === 'any') seg = await this.segmenter();
+    if (seg) {
+      const t = setTimeout(() => this.toast('Looking at the photo: the first time takes a while on a phone…', 30000), 400);
+      await seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {});
+      clearTimeout(t);
     }
-    if (idx >= found.length) { this.toast('Nothing bigger around this spot. Tap somewhere else.'); return; }
-    const { pins, parts } = found[idx];
-    const surfaces = this.project.surfaces, prev = again ? surfaces.findIndex((s) => s.id === last.id) : -1;
-    let id;
-    if (prev >= 0) {
-      Object.assign(surfaces[prev], { pins, parts: structuredClone(parts) }); delete surfaces[prev].mesh; id = last.id;
-      this.editor.select(prev); this.changed();
+    pick.memo ||= new Map();
+    pick.raw = await findAt({ seg, P, x: pick.x, y: pick.y, kind: pick.kind, sense: this.pickSetting('sense'), memo: pick.memo });
+    this.pickShapes(pick);
+  },
+  pickShapes(pick) {
+    const [W, H] = this.frame, { P, quad } = pick;
+    const toFrame = ([x, y]) => { const [u, v] = photoPointToFrame(quad, x / P.w, y / P.h); return [u * W, v * H]; };
+    pick.found = shapesOf(pick.raw, { kind: pick.kind, P, x: pick.x, y: pick.y, toFrame, W, H, simple: this.pickSetting('simple') });
+  },
+
+  // put the pick's current candidate on its surface, making the surface the first time
+  applyPick() {
+    const pick = this.pickLast, { pins, parts } = pick.found[Math.min(pick.idx, pick.found.length - 1)];
+    const surfaces = this.project.surfaces, at = pick.id ? surfaces.findIndex((s) => s.id === pick.id) : -1;
+    if (at >= 0) {
+      Object.assign(surfaces[at], { pins, parts: structuredClone(parts) }); delete surfaces[at].mesh;
+      this.editor.select(at); this.changed();
     } else {
       const s = newSurface('square', surfaces.length);
-      Object.assign(s, { pins, parts: structuredClone(parts) }); id = s.id;
-      if (!this.editor.addSurface(s)) return;
+      Object.assign(s, { pins, parts: structuredClone(parts) });
+      if (this.editor.addSurface(s)) pick.id = s.id;
     }
-    this.pickLast = { p, found, idx, id, kind: this.pickKind };
-    const n = surfaces.findIndex((s) => s.id === id) + 1;
-    this.toast(idx + 1 < found.length ? `Surface ${n}. Tap the same spot again for the one around it.` : `Surface ${n}.`);
+  },
+
+  // a slider moved: rework the shape after `wait` ms of stillness (0: now), showing that it's coming
+  tuneSoon(key, wait) {
+    if (!this.pickLast) return;
+    this.tuneKey = this.tuneKey === 'sense' ? 'sense' : key;
+    $('pickBusy').hidden = false;
+    clearTimeout(this.tuneT);
+    this.tuneT = setTimeout(() => { const k = this.tuneKey; this.tuneKey = null; this.tunePick(k); }, wait);
+  },
+
+  // find again (sensitivity) or just re-outline (simplicity), and reshape the same surface. One run at a time; a
+  // move during a run is picked up when it ends.
+  async tunePick(key) {
+    const pick = this.pickLast;
+    if (!pick || this.project.surfaces.findIndex((s) => s.id === pick.id) < 0) { $('pickBusy').hidden = true; return; }
+    if (this.tuning) { this.tuneAgain = (this.tuneAgain === 'sense' ? 'sense' : key); return; }
+    this.tuning = true;
+    $('pickBusy').hidden = false;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // let the spinner show first
+    try {
+      if (key === 'sense') await this.findPick(pick); else this.pickShapes(pick);
+      if (pick.found.length) this.applyPick();
+    } finally { this.tuning = false; }
+    const again = this.tuneAgain; this.tuneAgain = null;
+    if (again) this.tunePick(again);
+    else if (!this.tuneKey) $('pickBusy').hidden = true;
   },
 };
