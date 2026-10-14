@@ -161,6 +161,13 @@ export default async function run() {
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });
     const f = await overlap(page, 0, 'glass');
     t.ok(f.iou > 0.88 && f.points > 4, `the colour fill outlines the mirror's glass (IoU ${f.iou.toFixed(3)})`);
+    // the sliders show now; on a narrow phone each sits on its own row, wholly on screen
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      const rows = await page.evaluate(() => ['pickSense', 'pickSimple'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), w: Math.round(r.width) }; }).concat([{ vw: innerWidth }]));
+      const [a, b] = rows;
+      t.ok(a.w > 120 && b.w > 120 && a.l >= 0 && b.l >= 0 && a.r <= width && b.r <= width && b.t > a.t + 10, `at ${width} px both sliders stack and fit (${JSON.stringify(rows)})`);
+    }
     await ctx.close();
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
