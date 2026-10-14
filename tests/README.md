@@ -17,6 +17,7 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `sw.test.mjs` | The offline cache list and version in `app/sw.js` match the app's files. If it fails, run `node tools/sw.mjs`. |
 | `sim.test.mjs` | The sandbox's copy of the capture pipeline matches `app/src/capture.js`. If it fails, run `node tools/build-sim.mjs`. |
 | `capture.test.mjs` | The surface-capture pipeline (`app/src/capture.js`) on a synthetic room: a projector, a camera beside it, a wall, a floor and a box. The box faces must come back as three surfaces with the right corners. Node only. |
+| `photo.test.mjs` | A photo from beside the projector's lens, on a synthetic wall with wainscoting and picture frames (`buildWall` in `scene.mjs`): the projector frame found from a black and a white photo, and a tap on each panel and picture giving its rectangle, then the ones around it (artwork, mat, frame). Node only. |
 | `transfer.test.mjs` | Second-screen file transfer in Node with a slow fake connection: 5 MB arrives intact, never more than 32 chunks in flight, progress reported. |
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
@@ -24,13 +25,13 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `ai.e2e.mjs` | AI-written effects without any real API. With an Anthropic key, a fake SDK in place of the CDN module: the request (model, effort, refusal fallback, the surfaces described), one compile-repair round, applying the effect, a refusal, and key handling. With a Gemini key, a routed Interactions API: the request, the repair round, a refused key. As a Claude artifact, a stubbed `window.claude` sample(): no key box, the instructions in the first turn, the repair, declined consent. |
 | `mesh.e2e.mjs` | Bending a surface with its grid and softening its edge, read back from the rendered frame: the outline and content follow the bend, no seams between cells, the feather, and point editing through the bend. |
 | `limits.e2e.mjs` | Renderer limits: more than 2,048 outline points still draw; a 17th surface is refused; too many surfaces or shapes are reported in the Surfaces pane. |
-| `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. |
+| `photo.e2e.mjs` | Designing on a photo of the set (blended as light, saved, hidden from the media list), and media used only in a cue being kept with the project. Then, with a fake camera filming the synthetic wall: *Take it from the projector* lines the photo up with the frame, its corners can be dragged, and tapping pictures and panels on it makes surfaces on them. |
 | `share.e2e.mjs` | Project links: *Share a link* copies a link, a fresh browser opens it with surfaces, effects and cues, saves it and clears the fragment; a damaged link; in an artifact, *Open in Surface Mapper* is a plain link that follows edits. |
 | `isf.test.mjs` | ISF in Node: an exported effect's header, inputs and main(); an imported generator's renamed names, inputs fixed at their defaults, `#ifndef GL_ES` code left out; files that are refused (image or audio inputs, several passes). Uses `fixtures/rings.fs`. |
 | `isf.e2e.mjs` | ISF and the composition canvas in the app: every built-in effect exported as ISF compiles and draws in a minimal ISF host (WebGL1); *Export this effect as ISF* downloads the file; importing a generator, and the exported file again, draws on a surface; an image filter is refused. *Arrange content*: dragging a surface's rectangle moves and resizes what it shows, for effects and for "one image across all" media. |
 | `scan.e2e.mjs` | *Find surfaces with the camera* end to end, with a fake camera that films the synthetic room lit by the app's patterns, with a lag like a mirrored projector. |
 
-`scene.mjs` is the synthetic room; `serve.mjs` serves `app/` on a free port and
+`scene.mjs` is the synthetic room and wall; `serve.mjs` serves `app/` on a free port and
 holds small helpers. If Playwright is installed somewhere else, point
 `PLAYWRIGHT_PATH` at its `index.mjs`.
 

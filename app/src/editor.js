@@ -18,6 +18,7 @@ export class Editor {
     this.drag = null;
     this.snap = true;
     this.compose = false;     // arranging which part of the composition each surface shows (roadmap #7)
+    this.pick = false;        // tapping things on the design photo to make surfaces (issue #35)
     overlay.addEventListener('pointerdown', (e) => this.down(e));
     overlay.addEventListener('pointermove', (e) => this.move(e));
     overlay.addEventListener('pointerup', () => this.up());
@@ -54,6 +55,7 @@ export class Editor {
     this.app.gesture();
     const p = this.toFrame(e), r = this.handleR();
     if (this.compose) { this.composeDown(p, r); return; }
+    if (this.pick) { this.app.pickAt(p); return; }
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (s && this.mode === 'warp') {
       const k = g.pins.findIndex((q) => dist(q, p) <= r);

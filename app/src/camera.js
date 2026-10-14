@@ -69,6 +69,14 @@ export class Camera {
     return lum;
   }
 
+  // the camera image in colour at its full size, as a JPEG
+  grabPhoto() {
+    const c = document.createElement('canvas');
+    c.width = this.video.videoWidth; c.height = this.video.videoHeight;
+    c.getContext('2d').drawImage(this.video, 0, 0);
+    return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('The photo could not be saved.'))), 'image/jpeg', 0.92));
+  }
+
   // wait for the camera's next frame (no faster than the camera delivers)
   nextFrame() {
     if (this.video.requestVideoFrameCallback) return new Promise((r) => this.video.requestVideoFrameCallback(() => r()));
@@ -87,49 +95,39 @@ const mean = (a) => { let s = 0; for (let i = 0; i < a.length; i += 7) s += a[i]
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export class CaptureError extends Error {}
 
-// Run the whole capture. show(frame) puts a pattern on the projector; progress(i, n, text) reports.
-// Returns { shots, camW, camH, latency, locked }.
-export async function runCapture(camera, { W, H, show, progress = () => {}, signal }) {
-  const frames = patternFrames(W, H);
-  const check = () => { if (signal?.aborted) throw new CaptureError('Capture cancelled.'); };
+// Photograph whatever is on the projector once the camera image has stopped changing. With `unlike`, the photo
+// must also differ from that earlier one by more than sensor noise: fine stripes average out in the stability
+// check, so this is what catches a pattern that hasn't arrived yet.
+async function settle(camera, check, minWait, unlike, noise = 0) {
+  await sleep(minWait); check();
+  let prev = null, last = null;
+  const t0 = performance.now();
+  for (;;) {
+    await camera.nextFrame(); check();
+    const cur = camera.grab(), c = coarse(cur, camera.camW, camera.camH);
+    const arrived = !unlike || meanDiff(cur, unlike) > noise * 1.25 + 0.5;
+    if (prev && arrived && meanDiff(prev, c) < 1) { last = cur; break; }
+    prev = c;
+    if (performance.now() - t0 > 2500) { last = cur; break; }   // a flickering scene; take what we have
+  }
+  // average with one more frame to halve the sensor noise
+  await camera.nextFrame();
+  const extra = camera.grab();
+  for (let i = 0; i < last.length; i++) last[i] = (last[i] + extra[i]) / 2;
+  return last;
+}
 
-  // Photograph whatever is on the projector once the camera image has stopped changing. With `unlike`, the photo
-  // must also differ from that earlier one by more than sensor noise: fine stripes average out in the stability
-  // check, so this is what catches a pattern that hasn't arrived yet.
-  let latency = 150, noise = 0;
-  const settle = async (minWait, unlike) => {
-    await sleep(minWait); check();
-    let prev = null, last = null;
-    const t0 = performance.now();
-    for (;;) {
-      await camera.nextFrame(); check();
-      const cur = camera.grab(), c = coarse(cur, camera.camW, camera.camH);
-      const arrived = !unlike || meanDiff(cur, unlike) > noise * 1.25 + 0.5;
-      if (prev && arrived && meanDiff(prev, c) < 1) { last = cur; break; }
-      prev = c;
-      if (performance.now() - t0 > 2500) { last = cur; break; }   // a flickering scene; take what we have
-    }
-    // average with one more frame to halve the sensor noise
-    await camera.nextFrame();
-    const extra = camera.grab();
-    for (let i = 0; i < last.length; i++) last[i] = (last[i] + extra[i]) / 2;
-    return last;
-  };
-
-  // let auto-exposure adapt to a typical stripe frame (half lit), then lock it
-  progress(0, frames.length, 'Setting exposure…');
-  show(frames[2 + 2 * 3]);
-  await sleep(900); check();
-  const locked = await camera.lock();
-
-  // black, then white: measures the projection path's lag and checks the camera can see the projection
-  show(frames[0]);
-  const black = await settle(1000);   // generous: the lag isn't known yet
+// Black, then white: measures the projection path's lag (from showing white to the camera seeing it) and
+// photographs both. Returns { black, white, noise, latency, wait } (wait: how long to give each later frame).
+async function blackThenWhite(camera, check, show, { before } = {}) {
+  show({ mode: 0 });
+  const black = await settle(camera, check, 1000);   // generous: the lag isn't known yet
   await camera.nextFrame();
   const g1 = camera.grab(); await camera.nextFrame();
-  noise = meanDiff(g1, camera.grab());            // frame-to-frame sensor noise on a still image
+  const noise = meanDiff(g1, camera.grab());            // frame-to-frame sensor noise on a still image
+  if (before) await before();
   const bMean = mean(black);
-  show(frames[1]);
+  show({ mode: 1 });
   const tWhite = performance.now();
   let first = null;
   for (;;) {
@@ -138,9 +136,26 @@ export async function runCapture(camera, { W, H, show, progress = () => {}, sign
     if (m > bMean + 6 && first === null) first = performance.now() - tWhite;
     if (first !== null || performance.now() - tWhite > 3000) break;
   }
-  latency = Math.min(1500, first ?? 600);
+  const latency = Math.min(1500, first ?? 600);
   const wait = Math.round(latency * 1.25 + 80);
-  const white = await settle(wait, black);
+  const white = await settle(camera, check, wait, black, noise);
+  return { black, white, noise, latency, wait, bMean };
+}
+
+// Run the whole capture. show(frame) puts a pattern on the projector; progress(i, n, text) reports.
+// Returns { shots, camW, camH, latency, locked }.
+export async function runCapture(camera, { W, H, show, progress = () => {}, signal }) {
+  const frames = patternFrames(W, H);
+  const check = () => { if (signal?.aborted) throw new CaptureError('Capture cancelled.'); };
+
+  // let auto-exposure adapt to a typical stripe frame (half lit), then lock it
+  progress(0, frames.length, 'Setting exposure…');
+  show(frames[2 + 2 * 3]);
+  await sleep(900); check();
+  const locked = await camera.lock();
+
+  // black, then white: measures the projection path's lag and checks the camera can see the projection
+  const { black, white, noise, latency, wait, bMean } = await blackThenWhite(camera, check, show);
   const share = litShare(black, white);
   if (share < 0.05) throw new CaptureError('The camera hardly sees the projection. Turn off room lights, point the camera at the set, and make sure the projector shows this screen.');
 
@@ -148,16 +163,32 @@ export async function runCapture(camera, { W, H, show, progress = () => {}, sign
   for (let i = 2; i < frames.length; i++) {
     progress(i, frames.length, `Photo ${i + 1} of ${frames.length}`);
     show(frames[i]);
-    shots.push(await settle(wait, shots[i - 1]));
+    shots.push(await settle(camera, check, wait, shots[i - 1], noise));
   }
 
   // did anything move? photograph white again and compare
   progress(frames.length, frames.length, 'Checking nothing moved…');
   show(frames[1]);
-  const white2 = await settle(wait, shots[shots.length - 1]);
+  const white2 = await settle(camera, check, wait, shots[shots.length - 1], noise);
   show(frames[0]);
   const moved = meanDiff(white, white2);
   if (moved > Math.max(6, (mean(white) - bMean) * 0.12)) throw new CaptureError('The camera or the set moved during the capture. Steady the phone on a stand and try again.');
   await camera.unlock();
   return { shots, camW: camera.camW, camH: camera.camH, latency, locked, share };
+}
+
+// A photo of the set from beside the projector's lens, for designing on (issue #34): the room as it is while the
+// projector shows black, plus black and white luminance photos that show where the projector's frame falls.
+// show(frame) puts a frame on the projector. Returns { photo (a JPEG blob), black, white, camW, camH, share }.
+export async function runFramePhoto(camera, { show, signal }) {
+  const check = () => { if (signal?.aborted) throw new CaptureError('Cancelled.'); };
+  show({ mode: 0 });
+  await sleep(700); check();
+  let photo = null;
+  const { black, white } = await blackThenWhite(camera, check, show, {
+    // the room photo: taken on black, before the white frame changes the exposure
+    before: async () => { photo = await camera.grabPhoto(); await camera.lock(); },
+  });
+  await camera.unlock();
+  return { photo, black, white, camW: camera.camW, camH: camera.camH, share: litShare(black, white) };
 }

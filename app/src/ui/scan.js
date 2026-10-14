@@ -53,19 +53,10 @@ export const scanUI = {
   async runScan() {
     const sheet = $('scanSheet'), status = $('scanStatus');
     const [W, H] = this.frame;
-    // with an output window or second screen the patterns go there and this screen shows progress;
-    // otherwise this screen is the projector, so everything but the pattern is hidden
-    const remote = this.output.connected;
-    const show = (f) => { if (remote) this.post({ type: 'pattern', f }); else this.showPattern(f); };
     this.scanning = true;
     this.scanAbort = new AbortController();
     $('scanStart').disabled = true; $('scanUndo').hidden = true; $('scanView').hidden = true;
-    if (!remote) {
-      sheet.close();
-      document.body.classList.add('capturing');
-      this.gesture();
-      if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-    }
+    const show = this.beginPatterns(sheet);
     let message;
     try {
       const cap = await runCapture(this.camera, {
@@ -92,14 +83,31 @@ export const scanUI = {
     } catch (err) {
       message = err instanceof CaptureError ? err.message : 'The capture failed: ' + (err.message || err);
     } finally {
-      show(null);
-      document.body.classList.remove('capturing');
+      this.endPatterns(show);
       this.scanning = false;
       $('scanStart').disabled = false;
       if (!sheet.open) sheet.showModal();
       status.textContent = message;
       ($('scanView').hidden ? status : $('scanView')).scrollIntoView({ block: 'nearest' });
     }
+  },
+
+  // Get ready to put capture frames on the projector, and return show(frame) (null hides the frame). With an output
+  // window or second screen the frames go there and this screen shows progress; otherwise this screen is the
+  // projector, so the sheet closes and everything but the frame is hidden.
+  beginPatterns(sheet) {
+    const remote = this.output.connected;
+    if (!remote) {
+      sheet.close();
+      document.body.classList.add('capturing');
+      this.gesture();
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+    }
+    return (f) => { if (remote) this.post({ type: 'pattern', f }); else this.showPattern(f); };
+  },
+  endPatterns(show) {
+    show(null);
+    document.body.classList.remove('capturing');
   },
 
   // the flat areas found, one colour each, in the projector frame (grey: wall and floor)

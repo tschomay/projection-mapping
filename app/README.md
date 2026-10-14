@@ -24,6 +24,12 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    shows about 40 stripe frames while the camera photographs each one (half a
    minute or so; tap to cancel), then every flat face becomes a surface.
    Check the corners afterwards; *Undo* brings back what you had.
+   **Or pick them on a photo:** for flat things on a wall that the stripes
+   can't tell apart (picture frames, wainscoting panels, doors), take a photo
+   from the projector (*Project → Design on a photo → Take it from the
+   projector*), then *Tools → Surfaces → Tap things on the photo* and tap one.
+   Its corners become the surface's corners; tap the same spot again for the
+   rectangle around it (the artwork, then its mat, then the frame).
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
    the phone (*Halloween* has bats, eyes, fog, lightning and candle glow). Or
    *Describe a look* and an AI model writes a new effect for your surfaces:
@@ -45,10 +51,14 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    tap (or Space) runs the next one. Double-tap or long-press to go back to
    editing.
 
-**No projector yet?** *Project → Design on a photo*: pick a photo of the set,
-taken from where the projector will stand. Trace surfaces on it and try
-effects, media and cues; the content shows as light on the photo. On the day,
-nudge the corners onto the real objects. *Project → Check this device* shows
+**Design on a photo.** *Project → Design on a photo → Take it from the
+projector*: hold the phone right beside the projector's lens and the projector
+flashes black, then white. The white flash shows where the projector's frame is
+in the photo, so the photo lines up with the frame exactly. **No projector
+yet?** Choose a photo of the set taken from where the projector will stand,
+and drag the frame's corners onto it (*Line it up with the projector*). Trace
+surfaces on it and try effects, media and cues; the content shows as light on
+the photo. On the day, nudge the corners onto the real objects. *Project → Check this device* shows
 what your phone supports, and [`docs/connecting.md`](../docs/connecting.md)
 explains rehearsing with a TV.
 
@@ -139,7 +149,7 @@ microphone, full screen and second screens don't work inside an artifact.
 | File | What it does |
 |---|---|
 | `src/app.js` | The app: state, layout, frame loop, playback, Show mode, autosave, output window and second screen |
-| `src/ui/*.js` | One module per drawer pane (surfaces, content, sound, cues, project) plus camera capture; mixed into the app |
+| `src/ui/*.js` | One module per drawer pane (surfaces, content, sound, cues, project) plus camera capture and the design photo; mixed into the app |
 | `src/env.js` | Small shared helpers (`$`, whether this page is an output display) |
 | `src/renderer.js` | WebGL2 renderer: one fragment shader for all surfaces, effects and media |
 | `src/effects.js` | Built-in effects (GLSL); audio uniforms are documented at the top |
@@ -149,7 +159,9 @@ microphone, full screen and second screens don't work inside an artifact.
 | `src/media.js` | The user's videos, images and audio (object URLs, IndexedDB) |
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |
 | `src/capture.js` | Finding surfaces from photos: Gray-code patterns, decoding, plane fitting, surfaces (from the sandbox) |
-| `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled |
+| `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled, and the photo from the projector |
+| `src/photo.js` | Lining a photo up with the projector frame: the frame found in a black and a white photo, the homography, its CSS |
+| `src/regions.js` | Rectangles in a photo from a tap: edges, Hough lines, the quads around the tap, innermost first |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
 | `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
 | `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper* |

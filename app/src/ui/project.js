@@ -131,22 +131,25 @@ export const projectUI = {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
       try {
-        const m = await this.media.add(f);
-        if (m.kind !== 'image') { this.media.remove(m.id); throw new Error('Pick a photo (an image file).'); }
-        const old = this.project.backdrop;
-        this.project.backdrop = { mediaId: m.id, show: true, dim: old?.dim ?? 0.6 };
-        if (old && old.mediaId !== m.id && !this.isUsed(old.mediaId)) this.media.remove(old.mediaId);
-        this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
-        this.toast('Content now shows as projected light on the photo. Take the photo from where the projector will stand.', 4500);
+        await this.setBackdropFile(f);
+        this.toast('Content now shows as projected light on the photo. Line it up with the projector: drag the frame\'s corners.', 4500);
+        this.openAlign();
       } catch (err) { this.toast(err.message); }
     };
-    $('backdropShow').onchange = (e) => { if (this.project.backdrop) { this.project.backdrop.show = e.target.checked; this.scheduleSave(); this.renderBackdrop(); } };
+    $('backdropShow').onchange = (e) => {
+      if (!this.project.backdrop) return;
+      this.project.backdrop.show = e.target.checked;
+      if (!e.target.checked && this.editor.pick) this.setPick(false);
+      this.scheduleSave(); this.renderBackdrop(); this.renderSurfaceUI();
+    };
     $('backdropDim').oninput = (e) => { if (this.project.backdrop) { this.project.backdrop.dim = +e.target.value; this.scheduleSave(); this.renderBackdrop(); } };
     $('removeBackdrop').onclick = () => {
       const b = this.project.backdrop; if (!b) return;
       this.project.backdrop = null;
+      if (this.editor.pick) this.setPick(false);
       if (!this.isUsed(b.mediaId)) this.media.remove(b.mediaId);
-      this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI();
+      this.photoAnalysis = null;
+      this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI(); this.renderSurfaceUI();
     };
   },
 
@@ -157,6 +160,7 @@ export const projectUI = {
     img.hidden = !on;
     img.style.filter = `brightness(${b ? b.dim : 0.6})`;
     document.body.classList.toggle('photo', on);
+    this.placeBackdrop();
     $('backdropOpts').hidden = !b;
     if (b) { $('backdropShow').checked = b.show; $('backdropDim').value = b.dim; }
   },
