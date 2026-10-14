@@ -360,9 +360,23 @@ outlines in it (frames, molding, panels) can become surfaces directly.
   panel and picture rectangle within about 3 projector pixels, over 20 noise
   seeds. About 0.1 s to analyse a photo, then 10–50 ms per tap.
 
-Only rectangles for now. Arbitrary outlines (a promptable segmentation model
-in the browser) and subdividing the stripe capture's planes with the same
-photo are the next steps (see #33).
+**Any shape** (issue #37, `app/src/segment.js`, `app/src/outline.js`): for
+round and odd-shaped things, SlimSAM (a 14 MB quantized Segment Anything
+model) runs in the browser through transformers.js. It encodes the photo once
+and then answers each tap with up to three nested masks (part, object, whole),
+which map onto "tap again for the one around it". A mask is traced along its
+pixel edges, simplified to at most 96 points, and becomes a surface: a nearly
+four-sided mask gets its corners as pins, anything else gets the smallest
+rectangle around it as pins and the outline as its shape. Where the model
+can't load (offline, or in the Claude artifact), a colour fill from the tap
+that stops at edges stands in. On the synthetic wall's round mirror, the real
+model's outlines match the true glass and ring at IoU 0.97 and 0.96, and the
+colour fill's at 0.94 and 0.96 (`tests/bench/segment.bench.mjs`). Each tap
+takes about 0.4 s; encoding the photo took 22 s on a sandbox CPU (WebAssembly,
+one thread), and should be a second or two with WebGPU.
+
+Subdividing the stripe capture's planes with the same kind of photo is still
+to do (see #33).
 
 ## Limits and risks
 

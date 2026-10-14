@@ -59,10 +59,11 @@ export function cornerError(corners, surfaces, W, H) {
 
 // A synthetic wall for the photo checks: the projector at the origin looking down +z at a wall turned 25 degrees,
 // and a camera just beside the lens with a wider, slightly rolled view. On the wall: wainscoting (a chair rail and
-// three panels outlined by a thin molding) and two picture frames, one with a mat. buildWall is self-contained,
+// four panels outlined by a thin molding), two picture frames, one with a mat, and a round mirror in a gold ring. buildWall is self-contained,
 // like buildRoom. photo(lit, seed) is an RGBA camera image in room light, with the projector black (lit = 0) or
 // white (lit = 1). rects are the things to find, each as four corners (top-left first, clockwise on screen), in
-// projector pixels (frame) and camera pixels (cam); frameCam is the projector frame's corners in camera pixels.
+// projector pixels (frame) and camera pixels (cam); shapes are the round ones (the mirror's glass, and the glass with
+// its ring) as 96-point outlines, the same way; frameCam is the projector frame's corners in camera pixels.
 export function buildWall({ W, H, camW = 640, camH = 480 } = {}) {
   const fP = 1400 * W / 1280, fC = 560, yaw = 25 * Math.PI / 180;
   const O = [0, 0, 3], e1 = [Math.cos(yaw), 0, Math.sin(yaw)], e2 = [0, 1, 0], N = [Math.sin(yaw), 0, -Math.cos(yaw)];
@@ -89,7 +90,11 @@ export function buildWall({ W, H, camW = 640, camH = 480 } = {}) {
   const panels = [[-0.95, -0.45, -0.62, -0.40], [-0.3, 0.2, -0.62, -0.40], [0.35, 0.85, -0.62, -0.40], [1.0, 1.5, -0.62, -0.40]], MOLD = 0.015;
   const frame1 = [-0.8, -0.3, 0.0, 0.42], mat1 = shrink(frame1, 0.04), art1 = shrink(mat1, 0.05);
   const frame2 = [0.3, 0.7, -0.12, 0.3], art2 = shrink(frame2, 0.03);
+  const MIRROR = [1.25, 0.2], GLASS_R = 0.145, RING_R = 0.17;
   const albedo = (s, t) => {
+    const mr = Math.hypot(s - MIRROR[0], t - MIRROR[1]);
+    if (mr < GLASS_R) { const g = 0.62 + 0.25 * (t - MIRROR[1] + GLASS_R) / (2 * GLASS_R); return [g * 0.86, g * 0.92, g]; }   // glass, lighter at the top
+    if (mr < RING_R) return [0.78, 0.6, 0.26];                                   // gilt ring
     if (inR(s, t, art1)) { const u = (s - art1[0]) / (art1[1] - art1[0]), v = (t - art1[2]) / (art1[3] - art1[2]); return [0.25 + 0.3 * v, 0.45 + 0.2 * Math.sin(u * 5 + v * 3), 0.7 - 0.3 * u]; }
     if (inR(s, t, mat1)) return [0.93, 0.92, 0.88];
     if (inR(s, t, frame1)) return [0.32, 0.2, 0.12];
@@ -116,6 +121,9 @@ export function buildWall({ W, H, camW = 640, camH = 480 } = {}) {
   const corners = (r) => [[r[0], r[3]], [r[1], r[3]], [r[1], r[2]], [r[0], r[2]]].map(([s, t]) => wallPoint(s, t));
   const named = { panel1: shrink(panels[0], MOLD), panel2: shrink(panels[1], MOLD), panel3: shrink(panels[2], MOLD), panel1Outer: panels[0], art1, mat1, frame1, art2, frame2 };
   const rects = Object.fromEntries(Object.entries(named).map(([k, r]) => [k, { frame: corners(r).map(toProj), cam: corners(r).map(toCam) }]));
+  const circle = (r) => Array.from({ length: 96 }, (_, k) => wallPoint(MIRROR[0] + r * Math.cos(-k / 96 * 2 * Math.PI), MIRROR[1] + r * Math.sin(-k / 96 * 2 * Math.PI)));
+  const shapes = { glass: circle(GLASS_R), mirror: circle(RING_R) };
+  for (const k of Object.keys(shapes)) shapes[k] = { frame: shapes[k].map(toProj), cam: shapes[k].map(toCam) };
   const frameCam = [[0, 0], [W, 0], [W, H], [0, H]].map(([x, y]) => toCam(projRay(x, y)));
 
   // the photo: room light plus the projector, a little lens blur and sensor noise
@@ -140,5 +148,5 @@ export function buildWall({ W, H, camW = 640, camH = 480 } = {}) {
     }
     return out;
   }
-  return { W, H, camW, camH, photo, rects, frameCam };
+  return { W, H, camW, camH, photo, rects, shapes, frameCam };
 }

@@ -42,7 +42,7 @@ const triArea = (a, b, c) => Math.abs(cross(a, b, c)) / 2;
 export const quadArea = (q) => { let s = 0; for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
 
 // the largest quad with its corners on a convex polygon's vertices
-function maxQuad(h) {
+export function maxQuad(h) {
   const n = h.length;
   if (n < 4) return null;
   let best = null, bestA = -1;
