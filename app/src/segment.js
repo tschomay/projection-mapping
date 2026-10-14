@@ -21,9 +21,12 @@ export function loadSegmenter(progress = () => {}) {
     };
     // the graphics card where the browser offers one (encoding a photo takes a second or two), else the CPU (on a
     // phone, ten seconds or more)
+    // (a browser may offer WebGPU and still have no adapter for it, as on phones whose graphics chip is blocklisted:
+    // ask for one first)
+    const gpu = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
     const load = (device) => T.SamModel.from_pretrained(MODEL_ID, { dtype: 'q8', device, progress_callback });
     const [model, processor] = await Promise.all([
-      (navigator.gpu ? load('webgpu').catch(() => load('wasm')) : load('wasm')),
+      (gpu ? load('webgpu').catch(() => load('wasm')) : load('wasm')),
       T.AutoProcessor.from_pretrained(MODEL_ID, { progress_callback }),
     ]);
     return new Segmenter(T, model, processor);
@@ -70,6 +73,10 @@ class Segmenter {
       if (mask[at] && area < n * 0.5 && scores[j] > 0.5) found.push({ mask, area, score: scores[j] });
     }
     found.sort((a, b) => a.area - b.area);
-    return found.filter((f, i) => !i || f.area > found[i - 1].area * 1.05);
+    const kept = found.filter((f, i) => !i || f.area > found[i - 1].area * 1.05);
+    // the one the model is surest of first (what Segment Anything's authors use for a single click), then the bigger
+    // ones, then the smaller
+    const best = kept.reduce((b, f, i) => (f.score > kept[b].score ? i : b), 0);
+    return kept.slice(best).concat(kept.slice(0, best));
   }
 }

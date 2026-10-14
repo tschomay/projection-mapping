@@ -2,7 +2,7 @@
 // segmentation model in segment.js or from the colour fill here) becomes a surface: its outline traced and simplified,
 // and corner pins that suit it. No DOM here.
 import { convexHull, maxQuad, fitLine, intersect } from './photo.js';
-import { squareToQuad, inv3, hApply, SHAPES } from './geometry.js';
+import { squareToQuad, inv3, hApply, SHAPES, pointInPoly } from './geometry.js';
 import { edgeLevel } from './regions.js';
 
 export const MAX_OUTLINE = 96;   // points per outline; the renderer takes 128 per shape, which leaves room to add some
@@ -118,7 +118,9 @@ export function maskPolygon(mask, w, h, { simple = 0.4, max = MAX_OUTLINE } = {}
       return [sx / (2 * r + 1), sy / (2 * r + 1)];
     });
   }
-  let eps = 0.75 + simple ** 3 * 0.1 * size, keep = simplifyIdx(pts, eps);
+  // the tolerance stays small next to the shape's size, so curves keep enough points to stay round; straight runs
+  // lose their points at any setting once smoothing has taken out the staircase
+  let eps = 0.75 + simple ** 2 * 0.03 * size, keep = simplifyIdx(pts, eps);
   while (keep.length > max) { eps *= 1.4; keep = simplifyIdx(pts, eps); }
   if (!r || keep.length < 3) return keep.map((i) => pts[i]);
   // smoothing rounds corners off: refit each straight run to the boundary itself (its middle part), and put the
@@ -128,9 +130,25 @@ export function maskPolygon(mask, w, h, { simple = 0.4, max = MAX_OUTLINE } = {}
     for (let t = Math.ceil(len * 0.15); t <= Math.floor(len * 0.85); t++) run.push(dense[(a + t) % N]);
     return run.length >= 6 ? fitLine(run) : null;
   });
-  return keep.map((i, j) => {
-    const L1 = lines[(j - 1 + keep.length) % keep.length], L2 = lines[j], c = L1 && L2 && intersect(L1, L2);
+  const K = keep.length, prev = (j) => (j - 1 + K) % K, next = (j) => (j + 1) % K;
+  const corners = keep.map((i, j) => {
+    const L1 = lines[prev(j)], L2 = lines[j], c = L1 && L2 && intersect(L1, L2);
     return c && Math.hypot(c[0] - pts[i][0], c[1] - pts[i][1]) < Math.max(2, 2 * r) ? c : pts[i];
+  });
+  // a short chord between two straight runs is a corner that smoothing rounded off: the runs' meeting point instead
+  for (let j = 0; j < K; j++) {
+    if (lines[j] || !lines[prev(j)] || !lines[next(j)] || !corners[j] || !corners[next(j)]) continue;
+    const c = intersect(lines[prev(j)], lines[next(j)]);
+    if (c && Math.hypot(c[0] - corners[j][0], c[1] - corners[j][1]) < 3 * r && Math.hypot(c[0] - corners[next(j)][0], c[1] - corners[next(j)][1]) < 3 * r) {
+      corners[j] = c; corners[next(j)] = null;
+    }
+  }
+  for (let j = K - 1; j >= 0; j--) if (!corners[j]) corners.splice(j, 1);
+  // a point where the outline hardly turns is a leftover in the middle of a straight run
+  return corners.filter((c, j) => {
+    const a = corners[(j - 1 + corners.length) % corners.length], b = corners[(j + 1) % corners.length];
+    const u = [c[0] - a[0], c[1] - a[1]], v = [b[0] - c[0], b[1] - c[1]];
+    return corners.length <= 3 || Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])) > 0.07 || simple < 0.15;
   });
 }
 
@@ -158,10 +176,15 @@ function orderCorners(q) {
 // An outline (frame pixels) as a surface's geometry: { pins (normalized, bottom-left first), parts, quad }. An outline
 // that is nearly a quad keeps that quad's corners as pins and a square shape, like a tapped rectangle; anything else
 // gets the smallest rectangle around it as pins and the outline itself as the shape's points.
+// the quad an outline nearly is (top-left first, clockwise on screen), or null when it isn't four-sided
+export function quadOf(poly, { fill = 0.95, hull: maxHull = 1.04 } = {}) {
+  const hull = convexHull(poly), area = Math.abs(polyArea(poly)), q = maxQuad(hull);
+  return q && Math.abs(polyArea(q)) >= fill * area && Math.abs(polyArea(hull)) <= maxHull * area ? orderCorners(q) : null;
+}
+
 export function outlineToSurface(poly, W, H, detail = poly) {
   // whether it's four-sided is judged on the detailed outline (`detail`), before smoothing rounds the corners
-  const dHull = convexHull(detail), dArea = Math.abs(polyArea(detail)), q = maxQuad(dHull);
-  const quadLike = q && Math.abs(polyArea(q)) >= 0.95 * dArea && Math.abs(polyArea(dHull)) <= 1.04 * dArea;
+  const dq = quadOf(detail), quadLike = !!dq, q = dq;
   const hull = convexHull(poly);
   const corners = orderCorners(quadLike ? q : minRect(hull));
   const pinsPx = [corners[3], corners[2], corners[1], corners[0]];
@@ -257,11 +280,38 @@ export function colourFill(rgba, w, h, x, y, A, { steps = 3, maxShare = 0.35, se
   return masks;
 }
 
+// overlap of a mask component ({ mask, area }) and a quad, as IoU
+function maskQuadIoU(comp, w, h, q) {
+  const xs = q.map((p) => p[0]), ys = q.map((p) => p[1]);
+  const x0 = Math.max(0, Math.floor(Math.min(...xs))), x1 = Math.min(w - 1, Math.ceil(Math.max(...xs)));
+  const y0 = Math.max(0, Math.floor(Math.min(...ys))), y1 = Math.min(h - 1, Math.ceil(Math.max(...ys)));
+  let inter = 0, qa = 0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    if (!pointInPoly(x + 0.5, y + 0.5, q)) continue;
+    qa++; if (comp.mask[y * w + x]) inter++;
+  }
+  return inter / (comp.area + qa - inter || 1);
+}
+
 // A mask (from either source) as surface geometry: the part holding the tap (photo pixel x, y), outlined, mapped into
-// the frame by toFrame([x, y]) -> frame pixels, then given pins. Null when the tap isn't in the mask.
-export function maskToSurface(mask, w, h, x, y, toFrame, W, H, { simple = 0.4 } = {}) {
+// the frame by toFrame([x, y]) -> frame pixels, then given pins. Null when the tap isn't in the mask. quads (photo
+// pixels), when given, are rectangles found from the photo's edges around the same tap: a mask that closely matches
+// one (IoU 0.8 or more) takes that rectangle, whose sides follow real edges, instead of its own wobbly outline.
+// rect: always four corners (a mask that is neither gets the smallest rectangle around it).
+export function maskToSurface(mask, w, h, x, y, toFrame, W, H, { simple = 0.4, quads = null, rect = false } = {}) {
   const comp = componentAt(mask, w, h, x, y);
   if (!comp) return null;
+  let match = null, bestI = 0.8;
+  for (const qd of quads || []) {
+    const v = maskQuadIoU(comp, w, h, qd);
+    if (v > bestI) { bestI = v; match = qd; }
+  }
+  const detail = maskPolygon(comp.mask, w, h, { simple: 0 });
+  const q = match || quadOf(detail) || (rect && orderCorners(minRect(convexHull(detail))));
+  if (q) {
+    const c = q.map(toFrame);
+    return { pins: [c[3], c[2], c[1], c[0]].map(([fx, fy]) => [fx / W, fy / H]), parts: [{ op: 1, pts: SHAPES.square() }], quad: true };
+  }
   const poly = maskPolygon(comp.mask, w, h, { simple }).map(toFrame);
-  return poly.length >= 3 ? outlineToSurface(poly, W, H, maskPolygon(comp.mask, w, h, { simple: 0 }).map(toFrame)) : null;
+  return poly.length >= 3 ? outlineToSurface(poly, W, H, detail.map(toFrame)) : null;
 }

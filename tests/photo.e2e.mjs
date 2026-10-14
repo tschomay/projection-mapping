@@ -96,7 +96,10 @@ export default async function run() {
 
 async function cameraPhoto(browser, server, t) {
   const errors = [];
-  const page = await (await browser.newContext({ viewport: { width: 844, height: 390 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  // no shape model here: this checks the rectangles found from the photo's edges (outline.e2e covers the model)
+  await ctx.route(/cdn\.jsdelivr\.net\/npm\/@huggingface\/transformers/, (route) => route.fulfill({ status: 404, body: '' }));
+  const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (process.env.DEBUG_E2E) console.log('[page]', m.text()); });
   await page.addInitScript(fakeCamera(buildWall.toString()));

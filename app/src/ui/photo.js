@@ -6,7 +6,7 @@ import { Camera, CaptureError, listCameras, runFramePhoto } from '../camera.js';
 import { coverQuad, cssMatrix, frameQuad, photoToFrame, framePointToPhoto, photoPointToFrame } from '../photo.js';
 import { analysePhoto } from '../regions.js';
 import { loadSegmenter } from '../segment.js';
-import { rectsAt, masksAt, rectGeometry, maskGeometry, DEFAULTS } from '../pick.js';
+import { findAt, shapesOf, DEFAULTS } from '../pick.js';
 import { newSurface, insideSurface } from '../geometry.js';
 import { $ } from '../env.js';
 
@@ -194,7 +194,7 @@ export const photoUI = {
     $('pickBar').hidden = !on;
     $('pickSense').value = this.pickSetting('sense'); $('pickSimple').value = this.pickSetting('simple');
     this.renderPickTune();
-    if (on) this.pickHint();
+    if (on) { this.pickHint(); this.prepareModel(); }
     if (on) this.toggleDrawer(false);
     this.renderSurfaceUI();
   },
@@ -205,8 +205,7 @@ export const photoUI = {
     document.querySelectorAll('#pickKind button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
     this.pickHint();
     this.renderPickTune();
-    // start the download, and then encoding the photo, now rather than on the first tap
-    if (kind === 'any') this.segmenter().then((seg) => { const P = seg && this.photoPixels(); if (P) seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {}); });
+    this.prepareModel();
   },
 
   // the segmentation model, loading it the first time (with progress shown); null where it can't load
@@ -216,16 +215,25 @@ export const photoUI = {
       let shown = -1;
       this.segLoad = loadSegmenter((share) => {
         const pc = Math.floor(share * 100);
-        if (pc !== shown && this.pickKind === 'any') { shown = pc; this.toast(`Loading the outline model (about 14 MB, only once): ${pc}%`, 20000); }
-      }).then((seg) => { if (this.pickKind === 'any') this.toast('Outline model ready. Tap something on the photo.'); return seg; }, () => {
+        if (pc !== shown && this.editor.pick) { shown = pc; this.toast(`Loading the shape model (about 14 MB, only once): ${pc}%`, 20000); }
+      }).then((seg) => { if (this.editor.pick) this.toast('Shape model ready.'); return seg; }, () => {
         this.segFailed = true; this.segLoad = null;
-        this.toast('The outline model can\'t load here (offline, or blocked), so a colour fill finds outlines instead. It works best on plainly coloured things.', 6000);
+        if (this.editor.pick) this.toast('The shape model can\'t load here (offline, or blocked), so shapes come from the photo\'s edges and colours instead. They work best on plain, clearly edged things.', 6000);
         return null;
       });
     }
     return this.segLoad;
   },
 
+  // start the model's download, and then encoding the photo, as soon as picking starts rather than on the first tap
+  prepareModel() {
+    this.segmenter().then((seg) => {
+      if (!seg) return;
+      this.segReady = true;
+      const P = this.photoPixels();
+      if (P) seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {});
+    });
+  },
   pickHint() {
     this.toast(this.pickKind === 'any' ? 'Tap a mirror, a wreath, anything. Tap inside it again for a bigger outline.' : 'Tap a frame, panel or door. Tap inside it again for the one around it.', 4000);
   },
@@ -282,23 +290,24 @@ export const photoUI = {
   },
 
   // the candidates for a pick at its photo pixel, with the current sliders: pick.found (surface geometry)
+  // The model is used once it's ready (it's started when picking starts); in rectangle mode a tap doesn't wait for
+  // the download, it uses edges meanwhile.
   async findPick(pick) {
     const { P } = pick;
-    if (pick.kind === 'rect') {
-      pick.quads = rectsAt(P.A, pick.x, pick.y, this.pickSetting('sense')).quads;
-    } else {
-      const seg = await this.segmenter();
-      let t = 0;
-      if (seg) { t = setTimeout(() => this.toast('Looking at the photo: the first time takes a while on a phone…', 30000), 400); await seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {}); }
+    let seg = this.segReady ? await this.segLoad : null;
+    if (!seg && pick.kind === 'any') seg = await this.segmenter();
+    if (seg) {
+      const t = setTimeout(() => this.toast('Looking at the photo: the first time takes a while on a phone…', 30000), 400);
+      await seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {});
       clearTimeout(t);
-      pick.masks = (await masksAt({ seg, rgba: P.rgba, w: P.w, h: P.h, A: P.A, x: pick.x, y: pick.y, sense: this.pickSetting('sense') })).masks;
     }
+    pick.raw = await findAt({ seg, P, x: pick.x, y: pick.y, kind: pick.kind, sense: this.pickSetting('sense') });
     this.pickShapes(pick);
   },
   pickShapes(pick) {
     const [W, H] = this.frame, { P, quad } = pick;
     const toFrame = ([x, y]) => { const [u, v] = photoPointToFrame(quad, x / P.w, y / P.h); return [u * W, v * H]; };
-    pick.found = pick.kind === 'rect' ? rectGeometry(pick.quads, toFrame, W, H) : maskGeometry(pick.masks, P.w, P.h, pick.x, pick.y, toFrame, W, H, this.pickSetting('simple'));
+    pick.found = shapesOf(pick.raw, { kind: pick.kind, P, x: pick.x, y: pick.y, toFrame, W, H, simple: this.pickSetting('simple') });
   },
 
   // put the pick's current candidate on its surface, making the surface the first time

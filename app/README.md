@@ -28,12 +28,17 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    can't tell apart (picture frames, wainscoting panels, doors), take a photo
    from the projector (*Project → Design on a photo → Take it from the
    projector*), then *Tools → Surfaces → Tap things on the photo* and tap one.
-   Its corners become the surface's corners; tap the same spot again for the
-   rectangle around it (the artwork, then its mat, then the frame). Switch
-   the bar to *Any shape* for round and odd-shaped things (a mirror, a
-   wreath): the surface takes the outline itself, which *Points* can then
-   tweak. It uses a small Segment Anything model (about 14 MB, downloaded
-   once); where that can't load, a colour fill finds the outline instead.
+   Its corners become the surface's corners; tap inside it again for the
+   one around it (the artwork, then its mat, then the frame). Switch the bar
+   to *Any shape* for round and odd-shaped things (a mirror, a wreath, an
+   arched window): the surface takes the outline itself, which *Points* can
+   then tweak. Two sliders reshape the last one as they move: *Sensitivity*
+   (higher stops at fainter edges, so the shape stays smaller) and, for
+   outlines, *Simplify* (higher straightens jagged edges and keeps only the
+   main corners; curves stay round). Picking uses a small Segment Anything
+   model (about 14 MB, downloaded once, when you start) to tell what you
+   tapped, and the photo's straight edges to place rectangles exactly; where
+   the model can't load, edges and a colour fill do it alone, less reliably.
 4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
    the phone (*Halloween* has bats, eyes, fog, lightning and candle glow). Or
    *Describe a look* and an AI model writes a new effect for your surfaces:
@@ -147,7 +152,7 @@ capabilities `sample` and `downloads`. There, *Describe a look* runs on the
 viewer's Claude plan, and *Project → Open in Surface Mapper* hands the project
 to the deployed app (`APP_URL` in `src/share.js`). Camera capture, the
 microphone, full screen and second screens don't work inside an artifact, and
-*Any shape* uses the colour fill there (the model's host is out of reach).
+picking on a photo works from edges and colours alone there (the model's host is out of reach).
 
 ## Layout
 
@@ -167,6 +172,7 @@ microphone, full screen and second screens don't work inside an artifact, and
 | `src/camera.js` | The camera side: open it, lock exposure, photograph each pattern once it has settled, and the photo from the projector |
 | `src/photo.js` | Lining a photo up with the projector frame: the frame found in a black and a white photo, the homography, its CSS |
 | `src/regions.js` | Rectangles in a photo from a tap: edges, Hough lines, the quads around the tap, innermost first |
+| `src/pick.js` | One tap on the photo to candidate shapes: the model's masks, matched to edge rectangles; edges and colour fill without it |
 | `src/segment.js` | Any shape from a tap: SlimSAM (Segment Anything) through transformers.js, loaded from a CDN on first use |
 | `src/outline.js` | A mask as a surface: traced, simplified, given pins; and the colour fill used without the model |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |

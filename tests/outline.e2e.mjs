@@ -36,6 +36,10 @@ const setUp = async (page) => {
   await page.waitForFunction(() => window.app && window.app.editor);
   await page.evaluate(async () => {
     document.getElementById('connectSheet').close();
+    // every message shown, since one replaces another
+    const toast = window.app.toast.bind(window.app);
+    window.__toasts = [];
+    window.app.toast = (text, ms) => { window.__toasts.push(text); toast(text, ms); };
     const [W, H] = window.app.frame, wall = window.__wall = window.__buildWall({ W, H });
     const c = document.createElement('canvas'); c.width = wall.camW; c.height = wall.camH;
     c.getContext('2d').putImageData(new ImageData(wall.photo(0, 3), wall.camW, wall.camH), 0, 0);
@@ -80,9 +84,9 @@ export default async function run() {
     await page.goto(server.url);
     await setUp(page);
     const early = await page.waitForFunction(() => window.__fakeEncoded === 1, null, { timeout: 15000 }).then(() => true, () => false);
-    const st = await page.evaluate(() => ({ model: window.__fakeModel, toast: document.getElementById('toast').textContent }));
+    const st = await page.evaluate(() => ({ model: window.__fakeModel, toast: window.__toasts.join(' / ') }));
     t.ok(st.model?.id === 'Xenova/slimsam-77-uniform' && st.model.dtype === 'q8', 'Any shape loads the quantized SlimSAM model');
-    t.ok(/ready|Loading/.test(st.toast), 'and says how loading went');
+    t.ok(/Loading the shape model/.test(st.toast) && /ready/.test(st.toast), 'and says how loading went');
     t.ok(early, 'the photo is encoded as soon as the model is ready, before any tap');
     await tapShape(page, 'glass');
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });
@@ -105,8 +109,8 @@ export default async function run() {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(server.url);
     await setUp(page);
-    const told = await page.waitForFunction(() => /colour fill/.test(document.getElementById('toast').textContent), null, { timeout: 15000 }).then(() => true, () => false);
-    t.ok(told, 'where the model can\'t load, the app says a colour fill is used instead');
+    const told = await page.waitForFunction(() => window.__toasts.some((m) => /can't load here/.test(m)), null, { timeout: 15000 }).then(() => true, () => false);
+    t.ok(told, 'where the model can\'t load, the app says shapes come from edges and colours instead');
     await tapShape(page, 'glass');
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });
     const f = await overlap(page, 0, 'glass');

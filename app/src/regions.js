@@ -261,3 +261,4 @@ export function quadsAt(A, x, y, { k = 8, minSupport = 0.75, sense = 0.5, levels
   }
   return out.map(({ quad, support }) => ({ quad, support }));
 }
+

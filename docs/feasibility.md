@@ -369,11 +369,37 @@ pixel edges, simplified to at most 96 points, and becomes a surface: a nearly
 four-sided mask gets its corners as pins, anything else gets the smallest
 rectangle around it as pins and the outline as its shape. Where the model
 can't load (offline, or in the Claude artifact), a colour fill from the tap
-that stops at edges stands in. On the synthetic wall's round mirror, the real
-model's outlines match the true glass and ring at IoU 0.97 and 0.96, and the
-colour fill's at 0.94 and 0.96 (`tests/bench/segment.bench.mjs`). Each tap
-takes about 0.4 s; encoding the photo took 22 s on a sandbox CPU (WebAssembly,
-one thread), and should be a second or two with WebGPU.
+that stops at edges stands in. Each tap takes about 0.4 s; encoding the photo
+took 22 s on a sandbox CPU (WebAssembly, one thread), and should be a second
+or two with WebGPU.
+
+**What works on real photos** (issue #39, `app/src/pick.js`,
+`tests/bench/pick.bench.mjs`): real photos are much harder than the synthetic
+wall. White cabinet doors have three or four nested outlines that show only as
+faint shading, next to a textured ceiling whose edges set the detection
+threshold too high for them; a towel hides half an oven window's edge; a mosaic
+backsplash is all grout lines. Measured by hand-labelled taps on four photos
+(two used while tuning, two held out), counting a shape as right at IoU 0.85:
+
+| | First shape right | Within three taps |
+|---|---|---|
+| Model, matched to edge rectangles | 14 of 23 | 18 of 23 |
+| Rectangles from edges alone | 8 of 21 | 10 of 21 |
+| Colour fill alone | 2 of 23 | 5 of 23 |
+
+So the model decides what was tapped, and where one of its masks closely
+matches a rectangle found from the photo's edges (IoU 0.8), the rectangle is
+used, since its sides follow real edges while the model's masks are computed
+at low resolution and wobble. The model's most confident mask comes first
+(what Segment Anything's authors use for a single click), then the bigger ones.
+Edges are kept down to a low floor with their strength, and *Sensitivity*
+chooses how faint an edge may be and still count; when nothing turns up,
+fainter edges are tried before giving up. *Simplify* smooths the outline along
+the boundary, finds its straight runs, refits each to the boundary itself and
+puts corners where runs meet, so hard corners stay sharp, slanted edges become
+single lines, and curves keep enough points to stay round. Snapping a mask's
+sides onto nearby edge lines was tried and dropped: with moldings, the nearest
+line is often the neighbouring one.
 
 Subdividing the stripe capture's planes with the same kind of photo is still
 to do (see #33).

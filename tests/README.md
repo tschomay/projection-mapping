@@ -18,7 +18,7 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `sim.test.mjs` | The sandbox's copy of the capture pipeline matches `app/src/capture.js`. If it fails, run `node tools/build-sim.mjs`. |
 | `capture.test.mjs` | The surface-capture pipeline (`app/src/capture.js`) on a synthetic room: a projector, a camera beside it, a wall, a floor and a box. The box faces must come back as three surfaces with the right corners. Node only. |
 | `photo.test.mjs` | A photo from beside the projector's lens, on a synthetic wall with wainscoting and picture frames (`buildWall` in `scene.mjs`): the projector frame found from a black and a white photo, and a tap on each panel and picture giving its rectangle, then the ones around it (artwork, mat, frame). Node only. |
-| `outline.test.mjs` | Any-shape outlines in Node: a mask traced and simplified, a round outline kept as the surface's points and a four-sided one turned into corner pins, and the colour fill outlining the synthetic wall's round mirror (glass, then glass and ring) and a panel. |
+| `outline.test.mjs` | Any-shape outlines in Node: a mask traced and simplified; Simplify straightening a slanted square's staircase, keeping an L's and a hexagon's corners, a disc round and an arch's corners under its curve; a round outline kept as the surface's points and a four-sided one turned into corner pins; the colour fill outlining the synthetic wall's round mirror (glass, then glass and ring) and a panel. |
 | `transfer.test.mjs` | Second-screen file transfer in Node with a slow fake connection: 5 MB arrives intact, never more than 32 chunks in flight, progress reported. |
 | `link.e2e.mjs` | The connect guide, the Show-mode hint, and a second screen through the Presentation API running in a separate browser context, as if on another device: project, live edits, aspect ratio and media files reach it. |
 | `check.e2e.mjs` | The device check screen lists capabilities and tests the camera (Chromium's fake camera). |
@@ -67,7 +67,16 @@ SIM_PATH=/path/to/other/index.html ... # compare another version of the sandbox
 
 Each seed takes about a minute under software WebGL.
 
-`bench/segment.bench.mjs` runs the real outline model (SlimSAM, downloaded from
-jsDelivr and Hugging Face, so it needs the network) on the synthetic wall next
-to the colour fill, and prints how well each mask's outline matches the true
-ones (IoU). Behind an HTTPS proxy it passes `HTTPS_PROXY` to the browser.
+`bench/pick.bench.mjs` measures picking on a photo (*Tap things on the photo*)
+against the hand-labelled real photos in `photos/` (see its README): for each
+tap, whether the first shape is right and whether one of the first three is
+(IoU 0.85 or more), with the shape model in both modes, and without it from
+edges and colour fill. It needs the network for the model (`--no-model` skips
+it); behind an HTTPS proxy it passes `HTTPS_PROXY` to the browser. `PHOTOS=dir`
+adds your own labelled photos, kept out of the repository; `--split holdout`
+scores only the photos not used while tuning.
+
+```sh
+node bench/pick.bench.mjs --verbose          # every tap's scores, and totals
+node bench/pick.bench.mjs --sense 0.7        # at another Sensitivity
+```

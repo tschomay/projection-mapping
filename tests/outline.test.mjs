@@ -42,6 +42,24 @@ export default async function run() {
   const counts = [0, 0.4, 1].map((simple) => { const pl = maskPolygon(sqr, w, w, { simple }); return { n: pl.length, iou: iou(pl, truthSq) }; });
   t.ok(counts[0].n > 3 * counts[1].n && counts[2].n <= 6, `a slanted square: ${counts.map((c) => c.n).join(' → ')} points from detailed to simple`);
   t.ok(counts.every((c) => c.iou > 0.97), `and its outline matches at every setting (IoU ${counts.map((c) => c.iou.toFixed(3)).join(', ')})`);
+
+  // hard corners stay hard whatever the shape, and curves stay curves: an L and a hexagon (turned) come out as just
+  // their corners, a disc stays round even at the simple end, and an arch keeps its sharp bottom corners under its
+  // curved top
+  const rot = (P, a) => P.map(([x, y]) => [200 + (x - 200) * Math.cos(a) - (y - 200) * Math.sin(a), 200 + (x - 200) * Math.sin(a) + (y - 200) * Math.cos(a)]);
+  const raster = (P) => { const mk = new Uint8Array(w * w); for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) if (pointInPoly(x + 0.5, y + 0.5, P)) mk[y * w + x] = 1; return mk; };
+  const L = rot([[100, 100], [220, 100], [220, 220], [300, 220], [300, 300], [100, 300]], 0.26);
+  const hex = Array.from({ length: 6 }, (_, k) => [200 + 110 * Math.cos(k * Math.PI / 3 + 0.2), 200 + 110 * Math.sin(k * Math.PI / 3 + 0.2)]);
+  for (const [name, P] of [['an L', L], ['a hexagon', hex]]) {
+    const q = maskPolygon(raster(P), w, w, { simple: 0.4 }), v = iou(q, P);
+    t.ok(q.length === P.length && v > 0.99, `${name} comes out as its ${P.length} corners (${q.length} points, IoU ${v.toFixed(3)})`);
+  }
+  const ring = Array.from({ length: 200 }, (_, k) => [200 + 120 * Math.cos(k * Math.PI / 100), 200 + 120 * Math.sin(k * Math.PI / 100)]);
+  const round = maskPolygon(raster(ring), w, w, { simple: 1 });
+  t.ok(round.length >= 12 && iou(round, ring) > 0.98, `a disc stays round at the simple end (${round.length} points, IoU ${iou(round, ring).toFixed(3)})`);
+  const arch = rot([[120, 320], [280, 320], ...Array.from({ length: 61 }, (_, k) => [200 + 80 * Math.cos(k * Math.PI / 60), 160 - 80 * Math.sin(k * Math.PI / 60)])], 0.12);
+  const aq = maskPolygon(raster(arch), w, w, { simple: 0.6 }), off = Math.max(...[arch[0], arch[1]].map((c) => Math.min(...aq.map((p) => Math.hypot(p[0] - c[0], p[1] - c[1])))));
+  t.ok(off < 0.5 && iou(aq, arch) > 0.99, `an arch keeps its sharp bottom corners (within ${off.toFixed(2)} px) under a round top (IoU ${iou(aq, arch).toFixed(3)})`);
   const s = outlineToSurface(poly, 1280, 720);
   const back = surfaceGeom(s, 1280, 720).parts[0].outline;
   t.ok(!s.quad && iou(back, poly) > 0.99, 'a round outline keeps its shape as the surface\'s points');
