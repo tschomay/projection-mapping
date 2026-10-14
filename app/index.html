@@ -93,9 +93,11 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #nudge button { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; padding: 0; display: grid; place-items: center; }
 #nudge button svg { width: 18px; height: 18px; }
 #nudgeStep { font: 11px var(--mono); }
-#composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
+/* the bars for arranging and picking sit at the right, clear of the toolbar */
+#composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: min(560px, calc(100vw - 340px)); }
 #composeBar span { font-size: 13px; }
-#pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px; max-width: calc(100vw - 24px); }
+@media (max-width: 900px) { #toolbar .lbl { display: none; } }
+#pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px; max-width: min(560px, calc(100vw - 340px)); }
 #pickBar .seg { flex: none; }
 #pickTune { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
 #pickTune label { display: flex; align-items: center; gap: 6px; }
@@ -207,10 +209,10 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
 <div id="toolbar" class="ui" role="toolbar" aria-label="Main controls">
   <button class="btn" id="toolsBtn" aria-expanded="false" aria-controls="drawer">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h12"/></svg>Tools</button>
-  <button class="btn" id="addBtn" aria-haspopup="menu" title="Add a surface">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>Add</button>
-  <button class="btn" id="undoBtn" disabled title="Undo the last change to the surfaces (Ctrl+Z)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L2.5 6l3 3"/><path d="M2.5 6h7a4 4 0 010 8H7"/></svg>Undo</button>
+  <button class="btn" id="addBtn" aria-haspopup="menu" aria-label="Add a surface" title="Add a surface">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg><span class="lbl">Add</span></button>
+  <button class="btn" id="undoBtn" disabled aria-label="Undo" title="Undo the last change to the surfaces (Ctrl+Z)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L2.5 6l3 3"/><path d="M2.5 6h7a4 4 0 010 8H7"/></svg><span class="lbl">Undo</span></button>
   <button class="btn" id="playBtn" hidden>
     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg><span>Play</span></button>
   <button class="btn primary" id="showBtn">Show</button>
