@@ -20,6 +20,7 @@ export const scanUI = {
     $('scanStart').onclick = () => this.runScan();
     $('scanUndo').onclick = () => {
       if (!this.scanPrev) return;
+      this.checkpoint();
       this.project.surfaces = this.scanPrev; this.scanPrev = null;
       this.editor.select(-1); this.changed();
       $('scanUndo').hidden = true;
@@ -69,6 +70,7 @@ export const scanUI = {
       const res = surfacesFromShots(cap.shots, { camW: cap.camW, camH: cap.camH, W, H, keepBackground: $('scanKeepBg').checked });
       this.drawScan(res);
       if (!res.surfaces.length) throw new CaptureError(res.planes ? 'Only wall and floor were found. Tick "Keep wall and floor" to use them, or bring objects closer to the projector.' : 'No flat surfaces were found. Check the camera sees the projection clearly, and dim the lights.');
+      this.checkpoint();
       this.scanPrev = this.project.surfaces;
       this.project.surfaces = res.surfaces;
       this.editor.select(-1);

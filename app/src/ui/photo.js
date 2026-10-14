@@ -271,9 +271,10 @@ export const photoUI = {
     const last = this.pickLast, at = last ? this.project.surfaces.findIndex((s) => s.id === last.id) : -1;
     if (at >= 0 && last.kind === this.pickKind && insideSurface(this.geoms[at], p[0], p[1])) {
       if (last.found.length < 2) { this.toast('Nothing bigger found around it. Tap somewhere else, or move Sensitivity.'); return; }
+      this.checkpoint();
       last.idx = (last.idx + 1) % last.found.length;
       this.applyPick();
-      this.toast(last.idx ? `Surface ${at + 1}: the next one out.` : `Surface ${at + 1}: back to the smallest.`);
+      this.toast(last.idx ? `Surface ${at + 1}: the next one out.` : `Surface ${at + 1}: back to the smallest.`, 5000, { label: 'Undo', fn: () => this.undo() });
       return;
     }
     const [u, v] = framePointToPhoto(quad, p[0] / W, p[1] / H);
@@ -348,7 +349,7 @@ export const photoUI = {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // let the spinner show first
     try {
       if (key === 'sense') await this.findPick(pick); else this.pickShapes(pick);
-      if (pick.found.length) this.applyPick();
+      if (pick.found.length) { this.checkpoint('tune:' + pick.id); this.applyPick(); }
     } finally { this.tuning = false; }
     const again = this.tuneAgain; this.tuneAgain = null;
     if (again) this.tunePick(again);

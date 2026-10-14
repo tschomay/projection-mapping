@@ -140,7 +140,7 @@ export const contentUI = {
     $('composeReset').onclick = () => {
       const s = this.project.surfaces[this.editor.sel];
       if (!s) { this.toast('Select a surface first.'); return; }
-      delete s.input; this.changed();
+      this.checkpoint(); delete s.input; this.changed();
     };
   },
 
