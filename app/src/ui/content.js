@@ -147,6 +147,7 @@ export const contentUI = {
   setCompose(on) {
     const ed = this.editor;
     if (on && !this.project.surfaces.length) { this.toast('Add a surface first.'); return; }
+    if (on && ed.pick) this.setPick(false);
     ed.compose = on; ed.drag = null;
     $('composeBar').hidden = !on;
     $('composeBtn').setAttribute('aria-pressed', String(on));

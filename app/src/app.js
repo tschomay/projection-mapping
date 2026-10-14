@@ -19,6 +19,7 @@ import { soundUI } from './ui/sound.js';
 import { cuesUI } from './ui/cues.js';
 import { projectUI } from './ui/project.js';
 import { scanUI } from './ui/scan.js';
+import { photoUI } from './ui/photo.js';
 
 class App {
   constructor() {
@@ -63,7 +64,7 @@ class App {
     c.width = Math.max(1, Math.round(bw * scale)); c.height = Math.max(1, Math.round(bh * scale));
     const frame = [1280, Math.round(1280 / aspect)];
     if (frame[1] !== this.frame[1]) { this.frame = frame; this.renderer.frame = frame; this.dirty = true; }
-    if (IS_OUTPUT) this.hello();
+    if (IS_OUTPUT) this.hello(); else if (this.editor) this.placeBackdrop();
   }
 
   // ---------- state changes ----------
@@ -191,6 +192,7 @@ class App {
   // ---------- Show mode ----------
   setShow(on) {
     if (on && this.editor.compose) this.setCompose(false);
+    if (on && this.editor.pick) this.setPick(false);
     document.body.classList.toggle('show', on);
     if (on) {
       this.gesture();
@@ -237,6 +239,7 @@ class App {
     this.pause();
     this.project = p;
     this.show.index = -1; this.show.fade = null;
+    if (this.editor?.pick) this.setPick(false);
     p.settings = { snap: true, sensitivity: 1, loop: true, ...(p.settings || {}) };
     this.editor.select(-1);
     this.editor.snap = p.settings.snap;
@@ -449,7 +452,7 @@ class App {
 
     if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
     if (!this.channel) $('openOutput').disabled = true;
-    for (const init of ['initSurfacesUI', 'initContentUI', 'initSoundUI', 'initProjectUI', 'initCuesUI', 'initScan']) this[init]();
+    for (const init of ['initSurfacesUI', 'initContentUI', 'initSoundUI', 'initProjectUI', 'initCuesUI', 'initScan', 'initPhotoUI']) this[init]();
     this.initPresentation();
     this.selectTab('surfaces');
   }
@@ -486,7 +489,7 @@ class App {
 }
 
 // each drawer pane's wiring and rendering lives in its own module under ui/
-Object.assign(App.prototype, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI);
+Object.assign(App.prototype, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
 
 // offline support when served over http(s); unavailable in embedded previews, which is fine, and not used
 // inside a Claude artifact, where the platform serves the files

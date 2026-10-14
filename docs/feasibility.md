@@ -333,6 +333,37 @@ Alternatives:
   method fails. Coded markers suit multi-spot capture best, because each
   photo stands alone and the phone can move freely.
 
+### One photo from the projector (issue #33)
+
+The stripes find surfaces by parallax, so anything flat on a wall (picture
+frames, wainscoting panels, door casings) comes out as part of the wall. A
+photo taken from *beside the projector's lens* works the other way round. From
+there every point sits where that projector pixel's light lands, whatever its
+depth, so the photo is the projector frame up to one homography, and the
+outlines in it (frames, molding, panels) can become surfaces directly.
+
+- **Lining up** (`app/src/photo.js`): the projector shows black, then white,
+  while the phone photographs both. The lit area is the frame as the camera
+  sees it; from the lens its edges are straight lines whatever they fall on,
+  so a quad fitted to its outline (largest quad on the convex hull, then a line
+  through each side's sub-pixel outline points) gives the four corners. Without
+  a projector, the corners are dragged by hand on any photo.
+- **Tap to pick** (`app/src/regions.js`): edges (Sobel, strongest colour
+  channel, thinned), straight lines (a Hough transform over the full circle, so
+  the two edges of a thin molding are separate lines, then each line refitted
+  to its edge points), and, around the tap, every combination of the nearest
+  lines above, below, left and right that makes a convex quad with edges along
+  at least 75% of each side. The innermost comes first; tapping again steps out
+  to the next quad that encloses it on every side (artwork, mat, frame).
+- **Measured** on the synthetic wall (640×480 camera, seen from about 11 cm beside
+  the lens, wall turned 25°): frame corners within 0.1 camera pixels; every
+  panel and picture rectangle within about 3 projector pixels, over 20 noise
+  seeds. About 0.1 s to analyse a photo, then 10–50 ms per tap.
+
+Only rectangles for now. Arbitrary outlines (a promptable segmentation model
+in the browser) and subdividing the stripe capture's planes with the same
+photo are the next steps (see #33).
+
 ## Limits and risks
 
 - **Surface color and texture.** Dark or glossy surfaces reflect poorly. White

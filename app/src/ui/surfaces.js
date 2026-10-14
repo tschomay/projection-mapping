@@ -54,6 +54,8 @@ export const surfacesUI = {
       ? `Only the first ${MAX_SURF} surfaces can be shown; surfaces ${MAX_SURF + 1} to ${lim.of} aren't projected. Delete or combine some.`
       : `Too many shapes or outline points to show them all: ${lim.droppedParts} shape${lim.droppedParts === 1 ? ' isn\'t' : 's aren\'t'} projected. Delete some combined shapes, or use a smaller bend grid.`;
     document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
+    $('pickBtn').setAttribute('aria-pressed', String(!!ed.pick));
+    $('pickBtn').disabled = !(this.project.backdrop?.show);
     const has = ed.sel >= 0;
     for (const id of ['partAdd', 'partCut', 'dupSurface', 'delSurface']) $(id).disabled = !has;
     $('delPoint').disabled = !(has && ed.mode === 'points' && ed.selVert);

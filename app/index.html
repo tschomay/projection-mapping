@@ -35,10 +35,11 @@
 html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--sans); overflow: hidden; overscroll-behavior: none; }
 button, input, select { font: inherit; color: inherit; }
 #stage { position: fixed; inset: 0; background: #000; touch-action: none; }
-#box { position: absolute; }
+#box { position: absolute; overflow: hidden; }
 #box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-/* design on a photo: the photo sits behind the frame and the content adds light to it, as a projector would */
-#backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* design on a photo: the photo sits behind the frame and the content adds light to it, as a projector would. It's
+   warped so the projector frame's corners in the photo land on the frame's corners (see photo.js). */
+#backdrop { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; }
 body.photo #gl { mix-blend-mode: screen; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
@@ -93,7 +94,11 @@ input[type=range] { accent-color: var(--lamp); width: 100%; }
 #nudge button svg { width: 18px; height: 18px; }
 #nudgeStep { font: 11px var(--mono); }
 #composeBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
-#composeBar span { font-size: 13px; }
+#composeBar span, #pickBar span { font-size: 13px; }
+#pickBar { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; max-width: calc(100vw - 24px); }
+#photoVideo { width: 100%; max-height: 38vh; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0 8px; object-fit: contain; }
+#photoStatus, #alignNote { white-space: pre-line; margin: 8px 0 0; }
+#alignView { width: 100%; display: block; border: 1px solid var(--line); border-radius: 6px; background: #000; touch-action: none; margin: 6px 0 8px; }
 #toast { left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #12161ef0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; max-width: min(90vw, 460px); text-align: center; pointer-events: none; transition: opacity .3s; z-index: 5; }
 body.show #toast:not([hidden]) { display: block !important; }
 #gate { position: fixed; inset: 0; display: grid; place-items: center; background: #000c; z-index: 6; text-align: center; padding: 24px; }
@@ -181,6 +186,11 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
       <h3>Or find them with the camera</h3>
       <div class="row"><button class="btn" id="scanBtn">Find surfaces with the camera</button></div>
       <p class="note">The projector shows stripe patterns while this phone's camera, propped up beside the projector, photographs the set.</p>
+    </div>
+    <div class="group">
+      <h3>Or pick them on a photo</h3>
+      <div class="row"><button class="btn" id="pickBtn" aria-pressed="false">Tap things on the photo</button></div>
+      <p class="note" id="pickNote">Picture frames, wainscoting panels, doors: tap one on the design photo and it becomes a surface, its corners on the photo's corners. Good for flat things on a wall, which the stripes can't tell apart. Needs a photo from the projector (<i>Project → Design on a photo</i>).</p>
     </div>
     <div class="group">
       <h3>Surfaces</h3>
@@ -315,13 +325,13 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     </div>
     <div class="group">
       <h3>Design on a photo</h3>
-      <div class="row"><label class="btn file">Choose a photo of the set<input type="file" id="addBackdrop" accept="image/*"></label></div>
+      <div class="row"><button class="btn" id="photoTake">Take it from the projector</button><label class="btn file">Choose a photo of the set<input type="file" id="addBackdrop" accept="image/*"></label></div>
       <div id="backdropOpts" hidden>
         <label class="check"><input type="checkbox" id="backdropShow" checked> Show the photo behind the surfaces</label>
         <div class="row"><label class="note" for="backdropDim">Photo brightness</label><input type="range" id="backdropDim" min="0.1" max="1" step="0.05" value="0.6" style="flex:1"></div>
-        <div class="row"><button class="btn" id="removeBackdrop">Remove photo</button></div>
+        <div class="row"><button class="btn" id="alignBtn">Line it up with the projector</button><button class="btn" id="removeBackdrop">Remove photo</button></div>
       </div>
-      <p class="note">No projector yet? Take a photo from where the projector will stand, at dusk if it's outdoors. Trace surfaces on it and try content and cues; the content shows as light on the photo. On the day, nudge the corners onto the real objects. Turn the photo off before mirroring to a projector: it would be projected too.</p>
+      <p class="note"><b>Take it from the projector</b>: hold this phone right beside the projector's lens; the projector flashes white once so the photo lines up with its frame exactly. <b>No projector yet?</b> Choose a photo taken from where the projector will stand, at dusk if it's outdoors, then line it up by dragging the frame's corners. Trace surfaces on it and try content and cues; the content shows as light on the photo. Turn the photo off before mirroring to a projector: it would be projected too.</p>
     </div>
     <div class="group">
       <h3>This device</h3>
@@ -413,6 +423,31 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
   </div>
 </dialog>
 
+<dialog id="photoSheet" class="sheet" aria-labelledby="photoTitle">
+  <header><h2 id="photoTitle">Photograph the set from the projector</h2><button class="btn" id="closePhoto" aria-label="Close">Close</button></header>
+  <div class="sheet-body">
+    <ol class="steps">
+      <li>Hold this phone right beside the projector's lens, as close as you can, back camera facing the same way as the projector.</li>
+      <li>Leave the room lights as they are. Check the preview shows the whole projected area.</li>
+      <li>Tap <b>Take the photo</b> and hold still for a few seconds: the projector goes black, then white.</li>
+    </ol>
+    <video id="photoVideo" muted playsinline aria-label="Camera preview"></video>
+    <div class="row"><select id="photoCam" aria-label="Camera" hidden><option value="">Back camera</option></select></div>
+    <div class="row"><button class="btn primary" id="photoStart" disabled>Take the photo</button></div>
+    <p class="mono" id="photoStatus" role="status" aria-live="polite"></p>
+  </div>
+</dialog>
+
+<dialog id="alignSheet" class="sheet" aria-labelledby="alignTitle">
+  <header><h2 id="alignTitle">Line up the photo</h2><button class="btn" id="closeAlign" aria-label="Done">Done</button></header>
+  <div class="sheet-body">
+    <p class="note" id="alignNote">Drag the four corners onto the corners of the projector's picture in the photo. Everything outside them is cut off.</p>
+    <canvas id="alignView" aria-label="The photo, with the projector frame's corners to drag"></canvas>
+    <div class="row"><button class="btn" id="alignReset">Use the whole photo</button></div>
+  </div>
+</dialog>
+
+<div id="pickBar" class="ui" hidden><span>Tap a frame, panel or door on the photo. Tap it again for the one around it.</span><button class="btn primary" id="pickDone">Done</button></div>
 <div id="composeBar" class="ui" hidden><span>Arranging: drag a rectangle to pick what that surface shows, its corners to resize</span><button class="btn primary" id="composeDone">Done</button></div>
 <div id="toast" class="ui" role="status" aria-live="polite" hidden></div>
 <div id="gate" class="ui" hidden><div><p>Output window. Drag it onto the projector display, then click below.</p><button class="btn primary" id="gateBtn">Start: full screen and sound</button></div></div>
