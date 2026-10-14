@@ -21,9 +21,11 @@ export const photoUI = {
     $('pickDone').onclick = () => this.setPick(false);
     this.pickKind = 'rect';
     document.querySelectorAll('#pickKind button').forEach((b) => { b.onclick = () => this.setPickKind(b.dataset.kind); });
-    // the two tuning sliders reshape the last pick as they move
+    // the two tuning sliders reshape the last pick: they slide freely, and the shape is worked out again when the
+    // finger pauses or lifts
     for (const [id, key] of [['pickSense', 'sense'], ['pickSimple', 'simple']]) {
-      $(id).oninput = (e) => { this.project.settings['pick' + key[0].toUpperCase() + key.slice(1)] = +e.target.value; this.scheduleSave(); this.tunePick(key); };
+      $(id).oninput = (e) => { this.project.settings['pick' + key[0].toUpperCase() + key.slice(1)] = +e.target.value; this.scheduleSave(); this.tuneSoon(key, 300); };
+      $(id).onchange = () => this.tuneSoon(key, 0);
     }
   },
 
@@ -190,6 +192,7 @@ export const photoUI = {
     if (on && !(m && b.show)) { this.toast('Add a photo from the projector first: Project → Design on a photo.', 4000); on = false; }
     if (on && this.editor.compose) this.setCompose(false);
     this.editor.pick = on;
+    document.body.classList.toggle('picking', on);
     this.pickLast = null;
     $('pickBar').hidden = !on;
     $('pickSense').value = this.pickSetting('sense'); $('pickSimple').value = this.pickSetting('simple');
@@ -301,7 +304,8 @@ export const photoUI = {
       await seg.embed(P.rgba, P.w, P.h, P.mediaId).catch(() => {});
       clearTimeout(t);
     }
-    pick.raw = await findAt({ seg, P, x: pick.x, y: pick.y, kind: pick.kind, sense: this.pickSetting('sense') });
+    pick.memo ||= new Map();
+    pick.raw = await findAt({ seg, P, x: pick.x, y: pick.y, kind: pick.kind, sense: this.pickSetting('sense'), memo: pick.memo });
     this.pickShapes(pick);
   },
   pickShapes(pick) {
@@ -324,18 +328,30 @@ export const photoUI = {
     }
   },
 
-  // a slider moved: find again (sensitivity) or just re-outline (simplicity), and reshape the same surface. One run
-  // at a time; a move during a run is picked up when it ends.
+  // a slider moved: rework the shape after `wait` ms of stillness (0: now), showing that it's coming
+  tuneSoon(key, wait) {
+    if (!this.pickLast) return;
+    this.tuneKey = this.tuneKey === 'sense' ? 'sense' : key;
+    $('pickBusy').hidden = false;
+    clearTimeout(this.tuneT);
+    this.tuneT = setTimeout(() => { const k = this.tuneKey; this.tuneKey = null; this.tunePick(k); }, wait);
+  },
+
+  // find again (sensitivity) or just re-outline (simplicity), and reshape the same surface. One run at a time; a
+  // move during a run is picked up when it ends.
   async tunePick(key) {
     const pick = this.pickLast;
-    if (!pick || this.project.surfaces.findIndex((s) => s.id === pick.id) < 0) return;
+    if (!pick || this.project.surfaces.findIndex((s) => s.id === pick.id) < 0) { $('pickBusy').hidden = true; return; }
     if (this.tuning) { this.tuneAgain = (this.tuneAgain === 'sense' ? 'sense' : key); return; }
     this.tuning = true;
+    $('pickBusy').hidden = false;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // let the spinner show first
     try {
       if (key === 'sense') await this.findPick(pick); else this.pickShapes(pick);
       if (pick.found.length) this.applyPick();
     } finally { this.tuning = false; }
     const again = this.tuneAgain; this.tuneAgain = null;
     if (again) this.tunePick(again);
+    else if (!this.tuneKey) $('pickBusy').hidden = true;
   },
 };

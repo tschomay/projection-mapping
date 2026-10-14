@@ -35,7 +35,10 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    then tweak. Two sliders reshape the last one as they move: *Sensitivity*
    (higher stops at fainter edges, so the shape stays smaller) and, for
    outlines, *Simplify* (higher straightens jagged edges and keeps only the
-   main corners; curves stay round). Picking uses a small Segment Anything
+   main corners; curves stay round); they slide freely and the shape updates
+   when you pause or let go. Pinch (or the mouse wheel) zooms in on the design
+   photo and two fingers pan; while picking, one finger pans once zoomed in.
+   *Fit* zooms back out. Picking uses a small Segment Anything
    model (about 14 MB, downloaded once, when you start) to tell what you
    tapped, and the photo's straight edges to place rectangles exactly; where
    the model can't load, edges and a colour fill do it alone, less reliably.

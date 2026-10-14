@@ -25,12 +25,17 @@ export function rectsAt(A, x, y, sense = DEFAULTS.sense) {
 
 // What's around photo pixel (x, y) of photo P ({ rgba, w, h, A }): { masks (from the model or the colour fill),
 // quads (rectangles from edges, every strictness tried), source: 'model' | 'edges' }. kind 'rect' or 'any' only
-// decides the fallback without the model.
-export async function findAt({ seg, P, x, y, kind = 'any', sense = DEFAULTS.sense }) {
+// decides the fallback without the model. memo (a Map, one per tap) keeps the rectangles found at each strictness, so
+// moving Sensitivity back and forth doesn't search again.
+export async function findAt({ seg, P, x, y, kind = 'any', sense = DEFAULTS.sense, memo = new Map() }) {
   const { rgba, w, h, A } = P;
-  if (!seg && kind === 'rect') return { masks: [], quads: rectsAt(A, x, y, sense).quads.map((f) => f.quad), source: 'edges' };
+  const rects = (s) => { if (!memo.has(s)) memo.set(s, quadsAt(A, x, y, { sense: s })); return memo.get(s); };
+  if (!seg && kind === 'rect') {
+    for (let s = sense; s <= 1.001; s += 0.25) { const q = rects(Math.min(1, s)); if (q.length) return { masks: [], quads: q.map((f) => f.quad), source: 'edges' }; }
+    return { masks: [], quads: [], source: 'edges' };
+  }
   const seen = new Set(), quads = [];
-  for (const s of [sense, 0.75, 1]) for (const f of quadsAt(A, x, y, { sense: s })) {
+  for (const s of [sense, 0.75, 1]) for (const f of rects(s)) {
     const key = f.quad.map((p) => p.map(Math.round).join(',')).join(' ');
     if (!seen.has(key)) { seen.add(key); quads.push(f.quad); }
   }

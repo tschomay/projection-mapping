@@ -298,15 +298,22 @@ function maskQuadIoU(comp, w, h, q) {
 // pixels), when given, are rectangles found from the photo's edges around the same tap: a mask that closely matches
 // one (IoU 0.8 or more) takes that rectangle, whose sides follow real edges, instead of its own wobbly outline.
 // rect: always four corners (a mask that is neither gets the smallest rectangle around it).
+// what doesn't depend on Simplify, kept per mask, so moving that slider only re-outlines
+const prepared = new WeakMap();
 export function maskToSurface(mask, w, h, x, y, toFrame, W, H, { simple = 0.4, quads = null, rect = false } = {}) {
-  const comp = componentAt(mask, w, h, x, y);
-  if (!comp) return null;
-  let match = null, bestI = 0.8;
-  for (const qd of quads || []) {
-    const v = maskQuadIoU(comp, w, h, qd);
-    if (v > bestI) { bestI = v; match = qd; }
+  let pre = prepared.get(mask);
+  if (!pre || pre.x !== x || pre.y !== y || pre.quads !== quads) {
+    const comp = componentAt(mask, w, h, x, y);
+    let match = null, bestI = 0.8;
+    for (const qd of (comp && quads) || []) {
+      const v = maskQuadIoU(comp, w, h, qd);
+      if (v > bestI) { bestI = v; match = qd; }
+    }
+    pre = { x, y, quads, comp, match, detail: comp && maskPolygon(comp.mask, w, h, { simple: 0 }) };
+    prepared.set(mask, pre);
   }
-  const detail = maskPolygon(comp.mask, w, h, { simple: 0 });
+  const { comp, match, detail } = pre;
+  if (!comp) return null;
   const q = match || quadOf(detail) || (rect && orderCorners(minRect(convexHull(detail))));
   if (q) {
     const c = q.map(toFrame);

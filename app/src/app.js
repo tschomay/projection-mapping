@@ -33,6 +33,7 @@ class App {
     this.playing = false;
     this.dirty = true;
     this.output = { win: null, connected: false, lastSeen: 0, aspect: null };
+    this.view = { s: 1, x: 0, y: 0 };   // zoom and pan of the frame on screen (only over the design photo)
     this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('pm-sync') : null;
     this.ports = new Set();   // second screens started through the Presentation API
     this.t0 = performance.now();
@@ -64,7 +65,29 @@ class App {
     c.width = Math.max(1, Math.round(bw * scale)); c.height = Math.max(1, Math.round(bh * scale));
     const frame = [1280, Math.round(1280 / aspect)];
     if (frame[1] !== this.frame[1]) { this.frame = frame; this.renderer.frame = frame; this.dirty = true; }
-    if (IS_OUTPUT) this.hello(); else if (this.editor) this.placeBackdrop();
+    if (IS_OUTPUT) this.hello(); else if (this.editor) { this.setView({ s: 1, x: 0, y: 0 }); this.placeBackdrop(); }
+  }
+
+  // ---------- zooming in on the design photo ----------
+  // Only over the design photo: when the phone mirrors to the projector, a zoomed view would be projected too.
+  canZoom() { return !IS_OUTPUT && !!(this.project.backdrop?.show && !$('backdrop').hidden) && !document.body.classList.contains('show'); }
+
+  // from view v, scaled by k about screen point `from`, which moves to screen point `to`
+  zoomView(v, from, to, k) {
+    const s = Math.min(8, Math.max(1, v.s * k)), ox = this.box.offsetLeft, oy = this.box.offsetTop;
+    const lx = (from[0] - ox - v.x) / v.s, ly = (from[1] - oy - v.y) / v.s;
+    this.setView({ s, x: to[0] - ox - s * lx, y: to[1] - oy - s * ly });
+  }
+
+  setView({ s, x, y }) {
+    const bw = this.box.clientWidth, bh = this.box.clientHeight;
+    if (s < 1.01) { s = 1; x = 0; y = 0; }
+    // keep the frame covering the space it fills unzoomed
+    x = Math.min(0, Math.max(bw * (1 - s), x)); y = Math.min(0, Math.max(bh * (1 - s), y));
+    this.view = { s, x, y };
+    this.box.style.transformOrigin = '0 0';
+    this.box.style.transform = s === 1 ? '' : `translate(${x}px, ${y}px) scale(${s})`;
+    if (!IS_OUTPUT) $('viewFit').hidden = s === 1;
   }
 
   // ---------- state changes ----------
@@ -193,6 +216,7 @@ class App {
   setShow(on) {
     if (on && this.editor.compose) this.setCompose(false);
     if (on && this.editor.pick) this.setPick(false);
+    if (on) this.setView({ s: 1, x: 0, y: 0 });
     document.body.classList.toggle('show', on);
     if (on) {
       this.gesture();
@@ -421,6 +445,7 @@ class App {
     $('toolsBtn').onclick = () => this.toggleDrawer();
     $('closeDrawer').onclick = () => this.toggleDrawer(false);
     $('showBtn').onclick = () => this.setShow(true);
+    $('viewFit').onclick = () => this.setView({ s: 1, x: 0, y: 0 });
     for (const b of ['playBtn', 'playBtn2']) $(b).onclick = () => (this.playing ? this.pause() : this.play());
     $('restartBtn').onclick = () => this.restart();
     document.querySelectorAll('[data-tab]').forEach((b) => { b.onclick = () => this.selectTab(b.dataset.tab); });

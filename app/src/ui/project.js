@@ -160,6 +160,7 @@ export const projectUI = {
     img.hidden = !on;
     img.style.filter = `brightness(${b ? b.dim : 0.6})`;
     document.body.classList.toggle('photo', on);
+    if (!on && this.view.s !== 1) this.setView({ s: 1, x: 0, y: 0 });
     this.placeBackdrop();
     $('backdropOpts').hidden = !b;
     if (b) { $('backdropShow').checked = b.show; $('backdropDim').value = b.dim; }

@@ -19,10 +19,14 @@ export class Editor {
     this.snap = true;
     this.compose = false;     // arranging which part of the composition each surface shows (roadmap #7)
     this.pick = false;        // tapping things on the design photo to make surfaces (issue #35)
-    overlay.addEventListener('pointerdown', (e) => this.down(e));
-    overlay.addEventListener('pointermove', (e) => this.move(e));
-    overlay.addEventListener('pointerup', () => this.up());
-    overlay.addEventListener('pointercancel', () => this.up());
+    this.touches = new Map(); // fingers (pointers) down: id -> [clientX, clientY]
+    this.pinch = null;        // two fingers zooming and panning the view (on the design photo)
+    this.tap = null;          // picking: a touch that becomes a tap if it lifts without moving
+    overlay.addEventListener('pointerdown', (e) => this.pointerDown(e));
+    overlay.addEventListener('pointermove', (e) => this.pointerMove(e));
+    overlay.addEventListener('pointerup', (e) => this.pointerUp(e));
+    overlay.addEventListener('pointercancel', (e) => this.pointerUp(e, true));
+    overlay.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
     overlay.addEventListener('dblclick', (e) => this.dbl(e));
   }
 
@@ -50,12 +54,75 @@ export class Editor {
 
   select(i) { this.sel = i; this.selPin = -1; this.selVert = null; this.selMesh = -1; this.app.changed({ geometry: false }); }
 
-  down(e) {
-    this.canvas.setPointerCapture(e.pointerId);
+  // ---- gestures: one finger edits (or, picking, taps); two fingers pinch and pan the view on the design photo ----
+  pointerDown(e) {
+    try { this.canvas.setPointerCapture(e.pointerId); } catch { /* a pointer the browser no longer tracks */ }
+    this.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (this.touches.size === 2 && this.app.canZoom()) {
+      this.cancelDrag();
+      const [a, b] = [...this.touches.values()];
+      this.pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], view: { ...this.app.view } };
+      return;
+    }
+    if (this.touches.size > 1) return;
     this.app.gesture();
+    if (this.pick) { this.tap = { id: e.pointerId, at: [e.clientX, e.clientY], p: this.toFrame(e), view: { ...this.app.view } }; return; }
+    this.down(e);
+    // what a drag started from, to put back if it turns into a pinch
+    this.dragFrom = this.drag && this.surfaces[this.sel] ? { i: this.sel, s: structuredClone(this.surfaces[this.sel]) } : null;
+  }
+
+  pointerMove(e) {
+    if (!this.touches.has(e.pointerId)) return;
+    this.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (this.pinch) {
+      if (this.touches.size < 2) return;
+      const [a, b] = [...this.touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      this.app.zoomView(this.pinch.view, this.pinch.mid, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d / this.pinch.d);
+      return;
+    }
+    if (this.tap && this.tap.id === e.pointerId) {
+      const dx = e.clientX - this.tap.at[0], dy = e.clientY - this.tap.at[1];
+      // a finger that moves isn't a tap; zoomed in, it pans
+      if (!this.tap.moved && Math.hypot(dx, dy) > 8) this.tap.moved = true;
+      if (this.tap.moved && this.app.view.s > 1) this.app.zoomView(this.tap.view, this.tap.at, [e.clientX, e.clientY], 1);
+      return;
+    }
+    if (this.touches.size === 1) this.move(e);
+  }
+
+  pointerUp(e, cancelled = false) {
+    this.touches.delete(e.pointerId);
+    if (this.pinch) { if (!this.touches.size) this.pinch = null; return; }
+    if (this.tap && this.tap.id === e.pointerId) {
+      const t = this.tap; this.tap = null;
+      if (!t.moved && !cancelled) this.app.pickAt(t.p);
+      return;
+    }
+    this.up();
+  }
+
+  // a drag interrupted by a second finger: put the surface back as it was
+  cancelDrag() {
+    this.tap = null;
+    if (!this.drag) return;
+    const f = this.dragFrom;
+    if (f && this.surfaces[f.i]) this.surfaces[f.i] = f.s;
+    this.drag = null; this.dragFrom = null;
+    this.app.changed();
+  }
+
+  // mouse wheel or trackpad: zoom around the pointer
+  wheel(e) {
+    if (!this.app.canZoom()) return;
+    e.preventDefault();
+    const v = this.app.view, at = [e.clientX, e.clientY];
+    this.app.zoomView(v, at, at, Math.exp(-e.deltaY * 0.0015));
+  }
+
+  down(e) {
     const p = this.toFrame(e), r = this.handleR();
     if (this.compose) { this.composeDown(p, r); return; }
-    if (this.pick) { this.app.pickAt(p); return; }
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (s && this.mode === 'warp') {
       const k = g.pins.findIndex((q) => dist(q, p) <= r);
@@ -260,7 +327,8 @@ export class Editor {
 
   // ---- drawing (edit mode only; when mirroring, these handles are projected too, which helps alignment) ----
   draw() {
-    const c = this.canvas, r = c.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    // canvas pixels per screen pixel: the device's, capped so a zoomed-in view doesn't make a huge canvas
+    const c = this.canvas, r = c.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2, 4096 / Math.max(r.width, r.height, 1));
     if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); }
     const ctx = this.ctx, [W, H] = this.app.frame, sx = c.width / W, sy = c.height / H;
     ctx.clearRect(0, 0, c.width, c.height);

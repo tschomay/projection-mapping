@@ -103,8 +103,16 @@ export default async function run() {
     t.ok(await page.evaluate(() => window.__fakeEncoded === 1), 'the photo is encoded only once');
     // Simplify reshapes that same surface: fewer points, still the mirror
     const pts = () => page.evaluate(() => window.app.project.surfaces[0].parts[0].pts.length);
-    const detailed = await page.evaluate(() => { const s = document.getElementById('pickSimple'); s.value = 0; s.dispatchEvent(new Event('input')); return window.app.project.surfaces[0].parts[0].pts.length; });
-    await page.evaluate(() => { const s = document.getElementById('pickSimple'); s.value = 1; s.dispatchEvent(new Event('input')); });
+    // (sliding only shows a spinner; the shape is worked out when the finger lifts or pauses)
+    const slide = async (v) => {
+      const busy = await page.evaluate((v) => { const s = document.getElementById('pickSimple'); s.value = v; s.dispatchEvent(new Event('input')); return !document.getElementById('pickBusy').hidden; }, v);
+      await page.evaluate(() => document.getElementById('pickSimple').dispatchEvent(new Event('change')));
+      await page.waitForFunction(() => document.getElementById('pickBusy').hidden, null, { timeout: 10000 });
+      return busy;
+    };
+    const busy = await slide(0), detailed = await pts();
+    t.ok(busy, 'a slider moving shows that the shape is being updated');
+    await slide(1);
     const simple = await pts(), rs = await overlap(page, 0, 'mirror');
     t.ok(simple < detailed && rs.iou > 0.9 && await page.evaluate(() => window.app.project.surfaces.length) === 1, `Simplify reshapes the same surface (${detailed} → ${simple} points, IoU ${rs.iou.toFixed(3)})`);
     t.ok(await page.evaluate(() => window.app.project.settings.pickSimple === 1), 'and is saved with the project');
@@ -113,10 +121,29 @@ export default async function run() {
     await page.mouse.click(away[0], away[1]);
     await page.waitForTimeout(800);
     t.ok(await page.evaluate(() => window.app.project.surfaces.length !== 1 || /No outline/.test(window.__toasts.at(-1))), 'a tap elsewhere starts a new one');
+
+    // pinch to zoom on the photo (two fingers spreading), then Fit; a pinch doesn't pick anything
+    const n0 = await page.evaluate(() => window.app.project.surfaces.length);
+    const zoomed = await page.evaluate(async () => {
+      const o = document.getElementById('overlay'), r = o.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ev = (type, id, x, y) => o.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch', isPrimary: id === 1 }));
+      ev('pointerdown', 1, cx - 20, cy); ev('pointerdown', 2, cx + 20, cy);
+      for (let k = 1; k <= 5; k++) { ev('pointermove', 1, cx - 20 - 20 * k, cy); ev('pointermove', 2, cx + 20 + 20 * k, cy); }
+      ev('pointerup', 1, cx - 120, cy); ev('pointerup', 2, cx + 120, cy);
+      await new Promise((res) => setTimeout(res, 300));
+      return { s: window.app.view.s, fit: !document.getElementById('viewFit').hidden, n: window.app.project.surfaces.length };
+    });
+    t.ok(zoomed.s > 2.5 && zoomed.fit && zoomed.n === n0, `two fingers spreading zoom the photo in (${zoomed.s.toFixed(1)}x), Fit appears, nothing is picked`);
+    await page.click('#viewFit');
+    t.ok(await page.evaluate(() => window.app.view.s === 1 && document.getElementById('viewFit').hidden), 'Fit zooms back out');
+    const r2 = await page.evaluate(() => { const b = document.getElementById('overlay').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; });
+    await page.mouse.move(r2[0], r2[1]); await page.mouse.wheel(0, -400); await page.waitForTimeout(200);
+    t.ok(await page.evaluate(() => window.app.view.s > 1), 'the mouse wheel zooms too');
+    await page.click('#viewFit');
     await ctx.close();
 
-    // without the model
-    ctx = await browser.newContext({ viewport: { width: 844, height: 390 } });
+    // without the model, on a phone held upright: the pick bar fits and leaves the toolbar uncovered
+    ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await ctx.route(LIB, (route) => route.fulfill({ status: 404, body: '' }));
     await ctx.addInitScript(`window.__buildWall = ${buildWall.toString()};`);
     page = await ctx.newPage();
@@ -125,6 +152,11 @@ export default async function run() {
     await setUp(page);
     const told = await page.waitForFunction(() => window.__toasts.some((m) => /can't load here/.test(m)), null, { timeout: 15000 }).then(() => true, () => false);
     t.ok(told, 'where the model can\'t load, the app says shapes come from edges and colours instead');
+    const fit = await page.evaluate(() => {
+      const b = document.getElementById('pickBar').getBoundingClientRect(), tb = document.getElementById('toolbar').getBoundingClientRect();
+      return { inside: b.left >= 0 && b.right <= innerWidth, below: b.top >= tb.bottom };
+    });
+    t.ok(fit.inside && fit.below, `upright on a phone, the pick bar fits the screen and sits below the toolbar (${JSON.stringify(fit)})`);
     await tapShape(page, 'glass');
     await page.waitForFunction(() => window.app.project.surfaces.length === 1, null, { timeout: 15000 });
     const f = await overlap(page, 0, 'glass');
