@@ -179,22 +179,45 @@ const CSS = `
 .libA .tile .lib-badges { position: absolute; top: 6px; right: 6px; }
 .libA .tile span { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .libA .tile[aria-pressed=true] span::before { content: "● "; color: var(--lamp); }
-/* B: shelf */
-#libB { position: fixed; z-index: 4; left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); background: #12161ef0; backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 8px 0 10px; display: grid; gap: 8px; }
-#libB .top { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
-#libB .top .who { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#libB .top .who b { color: var(--fg); }
-#libB .seg button { white-space: nowrap; }
+/* B: shelf. Portrait (the phone as a remote for a second screen): the frame pinned to the top, the shelf across
+   the bottom half with two rows of tiles. Landscape (mirroring): a rail down one side, so the frame keeps its height. */
+#libB { position: fixed; z-index: 4; left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); background: #12161ef0; backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 10px 0; display: grid; gap: 10px; overflow: hidden; }
+#libB .top { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "who acts" "seg seg"; align-items: center; gap: 8px; padding: 0 10px; }
+#libB .who { grid-area: who; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#libB .who b { color: var(--fg); font-size: 15px; }
+#libB .top .seg { grid-area: seg; justify-self: start; }
+#libB .seg button { white-space: nowrap; min-height: 34px; }
+#libB .acts { grid-area: acts; display: flex; gap: 6px; }
+#libB .acts .btn { min-height: 36px; justify-content: center; }
+#libB .flip { grid-area: flip; display: none; min-height: 34px; padding: 4px 9px; }
 #libB .groups { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 0 10px; }
-#libB .groups .chip { flex: none; min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
-#libB .strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 10px; scrollbar-width: none; }
-#libB .strip .sep { flex: none; width: 1px; background: var(--line); margin: 0 2px; }
-#libB .tile { flex: none; width: 136px; position: relative; display: grid; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; scroll-snap-align: start; font: inherit; text-align: left; }
-#libB .tile canvas { width: 136px; height: 85px; border-radius: 8px; border: 2px solid var(--line); display: block; box-sizing: border-box; }
+#libB .groups .chip { flex: none; min-height: 32px; padding: 4px 11px; font-size: 13px; }
+#libB .strip { display: grid; grid-auto-flow: column; grid-template-rows: auto auto; grid-auto-columns: auto; gap: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding: 2px 10px; scrollbar-width: none; }
+#libB .strip .sep { grid-row: 1 / span 2; width: 1px; background: var(--line); font-size: 0; color: transparent; scroll-snap-align: start; }
+#libB .strip .sep:first-child { display: none; }
+#libB .tile { width: 140px; min-width: 0; position: relative; display: grid; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; scroll-snap-align: start; font: inherit; text-align: left; }
+#libB .tile canvas { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; border: 2px solid var(--line); display: block; box-sizing: border-box; }
 #libB .tile[aria-pressed=true] canvas { border-color: var(--lamp); box-shadow: 0 0 0 3px var(--lamp-dim); }
 #libB .tile .lib-badges { position: absolute; top: 5px; right: 5px; }
-#libB .tile span { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#libB .tile span { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.libB-open #quickBar, body.libB-open #nudge { display: none !important; }
+@media (orientation: portrait) {
+  body.libB-open #box { top: calc(108px + env(safe-area-inset-top, 0px)) !important; }
+}
+@media (orientation: landscape) {
+  #libB { left: auto; top: calc(58px + env(safe-area-inset-top, 0px)); width: 236px; grid-template-rows: auto 1fr; padding-bottom: 0; }
+  #libB.left { right: auto; left: calc(10px + env(safe-area-inset-left, 0px)); }
+  #libB .top { grid-template-areas: "who flip" "seg seg" "acts acts"; }
+  #libB .top .seg { justify-self: stretch; display: flex; }
+  #libB .top .seg button { flex: 1; }
+  #libB .acts .btn { flex: 1; }
+  #libB .tile { width: auto; }
+  #libB .tile span { font-size: 11.5px; }
+  #libB .flip { display: inline-flex; }
+  #libB .groups { display: none; }
+  #libB .strip { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: 1fr 1fr; gap: 8px; overflow-x: hidden; overflow-y: auto; scroll-snap-type: y proximity; padding: 0 10px 10px; min-height: 0; }
+  #libB .strip .sep, #libB .strip .sep:first-child { display: block; grid-row: auto; grid-column: 1 / -1; width: auto; background: none; margin-top: 4px; font: 600 10.5px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+}
 /* C: inspector */
 .libC { display: grid; gap: 12px; }
 .libC .hero { display: grid; gap: 8px; background: #0008; border: 1px solid var(--line); border-radius: 10px; padding: 10px; position: sticky; top: -12px; z-index: 1; backdrop-filter: blur(8px); }
@@ -285,16 +308,17 @@ function variantB(app, loop) {
     loop.clear();
     const list = items(app), cur = currentKey(app), n = app.editor.sel + 1;
     shelf.innerHTML = `<div class="top">
-        <div class="who">${all ? '<b>Every surface</b>' : `<b>Surface ${n}</b> · tap another on the frame to switch`}${before ? ' · trying it out' : ''}</div>
-        <div class="seg"><button data-all="0" aria-pressed="${!all}">This one</button><button data-all="1" aria-pressed="${all}">All</button></div>
-        ${before ? '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="keep">Keep</button>' : '<button class="btn" data-act="close" aria-label="Close">✕</button>'}
+        <div class="who">${all ? '<b>Every surface</b>' : `<b>Surface ${n}</b>`}${before ? ' · trying it' : ''}</div>
+        <button class="btn flip" data-act="flip" aria-label="Move to the other side" title="Move to the other side">⇆</button>
+        <div class="seg"><button data-all="0" aria-pressed="${!all}">This surface</button><button data-all="1" aria-pressed="${all}">All</button></div>
+        <div class="acts">${before ? '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="keep">Keep</button>' : '<button class="btn" data-act="close">Done</button>'}</div>
       </div>
       <div class="groups">${groupsOf(list).map((g) => `<button class="chip" data-jump="${g}">${g}</button>`).join('')}<button class="chip" data-act="ai">✦ Describe…</button><button class="chip" data-act="media">＋ Video or image</button></div>
       <div class="strip"></div>`;
     const strip = shelf.querySelector('.strip');
     let g = '';
     for (const it of list) {
-      if (it.group !== g) { if (g) strip.insertAdjacentHTML('beforeend', '<div class="sep"></div>'); g = it.group; }
+      if (it.group !== g) { strip.insertAdjacentHTML('beforeend', `<div class="sep" data-group="${it.group}">${it.group}</div>`); g = it.group; }
       const b = document.createElement('button');
       b.className = 'tile'; b.dataset.group = it.group; b.title = it.about;
       b.setAttribute('aria-pressed', String(it.key === cur));
@@ -303,15 +327,17 @@ function variantB(app, loop) {
       b.onclick = () => { if (!before) before = looks(); apply(app, it, all); render(); };
       strip.append(b);
     }
-    shelf.querySelectorAll('[data-jump]').forEach((c) => { c.onclick = () => strip.querySelector(`.tile[data-group="${c.dataset.jump}"]`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' }); });
+    shelf.querySelectorAll('[data-jump]').forEach((c) => { c.onclick = () => strip.querySelector(`.sep[data-group="${c.dataset.jump}"]`)?.scrollIntoView({ inline: 'start', block: 'start', behavior: 'smooth' }); });
     shelf.querySelectorAll('[data-all]').forEach((c) => { c.onclick = () => { all = c.dataset.all === '1'; render(); }; });
     shelf.querySelector('[data-act=keep]')?.addEventListener('click', () => { before = null; render(); });
     shelf.querySelector('[data-act=cancel]')?.addEventListener('click', () => { restore(); render(); });
     shelf.querySelector('[data-act=close]')?.addEventListener('click', () => open(false));
+    shelf.querySelector('[data-act=flip]').onclick = () => { shelf.classList.toggle('left'); };
     shelf.querySelector('[data-act=ai]').onclick = () => { open(false); app.toggleDrawer(true); app.selectTab('content'); $('aiPrompt').focus(); };
     shelf.querySelector('[data-act=media]').onclick = () => $('addMedia').click();
     // keep the strip where it was
-    strip.scrollLeft = render.scroll || 0; strip.onscroll = () => { render.scroll = strip.scrollLeft; };
+    strip.scrollLeft = render.sx || 0; strip.scrollTop = render.sy || 0;
+    strip.onscroll = () => { render.sx = strip.scrollLeft; render.sy = strip.scrollTop; };
   };
   return {
     refresh: () => { const k = app.editor.sel + ':' + currentKey(app); if (k !== render.k) { render.k = k; render(); } },
