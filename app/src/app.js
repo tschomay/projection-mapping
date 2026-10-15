@@ -233,7 +233,7 @@ class App {
     } else {
       store.setFlag('showHintDone');
       screen.orientation?.unlock?.();
-      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement && document.exitFullscreen && !this.editFullscreen) document.exitFullscreen().catch(() => {});   // PROTOTYPE: stays full screen if editing was
     }
     this.renderNudge();
   }

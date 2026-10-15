@@ -182,20 +182,22 @@ const CSS = `
 /* B: shelf. Portrait (the phone as a remote for a second screen): the frame pinned to the top, the shelf across
    the bottom half with two rows of tiles. Landscape (mirroring): a rail down one side, so the frame keeps its height. */
 #libB { position: fixed; z-index: 4; left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); background: #12161ef0; backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 10px 0; display: grid; gap: 10px; overflow: hidden; }
-#libB .top { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "who acts" "seg seg"; align-items: center; gap: 8px; padding: 0 10px; }
+#libB .top { display: grid; grid-template-columns: 1fr auto auto auto; grid-template-areas: "who seg x acts"; align-items: center; gap: 8px; padding: 0 10px; }
 #libB .who { grid-area: who; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #libB .who b { color: var(--fg); font-size: 15px; }
-#libB .top .seg { grid-area: seg; justify-self: start; }
-#libB .seg button { white-space: nowrap; min-height: 34px; }
+#libB .top .seg { grid-area: seg; }
+#libB .seg button { white-space: nowrap; min-height: 34px; padding: 4px 10px; }
 #libB .acts { grid-area: acts; display: flex; gap: 6px; }
-#libB .acts .btn { min-height: 36px; justify-content: center; }
-#libB .flip { grid-area: flip; display: none; min-height: 34px; padding: 4px 9px; }
+#libB .acts:empty { display: none; }
+#libB .acts .btn, #libB .x, #libB .flip { min-height: 34px; justify-content: center; }
+#libB .x { grid-area: x; padding: 4px 10px; }
+#libB .flip { grid-area: flip; display: none; padding: 4px 9px; }
 #libB .groups { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 0 10px; }
 #libB .groups .chip { flex: none; min-height: 32px; padding: 4px 11px; font-size: 13px; }
-#libB .strip { display: grid; grid-auto-flow: column; grid-template-rows: auto auto; grid-auto-columns: auto; gap: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding: 2px 10px; scrollbar-width: none; }
-#libB .strip .sep { grid-row: 1 / span 2; width: 1px; background: var(--line); font-size: 0; color: transparent; scroll-snap-align: start; }
+#libB .strip { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding: 2px 10px; scrollbar-width: none; }
+#libB .strip .sep { width: 1px; background: var(--line); font-size: 0; color: transparent; scroll-snap-align: start; }
 #libB .strip .sep:first-child { display: none; }
-#libB .tile { width: 140px; min-width: 0; position: relative; display: grid; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; scroll-snap-align: start; font: inherit; text-align: left; }
+#libB .tile { width: 128px; min-width: 0; position: relative; display: grid; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; scroll-snap-align: start; font: inherit; text-align: left; }
 #libB .tile canvas { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; border: 2px solid var(--line); display: block; box-sizing: border-box; }
 #libB .tile[aria-pressed=true] canvas { border-color: var(--lamp); box-shadow: 0 0 0 3px var(--lamp-dim); }
 #libB .tile .lib-badges { position: absolute; top: 5px; right: 5px; }
@@ -203,11 +205,12 @@ const CSS = `
 body.libB-open #quickBar, body.libB-open #nudge { display: none !important; }
 @media (orientation: portrait) {
   body.libB-open #box { top: calc(108px + env(safe-area-inset-top, 0px)) !important; }
+  #libB .who .trying { display: none; }
 }
 @media (orientation: landscape) {
   #libB { left: auto; top: calc(58px + env(safe-area-inset-top, 0px)); width: 236px; grid-template-rows: auto 1fr; padding-bottom: 0; }
   #libB.left { right: auto; left: calc(10px + env(safe-area-inset-left, 0px)); }
-  #libB .top { grid-template-areas: "who flip" "seg seg" "acts acts"; }
+  #libB .top { grid-template-columns: 1fr auto auto; grid-template-areas: "who flip x" "seg seg seg" "acts acts acts"; }
   #libB .top .seg { justify-self: stretch; display: flex; }
   #libB .top .seg button { flex: 1; }
   #libB .acts .btn { flex: 1; }
@@ -218,6 +221,7 @@ body.libB-open #quickBar, body.libB-open #nudge { display: none !important; }
   #libB .strip { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: 1fr 1fr; gap: 8px; overflow-x: hidden; overflow-y: auto; scroll-snap-type: y proximity; padding: 0 10px 10px; min-height: 0; }
   #libB .strip .sep, #libB .strip .sep:first-child { display: block; grid-row: auto; grid-column: 1 / -1; width: auto; background: none; margin-top: 4px; font: 600 10.5px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
 }
+#libCast[aria-pressed=true] { border-color: var(--lamp); color: var(--lamp); }
 /* C: inspector */
 .libC { display: grid; gap: 12px; }
 .libC .hero { display: grid; gap: 8px; background: #0008; border: 1px solid var(--line); border-radius: 10px; padding: 10px; position: sticky; top: -12px; z-index: 1; backdrop-filter: blur(8px); }
@@ -308,10 +312,11 @@ function variantB(app, loop) {
     loop.clear();
     const list = items(app), cur = currentKey(app), n = app.editor.sel + 1;
     shelf.innerHTML = `<div class="top">
-        <div class="who">${all ? '<b>Every surface</b>' : `<b>Surface ${n}</b>`}${before ? ' · trying it' : ''}</div>
+        <div class="who">${all ? '<b>Every surface</b>' : `<b>Surface ${n}</b>`}${before ? '<span class="trying"> · trying it</span>' : ''}</div>
         <button class="btn flip" data-act="flip" aria-label="Move to the other side" title="Move to the other side">⇆</button>
-        <div class="seg"><button data-all="0" aria-pressed="${!all}">This surface</button><button data-all="1" aria-pressed="${all}">All</button></div>
-        <div class="acts">${before ? '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="keep">Keep</button>' : '<button class="btn" data-act="close">Done</button>'}</div>
+        <div class="seg"><button data-all="0" aria-pressed="${!all}">This one</button><button data-all="1" aria-pressed="${all}">All</button></div>
+        ${before ? '' : '<button class="btn x" data-act="close" aria-label="Close" title="Close">✕</button>'}
+        <div class="acts">${before ? '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="keep">Keep</button>' : ''}</div>
       </div>
       <div class="groups">${groupsOf(list).map((g) => `<button class="chip" data-jump="${g}">${g}</button>`).join('')}<button class="chip" data-act="ai">✦ Describe…</button><button class="chip" data-act="media">＋ Video or image</button></div>
       <div class="strip"></div>`;
@@ -409,6 +414,38 @@ function variantC(app, loop) {
   };
 }
 
+// ---------- toolbar extras (all variants): full screen while editing, and Cast to make the phone a remote ----------
+const ICON = {
+  full: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>',
+  exit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/></svg>',
+  cast: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5V3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5H9"/><path d="M2 8a6 6 0 016 6M2 10.5A3.5 3.5 0 015.5 14"/><circle cx="2.3" cy="13.7" r=".6" fill="currentColor"/></svg>',
+};
+function extraButtons(app) {
+  const root = document.documentElement;
+  if (root.requestFullscreen) {
+    const fs = document.createElement('button');
+    fs.className = 'btn'; fs.id = 'libFull';
+    const upd = () => { const on = !!document.fullscreenElement; fs.innerHTML = on ? ICON.exit : ICON.full; fs.title = on ? 'Leave full screen' : 'Full screen while editing'; fs.setAttribute('aria-label', fs.title); };
+    fs.onclick = () => {
+      if (document.fullscreenElement) { app.editFullscreen = false; document.exitFullscreen().catch(() => {}); }
+      else { app.editFullscreen = true; root.requestFullscreen({ navigationUI: 'hide' }).catch(() => app.toast("This browser won't go full screen here.")); }
+    };
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) app.editFullscreen = false; upd(); });
+    upd();
+    $('toolsBtn').after(fs);
+  }
+  const present = $('presentBtn');
+  if (!present.hidden) {
+    const cast = document.createElement('button');
+    cast.className = 'btn'; cast.id = 'libCast';
+    cast.innerHTML = ICON.cast + '<span class="lbl">Cast</span>';
+    cast.title = 'Cast the output to a screen; this phone becomes the remote';
+    cast.onclick = () => present.click();
+    setInterval(() => { cast.setAttribute('aria-pressed', String(!!app.presenting)); cast.querySelector('.lbl').textContent = app.presenting ? 'Casting' : 'Cast'; }, 1000);
+    $('showBtn').before(cast);
+  }
+}
+
 // ---------- mounting and the switcher ----------
 export function mount(app) {
   if (!app.editor) return;
@@ -421,7 +458,8 @@ export function mount(app) {
   const sw = document.createElement('div');
   sw.id = 'libSwitch';
   sw.innerHTML = '<button aria-label="Previous variant">◀</button><span></span><button aria-label="Next variant">▶</button>';
-  $('toolbar').append(sw);   // in the toolbar's flow, so it never covers it; white so it's clearly not the design
+  $('toolbar').append(sw);
+  extraButtons(app);   // in the toolbar's flow, so it never covers it; white so it's clearly not the design
   const show = (k) => {
     v?.unmount(); loop.clear();
     key = k;
