@@ -550,6 +550,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !wind
 
 try {
   window.app = new App();
+  // PROTOTYPE (content library, #42): ?library=A|B|C tries three ways of browsing effects and media
+  if (new URLSearchParams(location.search).has('library')) import('./ui/library.prototype.js').then((m) => m.mount(window.app));
 } catch (err) {
   document.body.innerHTML = `<p style="padding:24px;font:16px system-ui;color:#e3e8ef">Surface Mapper can't start on this device: ${String(err.message || err).replace(/</g, '&lt;')}</p>`;
 }
