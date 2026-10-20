@@ -60,6 +60,14 @@ export default async function run() {
     t.ok(st.chips === 0, 'the photo stays out of the looks');
     await page.fill('#backdropDim', '0.3'); await page.dispatchEvent('#backdropDim', 'input');
     t.ok(await page.evaluate(() => /0\.3/.test(document.getElementById('backdrop').style.filter)), 'the brightness slider dims the photo');
+    // Show hides the photo (it's for setting up), and editing brings it back
+    const shown = () => page.evaluate(() => ({ photo: getComputedStyle(document.getElementById('backdrop')).display !== 'none', blend: getComputedStyle(document.getElementById('gl')).mixBlendMode }));
+    await page.evaluate(() => window.app.setShow(true));
+    const inShow = await shown();
+    t.ok(!inShow.photo && inShow.blend === 'normal', 'Show hides the photo, so only the content is projected');
+    await page.evaluate(() => { window.app.setShow(false); window.app.toggleDrawer(true); window.app.selectTab('project'); });
+    const back = await shown();
+    t.ok(back.photo && back.blend === 'screen', 'and it comes back on leaving Show');
 
     // media used only in a cue survives a save and reload, as does the photo
     await page.evaluate(() => { window.app.addShape('square'); window.app.editor.select(0); });

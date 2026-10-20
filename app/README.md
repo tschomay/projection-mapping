@@ -93,7 +93,8 @@ in the photo, so the photo lines up with the frame exactly. **No projector
 yet?** Choose a photo of the set taken from where the projector will stand,
 and drag the frame's corners onto it (*Line it up with the projector*). Trace
 surfaces on it and try effects, media and cues; the content shows as light on
-the photo. On the day, nudge the corners onto the real objects. *Project → Check this device* shows
+the photo. *Show* hides the photo, so only the content reaches the projector; it
+comes back when you go back to editing. On the day, nudge the corners onto the real objects. *Project → Check this device* shows
 what your phone supports, and [`docs/connecting.md`](../docs/connecting.md)
 explains rehearsing with a TV.
 

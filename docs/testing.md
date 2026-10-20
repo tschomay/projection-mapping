@@ -120,8 +120,8 @@ in the issue listed, or paste the *Check this device* report there.
 - [ ] *Project → Design on a photo* with a photo of your set taken from
       where the projector will stand. Trace surfaces on it, try content and
       cues; it should look like light on the photo.
-- [ ] Turn the photo off before connecting to a projector (it's projected
-      too when mirroring).
+- [ ] Mirroring to the projector with the photo on: *Show* hides the photo
+      (only the content is projected), and it's back after double-tapping out.
 
 ## With a TV or monitor (before the projector)
 

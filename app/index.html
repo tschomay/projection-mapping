@@ -41,6 +41,9 @@ button, input, select { font: inherit; color: inherit; }
    warped so the projector frame's corners in the photo land on the frame's corners (see photo.js). */
 #backdrop { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; }
 body.photo #gl { mix-blend-mode: screen; }
+/* it's for setting up and rehearsing: Show hides it, so it's never projected */
+body.show #backdrop { display: none !important; }
+body.show.photo #gl { mix-blend-mode: normal; }
 #overlay { touch-action: none; }
 body.show #overlay, body.show .ui { display: none !important; }
 body.show #stage { cursor: none; }
@@ -393,7 +396,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
         <div class="row"><label class="note" for="backdropDim">Photo brightness</label><input type="range" id="backdropDim" min="0.1" max="1" step="0.05" value="0.6" style="flex:1"></div>
         <div class="row"><button class="btn" id="alignBtn">Line it up with the projector</button><button class="btn" id="removeBackdrop">Remove photo</button></div>
       </div>
-      <p class="note"><b>Take it from the projector</b>: hold this phone right beside the projector's lens; the projector flashes white once so the photo lines up with its frame exactly. <b>No projector yet?</b> Choose a photo taken from where the projector will stand, at dusk if it's outdoors, then line it up by dragging the frame's corners. Trace surfaces on it and try content and cues; the content shows as light on the photo. Turn the photo off before mirroring to a projector: it would be projected too.</p>
+      <p class="note"><b>Take it from the projector</b>: hold this phone right beside the projector's lens; the projector flashes white once so the photo lines up with its frame exactly. <b>No projector yet?</b> Choose a photo taken from where the projector will stand, at dusk if it's outdoors, then line it up by dragging the frame's corners. Trace surfaces on it and try content and cues; the content shows as light on the photo. <b>Show</b> hides the photo, so it's never projected; it comes back when you go back to editing.</p>
     </div>
     <div class="group">
       <h3>This device</h3>
