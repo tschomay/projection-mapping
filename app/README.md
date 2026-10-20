@@ -63,7 +63,9 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    on the projector, straight away; *All* puts it on every surface. Search and
    the groups (*Basics*, *Music*, *Ambient*, *Halloween*, your own, videos and
    images) sit above the tiles (on its side, they scroll away with *This one*/*All*). ♪ marks looks that move
-   to music, ⇆ ones that flow from one surface to the next. *Halloween* has
+   to music, ⇆ ones that flow from one surface to the next; for those, the tray
+   offers *Flow across* or *Whole scene here*, which fits the whole scene on that
+   surface instead. *Halloween* has
    bats, eyes, fog, lightning and candle glow. *＋ Video or image* adds one
    from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:
    on your Claude plan in the studio artifact, or with your own Gemini or
@@ -122,7 +124,8 @@ surface shows the part of it that it covers, so content runs on continuously acr
 surface: the part of the composition that surface shows. Drag a rectangle to move it, its corners to resize
 it; the nudge pad moves it a pixel at a time. The surfaces themselves don't move. So three boxes on a
 shelf can show one video's left, middle and right in any order, or one small surface can show the whole
-video. *Back to where it sits* returns a surface to the default. Per-surface media (*Own copy*) and
+video. *Back to where it sits* returns a surface to the default. *Whole scene here* in the Looks tray is the one-tap
+version of the most common arrangement: the whole composition on one surface. Per-surface media (*Own copy*) and
 effects that use the surface's own `uv` aren't affected.
 
 ## ISF
