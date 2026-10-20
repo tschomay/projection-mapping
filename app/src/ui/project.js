@@ -124,6 +124,8 @@ export const projectUI = {
     $('outputState').textContent = this.presenting ? 'Presenting to a second screen' : this.output.connected ? 'Output window connected' : '';
     $('presentBtn').textContent = this.presenting ? 'Stop presenting' : 'Present to a screen';
     if (this.presenting) $('presentBtn').disabled = false;
+    $('castBtn').setAttribute('aria-pressed', String(!!this.presenting));
+    $('castBtn').querySelector('.lbl').textContent = this.presenting ? 'Casting' : 'Cast';
   },
 
   initBackdrop() {

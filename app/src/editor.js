@@ -131,6 +131,8 @@ export class Editor {
   }
 
   pointerUp(e, cancelled = false) {
+    // still pressed, not moved and not long: a tap
+    const tapped = !cancelled && this.press?.id === e.pointerId && this.touches.size === 1;
     if (this.press?.id === e.pointerId) this.endPress();
     this.touches.delete(e.pointerId);
     if (this.pinch) { if (!this.touches.size) this.pinch = null; return; }
@@ -140,6 +142,12 @@ export class Editor {
       return;
     }
     this.up();
+    // a tap on the selected surface hides or shows its bar; on empty space with nothing selected, the top buttons
+    const t = this.tapInfo; this.tapInfo = null;
+    if (tapped && t) {
+      if (t.hit >= 0 && t.hit === t.prevSel) this.app.toggleQuickBar();
+      else if (t.hit < 0 && t.prevSel < 0) this.app.toggleChrome();
+    }
   }
 
   // a drag interrupted by a second finger or a long press: put the surfaces back as they were
@@ -161,6 +169,7 @@ export class Editor {
 
   down(e) {
     const p = this.toFrame(e), r = this.handleR();
+    this.tapInfo = null;
     if (this.compose) { this.composeDown(p, r); return; }
     const s = this.surfaces[this.sel], g = this.geoms[this.sel];
     if (s && this.mode === 'warp') {
@@ -191,11 +200,13 @@ export class Editor {
       for (let j = g.parts.length - 1; j >= 0; j--) {
         if (pointInPoly(p[0], p[1], g.parts[j].outline)) {
           this.drag = { type: 'part', j, start: g.toUV(...p), pts: s.parts[j].pts.map((q) => [...q]) };
+          this.tapInfo = { prevSel: this.sel, hit: this.sel };
           return;
         }
       }
     }
     const hit = this.surfaceAt(...p);
+    this.tapInfo = { prevSel: this.sel, hit };
     if (hit >= 0) {
       if (hit !== this.sel) { this.sel = hit; this.selPin = -1; this.selVert = null; this.selMesh = -1; }
       this.drag = { type: 'move', start: p, pins: this.surfaces[hit].pins.map((q) => [...q]) };
@@ -294,14 +305,6 @@ export class Editor {
       s.mesh.pts[this.selMesh] = hApply(g.Hi, q[0] + dx, q[1] + dy);
     } else s.pins = s.pins.map(([x, y]) => [x + dx / W, y + dy / H]);
     this.app.changed({ save: true });
-  }
-  nudgeTarget() {
-    if (this.sel < 0) return '';
-    if (this.compose) return 'content rectangle';
-    if (this.mode === 'warp' && this.selPin >= 0) return 'corner';
-    if (this.mode === 'points' && this.selVert) return 'point';
-    if (this.mode === 'mesh' && this.selMesh >= 0) return 'bend point';
-    return 'surface';
   }
 
   // ---- arranging the composition: each surface's input rectangle, drawn over the whole frame ----

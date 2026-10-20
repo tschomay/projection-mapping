@@ -50,8 +50,8 @@ export default async function run() {
       const orig = window.app.showPattern.bind(window.app);
       window.app.showPattern = (f) => { window.__patternShown(f); orig(f); };
       window.app.editor.addSurface({ id: 'old', pins: [[0.1, 0.9], [0.3, 0.9], [0.3, 0.6], [0.1, 0.6]], parts: [{ op: 1, pts: [[0, 0], [1, 0], [1, 1], [0, 1]] }], content: { kind: 'effect', effect: 'outline' } });
-      document.getElementById('toolsBtn').click();
-      document.getElementById('scanBtn').click();
+      document.getElementById('addBtn').click();
+      [...document.querySelectorAll('#ctxMenu button')].find((b) => b.textContent === 'Find with the camera…').click();
     });
     await page.waitForFunction(() => !document.getElementById('scanStart').disabled, null, { timeout: 20000 });
     await page.click('#scanStart');

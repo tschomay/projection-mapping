@@ -20,7 +20,7 @@ export default async function run() {
     await page.goto(server.url);
     await ready(page);
     await page.evaluate(() => {
-      document.querySelector('[data-add="square"]').click(); document.querySelector('[data-add="circle"]').click();
+      window.app.addShape('square'); window.app.addShape('circle');
       const app = window.app, p = app.project;
       p.name = 'Kitchen bats';
       p.effects = [{ id: 'u1', name: 'Mine', prompt: 'mine', code: 'vec3 fx_custom(Surf2 s, float t) { return vec3(s.uv, 0.0); }' }];
@@ -67,11 +67,11 @@ export default async function run() {
     const page4 = await ctx3.newPage();
     await page4.goto(server.url);
     await ready(page4);
-    await page4.evaluate(() => { document.querySelector('[data-add="square"]').click(); document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
+    await page4.evaluate(() => { window.app.addShape('square'); document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
     t.ok(await page4.textContent('#sendLink') === 'Open in Surface Mapper', 'in an artifact the button opens Surface Mapper');
     await page4.waitForFunction(() => document.getElementById('sendLink').href.includes('#import='));
     const before = await page4.getAttribute('#sendLink', 'href');
-    await page4.evaluate(() => { document.querySelector('[data-add="circle"]').click(); window.app.save(); });
+    await page4.evaluate(() => { window.app.addShape('circle'); window.app.save(); });
     await page4.waitForFunction((b) => document.getElementById('sendLink').href !== b, before, { timeout: 15000 }).then(() => t.ok(true, 'the link follows edits'), () => t.ok(false, 'the link follows edits'));
     const [popup] = await Promise.all([ctx3.waitForEvent('page', { timeout: 30000 }).catch(() => null), page4.click('#sendLink')]);
     t.ok(popup && popup.url().startsWith('https://surface-mapper-alpha.vercel.app/#import='), 'one tap opens the app with the project (a plain link): ' + (popup && popup.url().slice(0, 60)));

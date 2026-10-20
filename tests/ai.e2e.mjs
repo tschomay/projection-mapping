@@ -42,7 +42,7 @@ export default async function run() {
     await page.goto(server.url);
     await page.waitForFunction(() => window.app && window.app.editor);
     await page.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); window.app.selectTab('content'); window.__aiRequests = []; window.__aiReplies = []; });
-    await page.evaluate(() => { document.querySelector('[data-add="square"]').click(); document.querySelector('[data-add="triangle"]').click(); window.app.editor.select(-1); });
+    await page.evaluate(() => { window.app.addShape('square'); window.app.addShape('triangle'); window.app.editor.select(-1); });
 
     t.ok(await page.evaluate(() => document.getElementById('aiGo').disabled), 'Write it is off until there is a key');
     await page.fill('#aiKey', 'not-a-key'); await page.click('#aiKeySave');
@@ -64,7 +64,10 @@ export default async function run() {
     t.ok(r.effects.length === 1 && r.compiled.includes(r.effects[0].id), 'the repaired effect is saved in the project and compiled');
     t.ok(r.contents.every((c) => c === r.effects[0].id), 'with no surface selected, every surface shows it');
     t.ok(/Fixed a compile error/.test(r.status), 'the status mentions the repair: ' + r.status);
-    t.ok(await page.evaluate(() => document.querySelectorAll('#effectList .chip.own').length === 1), 'it appears in the effect list');
+    await page.evaluate(() => window.app.setTray(true));
+    t.ok(await page.evaluate(() => document.querySelectorAll('#trayTiles .tile[data-group="Yours"][data-key]').length === 1), 'it appears in Looks, under Yours');
+    const drawer = () => page.evaluate(() => { window.app.toggleDrawer(true); window.app.selectTab('content'); });
+    await drawer();
 
     // a refusal
     await page.evaluate((m) => { window.__aiReplies.push(m); }, msg('', 'refusal'));
@@ -76,7 +79,9 @@ export default async function run() {
     const exported = await page.evaluate(() => JSON.stringify(window.app.project));
     t.ok(!exported.includes('sk-ant'), 'the project holds no key');
     // deleting the effect puts the surfaces back on the alignment grid
-    await page.click('#effectList .chip.own [data-del]');
+    await page.evaluate(() => window.app.setTray(true));
+    await page.click('#trayTiles .tile[data-group="Yours"] [data-del]');
+    await drawer();
     t.ok(await page.evaluate(() => !window.app.project.effects.length && window.app.project.surfaces.every((s) => s.content.effect === 'outline')), 'deleting the effect resets the surfaces using it');
     await page.click('#aiKeyForget');
     t.ok(await page.evaluate(() => !localStorage.getItem('pm.anthropicKey') && document.getElementById('aiGo').disabled), 'Forget my key removes it');
@@ -124,7 +129,7 @@ export default async function run() {
     page2.on('pageerror', (e) => errors.push(e.message));
     await page2.goto(server.url);
     await page2.waitForFunction(() => window.app && window.app.editor && !document.getElementById('aiGo').disabled, null, { timeout: 10000 });
-    await page2.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); window.app.selectTab('content'); document.querySelector('[data-add="square"]').click(); });
+    await page2.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); window.app.selectTab('content'); window.app.addShape('square'); });
     t.ok(await page2.evaluate(() => document.getElementById('aiKeyRow').hidden && !document.getElementById('aiPlanNote').hidden && document.getElementById('aiKeyNote').hidden), 'in an artifact there is no key to enter; the note says it uses the Claude plan');
     t.ok(await page2.evaluate(() => !navigator.serviceWorker || navigator.serviceWorker.getRegistrations().then((r) => !r.length)), 'no offline cache inside an artifact');
     await page2.evaluate(([a, b]) => { window.__sampleReplies.push(a, b); }, [BROKEN, FIXED]);

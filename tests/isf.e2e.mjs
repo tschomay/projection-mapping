@@ -76,8 +76,8 @@ export default async function run() {
     }, pts);
     await page.setInputFiles('#importISF', fixture);
     await page.waitForFunction(() => window.app.project.effects.length === 2, null, { timeout: 5000 }).catch(() => {});
-    const imp = await page.evaluate(() => ({ eff: window.app.project.effects[1], content: window.app.project.surfaces[0].content, chip: !!document.querySelector('#effectList .chip.own[data-effect="' + (window.app.project.effects[1] || {}).id + '"]') }));
-    t.ok(imp.eff && imp.eff.name === 'Rings' && imp.eff.source === 'isf' && imp.chip, 'an ISF generator imports into the effect list');
+    const imp = await page.evaluate(() => ({ eff: window.app.project.effects[1], content: window.app.project.surfaces[0].content, chip: window.app.trayItems().some((it) => it.own && it.id === (window.app.project.effects[1] || {}).id) }));
+    t.ok(imp.eff && imp.eff.name === 'Rings' && imp.eff.source === 'isf' && imp.chip, 'an ISF generator imports into the looks');
     t.ok(imp.eff && imp.content.effect === imp.eff.id, 'and goes onto the selected surface');
     // its colour input's default (0.2, 0.8, 0.4), full on the right half of the surface, half on the left
     const [right, left] = await read([[0.33, 0.55], [0.17, 0.55]]);
@@ -103,9 +103,8 @@ export default async function run() {
 
     await page.evaluate(() => { window.app.toggleDrawer(true); window.app.selectTab('content'); });
     await page.click('#composeBtn');
-    const on = await page.evaluate(() => ({ compose: window.app.editor.compose, bar: !document.getElementById('composeBar').hidden, drawer: document.getElementById('drawer').hidden, nudge: document.getElementById('nudgeLabel').textContent }));
+    const on = await page.evaluate(() => ({ compose: window.app.editor.compose, bar: !document.getElementById('composeBar').hidden, drawer: document.getElementById('drawer').hidden }));
     t.ok(on.compose && on.bar && on.drawer, 'Arrange content shows the composition with a Done bar, and the drawer gets out of the way');
-    t.ok(/content rectangle/.test(on.nudge), 'the nudge pad moves the content rectangle');
 
     // drag surface 2's rectangle (it sits at x 0.6..0.9) left by 0.4 of the frame: it now shows what's left of centre
     const box = await page.locator('#overlay').boundingBox();

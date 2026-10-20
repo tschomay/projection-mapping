@@ -21,6 +21,7 @@ import { projectUI } from './ui/project.js';
 import { scanUI } from './ui/scan.js';
 import { photoUI } from './ui/photo.js';
 import { editUI } from './ui/edit.js';
+import { trayUI } from './ui/tray.js';
 
 class App {
   constructor() {
@@ -151,6 +152,7 @@ class App {
     this.wasMixing = mix !== null;
     this.renderer.render((now - this.t0) / 1000, a, mix);
     if (!IS_OUTPUT) {
+      this.trayFrame(now, (now - this.t0) / 1000);
       this.drawTimeline();
       if (!document.body.classList.contains('show')) this.editor.draw();
       this.drawMeter(a);
@@ -233,9 +235,40 @@ class App {
     } else {
       store.setFlag('showHintDone');
       screen.orientation?.unlock?.();
-      if (document.fullscreenElement && document.exitFullscreen && !this.editFullscreen) document.exitFullscreen().catch(() => {});   // PROTOTYPE: stays full screen if editing was
+      // full screen stays on if it was turned on for editing
+      if (document.fullscreenElement && document.exitFullscreen && !this.editFullscreen) document.exitFullscreen().catch(() => {});
     }
-    this.renderNudge();
+  }
+
+  // The bars for picking and arranging go beside the toolbar when there's room, else below it; the tray and the
+  // soft edge bar go below it. Measured, because the toolbar's width and height change (labels, wrapping, hidden).
+  layoutBars() {
+    const tb = $('toolbar').getBoundingClientRect(), root = document.documentElement.style;
+    const shown = tb.height > 0, gap = 8, edge = 10;
+    const below = shown ? tb.bottom + gap : edge, room = innerWidth - (shown ? tb.right : 0) - edge - gap;
+    root.setProperty('--below-toolbar', below + 'px');
+    const beside = !shown || room >= 420;
+    root.setProperty('--bar-top', (beside ? (shown ? tb.top : edge) : below) + 'px');
+    root.setProperty('--bar-room', (beside && shown ? room : innerWidth - 2 * edge) + 'px');
+  }
+
+  // full screen while editing: the browser's bars take room the frame and the tray need
+  initFullscreen() {
+    const root = document.documentElement, btn = $('fullBtn');
+    if (!root.requestFullscreen) return;
+    btn.hidden = false;
+    btn.onclick = () => {
+      if (document.fullscreenElement) { this.editFullscreen = false; document.exitFullscreen().catch(() => {}); return; }
+      this.editFullscreen = true;
+      root.requestFullscreen({ navigationUI: 'hide' }).catch(() => { this.editFullscreen = false; this.toast("This browser won't go full screen here. Installing the app (Add to Home Screen) gives full screen too."); });
+    };
+    document.addEventListener('fullscreenchange', () => {
+      const on = !!document.fullscreenElement;
+      if (!on) this.editFullscreen = false;
+      document.body.classList.toggle('fullscreen', on);
+      btn.title = on ? 'Leave full screen' : 'Full screen while editing';
+      btn.setAttribute('aria-label', btn.title);
+    });
   }
 
   // ---------- persistence ----------
@@ -368,16 +401,24 @@ class App {
     const url = location.href.split('#')[0] + '#output';
     this.presentReq = new PresentationRequest([url]);
     try { navigator.presentation.defaultRequest = this.presentReq; } catch { /* read-only in some browsers */ }
+    // null until Chrome says whether it can see a screen to present to
+    this.screens = null;
     this.presentReq.getAvailability()
-      .then((av) => { const upd = () => { btn.disabled = !av.value && !this.presenting; this.renderOutputState(); }; av.onchange = upd; upd(); })
+      .then((av) => { const upd = () => { this.screens = av.value; btn.disabled = !av.value && !this.presenting; this.renderOutputState(); }; av.onchange = upd; upd(); })
       .catch(() => { /* can't watch for screens here; the button simply tries */ });
     this.presentReq.onconnectionavailable = (e) => this.addPresentation(e.connection);
-    btn.onclick = () => {
+    // Cast in the toolbar does the same, and says why when there's nothing to cast to (it used to do nothing)
+    const noScreen = 'Chrome found no screen it can show this page on. Many Chromecasts and cast projectors only take Cast apps, which Surface Mapper isn\'t yet: use a cable or screen mirroring for now.';
+    this.present = () => {
       if (this.presenting) { this.presenting.terminate(); return; }
+      if (this.screens === false) { this.toast(noScreen, 8000); return; }
       this.presentReq.start().then((c) => this.addPresentation(c)).catch((err) => {
-        if (err.name !== 'AbortError') this.toast('No screen to present to. Check the projector or Chromecast is on the same Wi-Fi.');
+        if (err.name !== 'AbortError') this.toast(err.name === 'NotFoundError' ? noScreen : 'No screen to present to. Check the projector or Chromecast is on the same Wi-Fi.', 8000);
       });
     };
+    btn.onclick = this.present;
+    $('castBtn').hidden = false;
+    $('castBtn').onclick = this.present;
     // pick a running presentation back up after a reload
     const last = session('get', 'pm-presentation');
     if (last) this.presentReq.reconnect(last).then((c) => this.addPresentation(c)).catch(() => session('remove', 'pm-presentation'));
@@ -484,8 +525,11 @@ class App {
 
     if (this.channel) this.channel.onmessage = ({ data }) => { if (data.type === 'hello') this.onHello(data); if (data.type === 'beat') this.remoteBeats++; };
     if (!this.channel) $('openOutput').disabled = true;
-    for (const init of ['initSurfacesUI', 'initContentUI', 'initSoundUI', 'initProjectUI', 'initCuesUI', 'initScan', 'initPhotoUI']) this[init]();
+    for (const init of ['initTray', 'initSurfacesUI', 'initContentUI', 'initSoundUI', 'initProjectUI', 'initCuesUI', 'initScan', 'initPhotoUI']) this[init]();
     this.initPresentation();
+    this.initFullscreen();
+    new ResizeObserver(() => this.layoutBars()).observe($('toolbar'));
+    addEventListener('resize', () => this.layoutBars());
     this.selectTab('surfaces');
   }
 
@@ -494,7 +538,7 @@ class App {
     d.hidden = !open;
     $('toolsBtn').setAttribute('aria-expanded', String(open));
     document.body.classList.toggle('drawer-open', open);
-    this.renderNudge();
+    if (open) this.setTray(false);
   }
 
   selectTab(tab) {
@@ -540,7 +584,7 @@ class App {
 }
 
 // each drawer pane's wiring and rendering lives in its own module under ui/
-Object.assign(App.prototype, editUI, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
+Object.assign(App.prototype, editUI, trayUI, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
 
 // offline support when served over http(s); unavailable in embedded previews, which is fine, and not used
 // inside a Claude artifact, where the platform serves the files
@@ -550,8 +594,6 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !wind
 
 try {
   window.app = new App();
-  // PROTOTYPE (content library, #42): ?library=A|B|C tries three ways of browsing effects and media
-  if (new URLSearchParams(location.search).has('library')) import('./ui/library.prototype.js').then((m) => m.mount(window.app));
 } catch (err) {
   document.body.innerHTML = `<p style="padding:24px;font:16px system-ui;color:#e3e8ef">Surface Mapper can't start on this device: ${String(err.message || err).replace(/</g, '&lt;')}</p>`;
 }
