@@ -131,7 +131,6 @@ body.has-quick:not(.drawer-open) #toast { bottom: calc(70px + env(safe-area-inse
 body.chrome-hidden #toolbar { display: none; }
 #toolbar #fullBtn .out, body.fullscreen #toolbar #fullBtn .in { display: none; }
 body.fullscreen #toolbar #fullBtn .out { display: inline; }
-#castBtn[aria-pressed="true"] { border-color: var(--lamp); color: var(--lamp); }
 #edgeBar { top: var(--below-toolbar, 58px); left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 20px)); display: flex; align-items: center; gap: 10px; background: #12161ee6; border: 1px solid var(--lamp); border-radius: 8px; padding: 6px 6px 6px 12px; }
 #edgeBar label { font-size: 13px; white-space: nowrap; }
 #edgeBar input { flex: 1; min-width: 0; }
@@ -256,8 +255,6 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L2.5 6l3 3"/><path d="M2.5 6h7a4 4 0 010 8H7"/></svg><span class="lbl">Undo</span></button>
   <button class="btn" id="playBtn" hidden>
     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg><span>Play</span></button>
-  <button class="btn" id="castBtn" hidden aria-pressed="false" title="Cast the output to a screen; this phone becomes the remote">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5V3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5H9"/><path d="M2 8a6 6 0 016 6M2 10.5A3.5 3.5 0 015.5 14"/><circle cx="2.3" cy="13.7" r=".6" fill="currentColor"/></svg><span class="lbl">Cast</span></button>
   <button class="btn primary" id="showBtn">Show</button>
   <button class="btn" id="viewFit" hidden title="Zoom back out to the whole frame">Fit</button>
 </div>

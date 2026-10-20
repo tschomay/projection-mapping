@@ -407,7 +407,7 @@ class App {
       .then((av) => { const upd = () => { this.screens = av.value; btn.disabled = !av.value && !this.presenting; this.renderOutputState(); }; av.onchange = upd; upd(); })
       .catch(() => { /* can't watch for screens here; the button simply tries */ });
     this.presentReq.onconnectionavailable = (e) => this.addPresentation(e.connection);
-    // Cast in the toolbar does the same, and says why when there's nothing to cast to (it used to do nothing)
+    // say why when there's nothing to present to, rather than do nothing (Cast devices need a Cast app: #47)
     const noScreen = 'Chrome found no screen it can show this page on. Many Chromecasts and cast projectors only take Cast apps, which Surface Mapper isn\'t yet: use a cable or screen mirroring for now.';
     this.present = () => {
       if (this.presenting) { this.presenting.terminate(); return; }
@@ -417,8 +417,6 @@ class App {
       });
     };
     btn.onclick = this.present;
-    $('castBtn').hidden = false;
-    $('castBtn').onclick = this.present;
     // pick a running presentation back up after a reload
     const last = session('get', 'pm-presentation');
     if (last) this.presentReq.reconnect(last).then((c) => this.addPresentation(c)).catch(() => session('remove', 'pm-presentation'));

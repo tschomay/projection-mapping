@@ -99,11 +99,11 @@ Projects save automatically on the device, with media kept in IndexedDB.
 *Project → Export file* moves a mapping to another device; re-add the media
 files there.
 
-**Second screen (Chrome):** *Cast* in the top bar (or *Project → Present to a
-screen*) sends only the output to a screen Chrome can present to, and the phone
-keeps its controls: it becomes the remote, and can be held upright. Many
-Chromecasts and cast projectors only take Cast apps, which Surface Mapper isn't
-yet; then Cast says so, and a cable or screen mirroring is the way. Videos and images are copied to
+**Second screen (Chrome):** *Project → Present to a screen* sends only the
+output to a screen Chrome can present to, and the phone keeps its controls: it
+becomes the remote, and can be held upright. Chromecasts and cast projectors
+only take Cast apps, which Surface Mapper isn't yet (#47); there, a cable or
+screen mirroring is the way. Videos and images are copied to
 the screen when it needs them. See [`docs/connecting.md`](../docs/connecting.md)
 for every path and what's been tested.
 

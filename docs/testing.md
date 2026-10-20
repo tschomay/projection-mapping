@@ -36,9 +36,6 @@ in the issue listed, or paste the *Check this device* report there.
       up for search and the groups. A tap shows the look on the surface at once.
 - [ ] The full screen button: the browser's bars go while editing, and stay
       gone after leaving Show.
-- [ ] *Cast* with the projector on the same Wi-Fi: does Chrome list it, and
-      does the projector show only the output? If not, what does the message
-      say?
 - [ ] Long-press a surface: the menu opens after about half a second, with a
       buzz on Android, and doesn't move the surface. Holding a corner still
       and then dragging it slowly must *not* open the menu. On iPhone, no
