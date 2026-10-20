@@ -30,8 +30,9 @@ node run.mjs --only scan.e2e,link.e2e   # just the named suites
 | `outline.e2e.mjs` | *Any shape* in the app on the synthetic wall: with a fake transformers.js in place of the CDN module, a tap on the mirror gives a surface with its round outline and a tap inside it takes in the ring, the photo encoded once; the sliders appear after a pick, *Simplify* reshapes the same surface and is saved, and a tap elsewhere starts a new one; with the model unreachable, the app says so and the colour fill outlines the mirror. |
 | `share.e2e.mjs` | Project links: *Share a link* copies a link, a fresh browser opens it with surfaces, effects and cues, saves it and clears the fragment; a damaged link; in an artifact, *Open in Surface Mapper* is a plain link that follows edits. |
 | `merge.test.mjs` | Joining surfaces in Node: outlines that share an edge (fully or partly, wound either way) become one outline; touching only at a corner, overlapping or apart, they don't. Two snapped squares become one surface whose corner pins are the outer rectangle; in perspective, the outline runs exactly round both; cut-outs come along, a bend is dropped, more than eight shapes is refused. |
+| `effects.test.mjs` | The built-in looks in Node: ids, names and groups, `fx_<id>` defined once, no helper defined twice across looks and the kit, no GLSL ES 3.00-only code or reserved words, every kit function documented for the AI prompt, and the tray's badges. |
 | `isf.test.mjs` | ISF in Node: an exported effect's header, inputs and main(); an imported generator's renamed names, inputs fixed at their defaults, `#ifndef GL_ES` code left out; files that are refused (image or audio inputs, several passes). Uses `fixtures/rings.fs`. |
-| `isf.e2e.mjs` | ISF and the composition canvas in the app: every built-in effect exported as ISF compiles and draws in a minimal ISF host (WebGL1); *Export this effect as ISF* downloads the file; importing a generator, and the exported file again, draws on a surface; an image filter is refused. *Arrange content*: dragging a surface's rectangle moves and resizes what it shows, for effects and for "one image across all" media. |
+| `isf.e2e.mjs` | ISF and the composition canvas in the app: every built-in effect exported as ISF compiles and draws in a minimal ISF host (WebGL1); all of them compile together in the app's renderer, and an empty project compiles only the basics; *Export this effect as ISF* downloads the file; importing a generator, and the exported file again, draws on a surface; an image filter is refused. *Arrange content*: dragging a surface's rectangle moves and resizes what it shows, for effects and for "one image across all" media. |
 | `edit.e2e.mjs` | Quick editing: *Add* menu, a drag and four nudges each one Undo step (content left alone), Ctrl+Z, the selected surface's bar (handle modes, Copy, hidden with the drawer open), the long-press menu (Delete with Undo in the toast, a tap outside closes it, not on a corner handle, add a shape on empty space), *Join* for two snapped squares (one lit surface, Undo splits them), and Undo after tapping a picked shape for a bigger one. |
 | `scan.e2e.mjs` | *Find surfaces with the camera* end to end, with a fake camera that films the synthetic room lit by the app's patterns, with a lag like a mirrored projector. |
 
@@ -53,6 +54,13 @@ they're stale:
   `node tools/sw.mjs` after adding or changing app files.
 - `sim/index.html`: its copy of `app/src/capture.js`. Run
   `node tools/build-sim.mjs` after changing the capture pipeline.
+
+## Looking at looks
+
+`node tools/looks.mjs` (from the repo root, after `npm install` here) draws
+every built-in look at a few moments into `looks.png`, to check a new one by eye.
+Name looks (`pumpkin,window`) or a `--group`; `--times`, `--music` and `--circle`
+change what's drawn. See [`docs/looks.md`](../docs/looks.md).
 
 ## Benchmarks
 

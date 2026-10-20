@@ -4,12 +4,12 @@
 // that scrolls as a whole; only the surface's name and closing it stay put.
 // The previews are drawn on a canvas inside the tiles' scrolling area, so they move with the tiles as they scroll.
 // Methods mixed into App (see app.js), so `this` is the app.
-import { EFFECTS } from '../effects.js';
+import { EFFECTS, LOOK_GROUPS, movesToMusic, flowsAcross } from '../effects.js';
 import { namespaced } from '../ai.js';
 import { Thumbs, previewAudio } from '../thumbs.js';
 import { $ } from '../env.js';
 
-const GROUPS = ['Basics', 'Music', 'Ambient', 'Halloween', 'Yours', 'Videos & images'];
+const GROUPS = [...LOOK_GROUPS, 'Yours', 'Videos & images'];
 const FPS = 30;
 const AHEAD = 160;   // px beyond the visible part of the tray where tiles are drawn, ready to scroll in
 const esc = (t) => String(t).replace(/[<&"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '"': '&quot;' }[c]));
@@ -83,8 +83,8 @@ export const trayUI = {
     list.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
     list.forEach((it, i) => {
       it.idx = i;
-      it.music = it.kind === 'effect' && /uBeat|uAudio/.test(it.code);
-      it.wide = it.kind === 'effect' && /s\.screen/.test(it.code);
+      it.music = it.kind === 'effect' && movesToMusic(it.code);
+      it.wide = it.kind === 'effect' && flowsAcross(it.code);
     });
     return list;
   },
@@ -156,7 +156,7 @@ export const trayUI = {
     if (!c) return false;
     if (c.kind === 'media') return c.space === 'frame';
     const e = EFFECTS.find((x) => x.id === (c.effect || 'outline')) || (this.project.effects || []).find((x) => x.id === c.effect);
-    return !!e && /s\.screen/.test(e.code);
+    return !!e && flowsAcross(e.code);
   },
 
   // whole scene: the surface shows the full frame's composition (see inputRect); flow across: back to the part it covers

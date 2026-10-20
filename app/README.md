@@ -61,12 +61,15 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    the bottom with the phone upright, down one side when it's on its side (⇆
    moves it to the other side). Tap a look and it's on the selected surface, and
    on the projector, straight away; *All* puts it on every surface. Search and
-   the groups (*Basics*, *Music*, *Ambient*, *Halloween*, your own, videos and
+   the groups (*Basics*, *Music*, *Ambient*, *Halloween*, *Fall*, your own, videos and
    images) sit above the tiles (on its side, they scroll away with *This one*/*All*). ♪ marks looks that move
    to music, ⇆ ones that flow from one surface to the next; for those, the tray
    offers *Flow across* or *Whole scene here*, which fits the whole scene on that
    surface instead. *Halloween* has
-   bats, eyes, fog, lightning and candle glow. *＋ Video or image* adds one
+   20 looks, among them a singing jack-o'-lantern for a real pumpkin, a haunted
+   window, ghosts, a witch across the moon, dripping blood and a jump scare;
+   *Fall* has falling leaves, a harvest moon, a fireplace and more. See
+   [`docs/looks.md`](../docs/looks.md) for the list, what each is best on, and how to add one. *＋ Video or image* adds one
    from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:
    on your Claude plan in the studio artifact, or with your own Gemini or
    Anthropic API key here (stored only on the device). Media follows the surface's perspective. *One image across all*
@@ -193,7 +196,8 @@ picking on a photo works from edges and colours alone there (the model's host is
 | `src/thumbs.js` | Live previews for the content tray: one canvas behind the tiles, each effect drawn into its tile |
 | `src/env.js` | Small shared helpers (`$`, whether this page is an output display) |
 | `src/renderer.js` | WebGL2 renderer: one fragment shader for all surfaces, effects and media |
-| `src/effects.js` | Built-in effects (GLSL); audio uniforms are documented at the top |
+| `src/effects.js` | Built-in effects (GLSL), the tray's groups and badges; audio uniforms are documented at the top |
+| `src/effects/*.js` | Seasonal sets (`halloween.js`, `fall.js`), shared families and parts (`families.js`), and the kit of GLSL helpers every look can use (`kit.js`) |
 | `src/geometry.js` | Homographies, shapes, hit-testing |
 | `src/editor.js` | Touch editing: corners, points, combine and cut, snapping, nudging, taps that hide and show the bars, arranging content rectangles |
 | `src/audio.js` | Web Audio analysis: bass, mid, treble, level, beat |

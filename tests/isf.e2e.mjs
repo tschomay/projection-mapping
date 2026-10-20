@@ -55,6 +55,18 @@ export default async function run() {
     t.ok(!failed.length, `every built-in effect exported as ISF compiles as GLSL ES 1.00 (${Object.keys(host).length} effects)` + (failed.length ? ': ' + failed.map(([k, v]) => `${k}: ${v.split('\n')[0]}`).join(' | ') : ''));
     t.ok(['plasma', 'outline', 'white', 'bats', 'candle'].every((k) => host[k] > 30) && host.off === 0, `and draws in the host (plasma ${host.plasma}, bats ${host.bats}, off ${host.off})`);
 
+    // ---- every built-in look in the app's own renderer ----
+    // with nothing on the surfaces, only the basics are compiled; then all the looks at once, as one shader
+    const all = await page.evaluate(async () => {
+      const { EFFECTS } = await import('./src/effects.js');
+      const r = window.app.renderer, atStart = r.effects.map((e) => e.id).join();
+      const err = r.setEffects([], null), n = r.effects.length;
+      window.app.dirty = true;
+      return { atStart, err, n, total: EFFECTS.length };
+    });
+    t.ok(all.atStart === 'outline,off', `a project with nothing on its surfaces compiles only the basics (${all.atStart})`);
+    t.ok(!all.err && all.n === all.total, `all ${all.total} built-in looks compile together in the app's renderer` + (all.err ? ': ' + all.err.split('\n')[0] : ''));
+
     // ---- export and import from the Content pane ----
     await page.evaluate(() => {
       document.getElementById('connectSheet').close();
