@@ -62,7 +62,7 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    moves it to the other side). Tap a look and it's on the selected surface, and
    on the projector, straight away; *All* puts it on every surface. Search and
    the groups (*Basics*, *Music*, *Ambient*, *Halloween*, your own, videos and
-   images) sit just above the tiles: scroll up to them. ♪ marks looks that move
+   images) sit above the tiles (on its side, they scroll away with *This one*/*All*). ♪ marks looks that move
    to music, ⇆ ones that flow from one surface to the next. *Halloween* has
    bats, eyes, fog, lightning and candle glow. *＋ Video or image* adds one
    from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:

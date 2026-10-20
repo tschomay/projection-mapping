@@ -1,4 +1,4 @@
-// Live previews of effects for the content tray. One WebGL2 canvas sits behind the tray and each effect is drawn
+// Live previews of effects for the content tray. One WebGL2 canvas sits behind the tiles and each effect is drawn
 // straight into its tile's rectangle (viewport and scissor), so nothing is copied back from the GPU. Each effect is
 // compiled on its own (a rectangle stands in for a surface: uv = screen), in the background where the browser can
 // (KHR_parallel_shader_compile). With no sound playing, a pretend 120 bpm beat drives the audio uniforms so the
@@ -66,7 +66,9 @@ void main() {
   draw(tiles, clip, t, audio) {
     const gl = this.gl;
     if (!gl) return;
-    const c = this.canvas, dpr = Math.min(devicePixelRatio || 1, 1.5);
+    // a long strip of tiles makes a wide canvas: lower its resolution rather than go past what the GPU can hold
+    const c = this.canvas, max = Math.min(4096, this.gl.getParameter(this.gl.MAX_RENDERBUFFER_SIZE));
+    const dpr = Math.min(devicePixelRatio || 1, 1.5, max / Math.max(c.clientWidth, c.clientHeight, 1));
     const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     gl.disable(gl.SCISSOR_TEST);

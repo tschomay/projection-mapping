@@ -1,7 +1,8 @@
 // The content tray: every look (effects, the project's own effects, the user's videos and images) as a live tile.
 // A tap puts it on the selected surface, or on all of them, and it shows on the projector straight away.
-// Portrait: a strip along the bottom, one row of tiles. Landscape: a rail down one side that scrolls as a whole.
-// Search and the group filter sit above the tiles and scroll away.
+// Portrait: a strip along the bottom with search, the groups and one row of tiles. Landscape: a rail down one side
+// that scrolls as a whole; only the surface's name and closing it stay put.
+// The previews are drawn on a canvas inside the tiles' scrolling area, so they move with the tiles as they scroll.
 // Methods mixed into App (see app.js), so `this` is the app.
 import { EFFECTS } from '../effects.js';
 import { namespaced } from '../ai.js';
@@ -9,16 +10,16 @@ import { Thumbs, previewAudio } from '../thumbs.js';
 import { $ } from '../env.js';
 
 const GROUPS = ['Basics', 'Music', 'Ambient', 'Halloween', 'Yours', 'Videos & images'];
-const FPS = 20;
+const FPS = 30;
+const AHEAD = 160;   // px beyond the visible part of the tray where tiles are drawn, ready to scroll in
 const esc = (t) => String(t).replace(/[<&"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '"': '&quot;' }[c]));
 
 function keyOf(c) { return !c ? 'fx:outline' : c.kind === 'media' ? 'media:' + c.mediaId : 'fx:' + (c.effect || 'outline'); }
 
 export const trayUI = {
   initTray() {
-    this.tray = { all: false, filter: 'All', query: '', tiles: [], visible: new Set(), last: 0 };
+    this.tray = { all: false, filter: 'All', query: '', tiles: [], last: 0 };
     this.thumbs = new Thumbs($('trayGL'));
-    this.tray.io = new IntersectionObserver((es) => es.forEach((e) => (e.isIntersecting ? this.tray.visible.add(e.target) : this.tray.visible.delete(e.target))));
     $('trayBtn').onclick = () => this.setTray($('tray').hidden);
     $('trayClose').onclick = () => this.setTray(false);
     $('trayFlip').onclick = () => $('tray').classList.toggle('left');
@@ -51,13 +52,21 @@ export const trayUI = {
     this.layoutTray(true);
   },
 
-  // portrait: exactly the header and one row of tiles show, with search and the filter just above them, a scroll
-  // away; landscape: the rail's full height, from the top
+  // This one / All: in the header upright; on its side, it scrolls away with search and the groups
   layoutTray(start = false) {
     if ($('tray').hidden) return;
-    const sc = $('trayScroll'), portrait = matchMedia('(orientation: portrait)').matches;
-    sc.style.height = portrait ? $('trayHead').offsetHeight + $('trayTiles').offsetHeight + 'px' : '';
-    if (start) sc.scrollTop = portrait ? $('trayFind').offsetHeight : 0;
+    const portrait = matchMedia('(orientation: portrait)').matches, scope = $('trayScope');
+    if (portrait && scope.parentElement !== $('trayHead')) $('trayClose').before(scope);
+    if (!portrait && scope.parentElement !== $('trayFind')) $('trayFind').prepend(scope);
+    if (start) $('trayScroll').scrollTop = 0;
+    this.sizeTrayGL();
+  },
+
+  // the preview canvas covers the whole scrolling area of the tiles (it's drawn only where tiles are on screen)
+  sizeTrayGL() {
+    const tiles = $('trayTiles'), c = this.thumbs.canvas;
+    c.style.width = '0px'; c.style.height = '0px';
+    c.style.width = tiles.scrollWidth + 'px'; c.style.height = tiles.scrollHeight + 'px';
   },
 
   trayItems() {
@@ -68,6 +77,8 @@ export const trayUI = {
       if (m.kind === 'audio' || m.id === this.project.backdrop?.mediaId) continue;
       list.push({ key: 'media:' + m.id, kind: 'media', id: m.id, name: m.name, group: 'Videos & images', media: m, about: m.kind === 'video' ? 'Your video.' : 'Your image.' });
     }
+    // grouped, in the groups' order (sort is stable, so each group keeps its own order)
+    list.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
     list.forEach((it, i) => {
       it.idx = i;
       it.music = it.kind === 'effect' && /uBeat|uAudio/.test(it.code);
@@ -81,7 +92,6 @@ export const trayUI = {
     if ($('tray').hidden) return;
     const T = this.tray;
     T.items = this.trayItems();
-    T.io.disconnect(); T.visible.clear();
     const groups = GROUPS.filter((g) => T.items.some((it) => it.group === g));
     if (T.filter !== 'All' && !groups.includes(T.filter)) T.filter = 'All';
     $('trayFilters').innerHTML = ['All', ...groups].map((g) => `<button class="chip" data-g="${g}">${g}</button>`).join('');
@@ -99,8 +109,8 @@ export const trayUI = {
     html += '<div class="tile add" role="button" tabindex="0" data-act="ai" data-group="Yours"><div class="thumb">✦ Describe a look</div><span class="name">AI writes it</span></div>';
     html += '<div class="tile add" role="button" tabindex="0" data-act="media" data-group="Videos & images"><div class="thumb">＋ Video or image</div><span class="name">From this device</span></div>';
     $('trayTiles').innerHTML = html;
+    $('trayTiles').prepend(this.thumbs.canvas);
     T.tiles = [...$('trayTiles').querySelectorAll('.tile[data-key]')].map((el) => ({ el, thumb: el.querySelector('.thumb'), item: T.items.find((x) => x.key === el.dataset.key) }));
-    for (const t of T.tiles) if (t.item.kind === 'effect') T.io.observe(t.thumb);
     this.filterTray();
   },
 
@@ -112,6 +122,7 @@ export const trayUI = {
     document.querySelectorAll('#trayTiles .tile.add').forEach((el) => { el.hidden = !show(el.dataset.group, el.textContent) && !(T.filter === 'All' && q); });
     document.querySelectorAll('#trayTiles .tray-group').forEach((h) => { h.hidden = !T.tiles.some((t) => !t.el.hidden && t.item.group === h.dataset.group); });
     this.renderTrayState();
+    if (!$('tray').hidden) this.sizeTrayGL();
   },
 
   // which surface, and which look is on it: cheap, so it runs on every change
@@ -133,20 +144,21 @@ export const trayUI = {
     this.changed();
   },
 
-  // from the frame loop: draw the effect tiles that are on screen, a few times a second, and not mid-drag
+  // from the frame loop: draw the effect tiles that are on screen (or about to be), and not mid-drag. Positions are
+  // taken relative to the canvas, which scrolls with the tiles, so scrolling never moves a preview off its tile.
   trayFrame(now, t) {
     const T = this.tray;
     if (!T || $('tray').hidden || this.editor.drag || now - T.last < 1000 / FPS) return;
     T.last = now;
-    const c = $('trayGL').getBoundingClientRect(), sc = $('trayScroll').getBoundingClientRect(), head = $('trayHead').getBoundingClientRect();
-    const top = Math.max(sc.top, head.bottom);
-    const clip = { x: sc.left - c.left, y: top - c.top, w: sc.width, h: sc.bottom - top };
+    const c = this.thumbs.canvas.getBoundingClientRect(), sc = $('trayScroll').getBoundingClientRect(), tl = $('trayTiles').getBoundingClientRect();
+    const view = { l: Math.max(sc.left, tl.left) - AHEAD, r: Math.min(sc.right, tl.right) + AHEAD, t: sc.top - AHEAD, b: sc.bottom + AHEAD };
     const tiles = [];
     for (const tile of T.tiles) {
-      if (!T.visible.has(tile.thumb) || tile.el.hidden) continue;
+      if (tile.item.kind !== 'effect' || tile.el.hidden) continue;
       const r = tile.thumb.getBoundingClientRect();
-      tiles.push({ effect: tile.item, idx: tile.item.idx, rect: { x: r.left - c.left + 1, y: r.top - c.top + 1, w: r.width - 2, h: r.height - 2 } });
+      if (r.right < view.l || r.left > view.r || r.bottom < view.t || r.top > view.b) continue;
+      tiles.push({ effect: tile.item, idx: tile.item.idx, rect: { x: r.left - c.left + 2, y: r.top - c.top + 2, w: r.width - 4, h: r.height - 4 } });
     }
-    this.thumbs.draw(tiles, clip, t, previewAudio(this.audio.state, t));
+    this.thumbs.draw(tiles, { x: 0, y: 0, w: c.width, h: c.height }, t, previewAudio(this.audio.state, t));
   },
 };

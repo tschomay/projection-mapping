@@ -138,10 +138,11 @@ body.fullscreen #toolbar #fullBtn .out { display: inline; }
 .help { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .help b { color: var(--fg); font-weight: 500; }
 
-/* the content tray. Portrait: along the bottom, one row of tiles. Landscape: a rail down one side, scrolling as a
-   whole. The previews are drawn on one canvas behind the tiles (thumbs.js); the tiles' thumbnail boxes are clear. */
+/* the content tray. Portrait: along the bottom, search, groups and one row of tiles. Landscape: a rail down one side,
+   scrolling as a whole. The previews are drawn on one canvas behind the tiles, scrolling with them (thumbs.js); the
+   tiles' thumbnail boxes are clear. */
 #tray { z-index: 3; left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); background: #12161ef2; backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-#trayGL { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#trayGL { position: absolute; left: 0; top: 0; pointer-events: none; }
 #trayScroll { position: relative; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 #trayHead { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #151a23; border-bottom: 1px solid var(--line); }
 #trayWho { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -153,9 +154,9 @@ body.fullscreen #toolbar #fullBtn .out { display: inline; }
 #traySearch { width: 100%; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-height: 38px; }
 #trayFilters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 #trayFilters .chip { flex: none; min-height: 32px; padding: 4px 11px; font-size: 13px; }
-#trayTiles { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 10px; }
+#trayTiles { position: relative; display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 10px; }
 .tray-group { flex: none; writing-mode: vertical-rl; transform: rotate(180deg); font: 600 10px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); border-left: 1px solid var(--line); padding-left: 4px; align-self: stretch; text-align: right; }
-#trayTiles .tile { flex: none; width: 128px; display: grid; gap: 4px; cursor: pointer; border-radius: 8px; }
+#trayTiles .tile { position: relative; flex: none; width: 128px; display: grid; gap: 4px; cursor: pointer; border-radius: 8px; }
 #trayTiles .thumb { position: relative; aspect-ratio: 16 / 10; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; }
 #trayTiles .thumb img, #trayTiles .thumb video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 #trayTiles .tile[aria-pressed="true"] .thumb { border-color: var(--lamp); box-shadow: 0 0 0 3px var(--lamp-dim); }
@@ -171,8 +172,8 @@ body.fullscreen #toolbar #fullBtn .out { display: inline; }
   #trayScroll { max-height: none; height: 100%; }
   #trayFlip { display: inline-flex !important; }
   #trayHead { flex-wrap: wrap; }
-  #trayWho { flex-basis: calc(100% - 100px); }
-  #trayScope { order: 3; flex-basis: 100%; }
+  #trayFind #trayScope { display: flex; }
+  #trayFind #trayScope button { flex: 1; min-height: 36px; }
   #trayTiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow: visible; }
   .tray-group { grid-column: 1 / -1; writing-mode: horizontal-tb; transform: none; border: 0; padding: 6px 0 0; text-align: left; }
   #trayTiles .tile { width: auto; }
@@ -521,7 +522,6 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
 </div>
 <div id="edgeBar" class="ui" hidden><label for="feather">Soft edge</label><input type="range" id="feather" min="0" max="60" step="1" value="0"><span class="mono" id="featherOut">0 px</span><button class="btn primary" id="edgeDone">Done</button></div>
 <div id="tray" class="ui" hidden aria-label="Looks">
-  <canvas id="trayGL" aria-hidden="true"></canvas>
   <div id="trayScroll">
     <div id="trayHead">
       <div id="trayWho"></div>
@@ -533,7 +533,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
       <input type="search" id="traySearch" placeholder="Search looks" aria-label="Search looks" autocomplete="off">
       <div id="trayFilters" role="group" aria-label="Show only"></div>
     </div>
-    <div id="trayTiles"></div>
+    <div id="trayTiles"><canvas id="trayGL" aria-hidden="true"></canvas></div>
   </div>
 </div>
 <div id="ctxMenu" class="ui" role="menu" hidden></div>
