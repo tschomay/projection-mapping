@@ -170,6 +170,17 @@ export default async function run() {
     // a new project starts with nothing to undo
     await page.evaluate(() => document.getElementById('newProj').click());
     t.ok(await page.evaluate(() => document.getElementById('undoBtn').disabled), 'a new project has nothing to undo');
+    // a look that flows across surfaces: the whole scene on one surface, or back to flowing across
+    await page.evaluate(() => { const app = window.app; if (!app.project.surfaces.length) app.addShape('square'); app.editor.select(0); app.project.surfaces[0].content = { kind: 'effect', effect: 'white' }; app.changed(); app.setTray(true); });
+    t.ok(!(await visible('trayScene')), 'the scene switch hides for a look that stays on its own surface');
+    await page.evaluate(() => [...document.querySelectorAll('#trayTiles .tile')].find((b) => b.textContent.includes('Plasma')).click());
+    t.ok(await visible('trayScene'), 'and shows for one that flows across surfaces');
+    await page.click('#trayScene [data-whole="1"]');
+    t.ok(await page.evaluate(() => JSON.stringify(window.app.project.surfaces[0].input) === '{"x":0,"y":0,"w":1,"h":1}' && document.querySelector('#trayScene [data-whole="1"]').getAttribute('aria-pressed') === 'true'), 'Whole scene here shows the whole frame on that surface');
+    await page.click('#trayScene [data-whole="0"]');
+    t.ok(await page.evaluate(() => !window.app.project.surfaces[0].input), 'Flow across puts it back to the part it covers');
+    await page.keyboard.press('Control+z');
+    t.ok(await page.evaluate(() => !!window.app.project.surfaces[0].input), 'and Undo takes that back');
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();

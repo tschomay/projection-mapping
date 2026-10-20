@@ -14,6 +14,7 @@ const FPS = 30;
 const AHEAD = 160;   // px beyond the visible part of the tray where tiles are drawn, ready to scroll in
 const esc = (t) => String(t).replace(/[<&"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '"': '&quot;' }[c]));
 
+const isWhole = (r) => !!r && r.x === 0 && r.y === 0 && r.w === 1 && r.h === 1;
 function keyOf(c) { return !c ? 'fx:outline' : c.kind === 'media' ? 'media:' + c.mediaId : 'fx:' + (c.effect || 'outline'); }
 
 export const trayUI = {
@@ -24,6 +25,7 @@ export const trayUI = {
     $('trayClose').onclick = () => this.setTray(false);
     $('trayFlip').onclick = () => $('tray').classList.toggle('left');
     document.querySelectorAll('#trayScope button').forEach((b) => { b.onclick = () => { this.tray.all = b.dataset.all === '1'; this.renderTrayState(); }; });
+    document.querySelectorAll('#trayScene button').forEach((b) => { b.onclick = () => this.setWholeScene(b.dataset.whole === '1'); });
     $('traySearch').oninput = (e) => { this.tray.query = e.target.value.trim().toLowerCase(); this.filterTray(); };
     $('trayFilters').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { this.tray.filter = b.dataset.g; this.filterTray(); } };
     $('trayTiles').addEventListener('click', (e) => {
@@ -134,6 +136,36 @@ export const trayUI = {
     const cur = sel >= 0 ? keyOf(this.project.surfaces[sel]?.content) : null;
     const on = T.all ? new Set(this.project.surfaces.map((s) => keyOf(s.content))) : new Set([cur]);
     for (const t of T.tiles) t.el.setAttribute('aria-pressed', String(on.has(t.item.key)));
+    // for looks that are one scene across the frame: flow across the surfaces, or the whole scene on this one
+    const targets = this.sceneTargets();
+    $('trayScene').hidden = !targets.length;
+    if (targets.length) {
+      const whole = targets.every((s) => isWhole(s.input)), flow = targets.every((s) => !s.input);
+      document.querySelectorAll('#trayScene button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.whole === '1' ? whole : flow)));
+    }
+  },
+
+  // the surfaces the switch acts on: the selected one (or, with All, every one) showing a frame-wide look
+  sceneTargets() {
+    const sel = this.project.surfaces[this.editor.sel];
+    const list = this.tray.all ? this.project.surfaces : sel ? [sel] : [];
+    return list.filter((s) => this.isFrameWide(s.content));
+  },
+
+  isFrameWide(c) {
+    if (!c) return false;
+    if (c.kind === 'media') return c.space === 'frame';
+    const e = EFFECTS.find((x) => x.id === (c.effect || 'outline')) || (this.project.effects || []).find((x) => x.id === c.effect);
+    return !!e && /s\.screen/.test(e.code);
+  },
+
+  // whole scene: the surface shows the full frame's composition (see inputRect); flow across: back to the part it covers
+  setWholeScene(whole) {
+    const targets = this.sceneTargets();
+    if (!targets.length) return;
+    this.checkpoint();
+    for (const s of targets) { if (whole) s.input = { x: 0, y: 0, w: 1, h: 1 }; else delete s.input; }
+    this.changed();
   },
 
   applyLook(it) {

@@ -150,6 +150,7 @@ body.fullscreen #toolbar #fullBtn .out { display: inline; }
 #trayHead .btn { min-height: 34px; padding: 4px 10px; }
 #trayFlip { display: none !important; }
 #trayFind { display: grid; gap: 8px; padding: 10px 10px 0; }
+#trayScene button { white-space: nowrap; min-height: 36px; }
 #traySearch { width: 100%; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-height: 38px; }
 #trayFilters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 #trayFilters .chip { flex: none; min-height: 32px; padding: 4px 11px; font-size: 13px; }
@@ -527,6 +528,7 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
       <button class="btn" id="trayClose" aria-label="Close looks" title="Close">✕</button>
     </div>
     <div id="trayFind">
+      <div class="seg" id="trayScene" role="group" aria-label="Where the scene goes" hidden title="This look is one scene across the whole frame"><button data-whole="0" aria-pressed="true">⇆ Flow across</button><button data-whole="1" aria-pressed="false">Whole scene here</button></div>
       <input type="search" id="traySearch" placeholder="Search looks" aria-label="Search looks" autocomplete="off">
       <div id="trayFilters" role="group" aria-label="Show only"></div>
     </div>
