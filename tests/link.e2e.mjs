@@ -49,7 +49,7 @@ export default async function run() {
 
     // a surface showing an image
     await ed.evaluate(() => document.getElementById('toolsBtn').click());
-    await ed.click('[data-add="square"]');
+    await ed.evaluate(() => window.app.addShape('square'));
     await ed.evaluate(() => window.app.editor.select(0));
     await ed.setInputFiles('#addMedia', new URL('../app/icon-192.png', import.meta.url).pathname);
     await ed.waitForFunction(() => window.app.project.surfaces[0].content.kind === 'media');

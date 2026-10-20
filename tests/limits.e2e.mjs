@@ -40,7 +40,7 @@ export default async function run() {
     t.ok(await page.evaluate(() => document.getElementById('limitNote').hidden), 'no warning while everything fits');
 
     // a seventeenth surface is refused, with a message
-    await page.click('[data-add="square"]');
+    await page.evaluate(() => window.app.addShape('square'));
     t.ok(await page.evaluate(() => window.app.project.surfaces.length === 16 && /Up to 16 surfaces/.test(document.getElementById('toast').textContent)), 'a 17th surface is refused with a message');
     // ...but a project imported with more says which aren't projected
     await page.evaluate(() => { const app = window.app; app.project.surfaces.push(JSON.parse(JSON.stringify(app.project.surfaces[0]))); app.project.surfaces[16].id = 'extra'; app.changed(); app.sync(); });

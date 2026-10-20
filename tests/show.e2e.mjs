@@ -34,8 +34,8 @@ export default async function run() {
     await page.goto(server.url);
     await page.waitForFunction(() => window.app && window.app.editor);
     await page.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); });
-    await page.click('[data-add="square"]');
-    await page.click('[data-add="circle"]');
+    await page.evaluate(() => window.app.addShape('square'));
+    await page.evaluate(() => window.app.addShape('circle'));
 
     // three looks, saved as cues
     const look = async (effect) => {

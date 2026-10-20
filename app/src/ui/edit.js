@@ -1,4 +1,5 @@
-// Quick editing without the drawer: undo, the bar for the selected surface, the long-press menu, joining surfaces.
+// Quick editing without the drawer: undo, the bar for the selected surface and its menu (also on a long press),
+// the Add menu, joining surfaces.
 // Methods mixed into App (see app.js), so `this` is the app.
 import { newSurface, surfaceGeom } from '../geometry.js';
 import { mergeSurfaces, surfacesMeet } from '../merge.js';
@@ -12,11 +13,7 @@ export const editUI = {
     this.history = [];
     $('undoBtn').onclick = () => this.undo();
     $('addBtn').onclick = (e) => { e.stopPropagation(); this.openAddMenu($('addBtn')); };
-    $('quickDup').onclick = () => this.editor.duplicateSurface();
-    $('quickDel').onclick = () => this.editor.deleteSurface();
-    $('quickDelPoint').onclick = () => { const err = this.editor.deletePoint(); if (err) this.toast(err); };
-    $('quickJoin').onclick = (e) => { e.stopPropagation(); this.joinFromBar($('quickJoin')); };
-    $('quickMore').onclick = () => { this.selectTab('surfaces'); this.toggleDrawer(true); };
+    $('quickMore').onclick = (e) => { e.stopPropagation(); this.surfaceMenu(this.editor.sel, $('quickMore')); };
     // a tap outside the menu closes it, and does nothing else
     window.addEventListener('pointerdown', (e) => {
       if ($('ctxMenu').hidden || $('ctxMenu').contains(e.target)) return;
@@ -69,16 +66,23 @@ export const editUI = {
   renderUndo() { $('undoBtn').disabled = !this.history?.length; },
 
   // ---------- the bar for the selected surface ----------
+  // Small (under half the screen's width) and on the side away from the surface, so it doesn't cover it. A tap on
+  // the selected surface hides or shows it; editing carries on either way.
   renderQuickBar() {
     const ed = this.editor, s = this.project.surfaces[ed.sel];
-    const on = !!s && !ed.compose;
+    if (ed.sel !== this.quickFor) { this.quickFor = ed.sel; this.quickHidden = false; }
+    const on = !!s && !ed.compose && !this.quickHidden;
     $('quickBar').hidden = !on;
     document.body.classList.toggle('has-quick', on);
+    document.querySelectorAll('#quickMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === ed.mode)));
     if (!on) return;
-    $('quickLabel').textContent = 'Surface ' + (ed.sel + 1);
-    $('quickDelPoint').hidden = !(ed.mode === 'points' && ed.selVert);
-    $('quickJoin').hidden = !this.neighbours(ed.sel).length;
+    const g = this.geoms[ed.sel];
+    if (g) { const cx = g.pins.reduce((a, q) => a + q[0], 0) / 4; $('quickBar').classList.toggle('left', cx > this.frame[0] / 2); }
   },
+  toggleQuickBar() { this.quickHidden = !this.quickHidden; this.renderQuickBar(); },
+
+  // the buttons along the top: a tap on empty space with nothing selected hides or shows them
+  toggleChrome() { document.body.classList.toggle('chrome-hidden'); this.layoutBars(); },
 
   // ---------- menus: long press on a surface, the Add button, joining with one of several ----------
   // items: [{ label, fn, danger, off }] at client point [x, y], or below an element
@@ -116,13 +120,18 @@ export const editUI = {
       this.openMenu([{ label: 'Add a square here', fn: () => add('square') }, { label: 'Add a circle here', fn: () => add('circle') }, { label: 'Add a triangle here', fn: () => add('triangle') }], at);
       return;
     }
-    const items = [];
-    if (vert) items.push({ label: 'Delete this point', fn: () => { ed.selVert = vert; const err = ed.deletePoint(); if (err) this.toast(err); } });
+    const s = this.project.surfaces[i], items = [];
+    if (vert || (ed.mode === 'points' && ed.selVert)) items.push({ label: 'Delete this point', fn: () => { if (vert) ed.selVert = vert; const err = ed.deletePoint(); if (err) this.toast(err); } });
     for (const n of this.neighbours(i)) items.push({ label: `Join with surface ${n + 1}`, fn: () => this.join(i, n) });
+    const shapes = (op) => () => this.openMenu(['square', 'circle', 'triangle'].map((sh) => ({ label: (op > 0 ? 'Add a ' : 'Cut out a ') + sh, fn: () => ed.addPart(sh, op) })), at);
+    const sizes = [0, 2, 3, 4, 6, 8], now = s.mesh ? s.mesh.n[0] : 0;
     items.push(
-      { label: ed.mode === 'points' ? 'Edit corners' : 'Edit points', fn: () => this.setMode(ed.mode === 'points' ? 'warp' : 'points') },
+      { label: 'Looks…', fn: () => this.setTray(true) },
+      { label: 'Soft edge…', fn: () => this.setEdgeBar(true) },
+      { label: 'Bend grid…', fn: () => this.openMenu(sizes.map((n) => ({ label: (n === now ? '● ' : '') + (n ? `${n} × ${n}` : 'Off (flat)'), fn: () => { if (n !== now) this.setMesh(s, n); if (n) this.setMode('mesh'); } })), at) },
+      { label: 'Add a shape to it…', fn: shapes(1) },
+      { label: 'Cut a shape out…', fn: shapes(-1) },
       { label: 'Duplicate', fn: () => ed.duplicateSurface() },
-      { label: 'Content…', fn: () => { this.selectTab('content'); this.toggleDrawer(true); } },
       { sep: true },
       { label: 'Delete surface', danger: true, fn: () => ed.deleteSurface() },
     );
@@ -130,14 +139,19 @@ export const editUI = {
   },
 
   openAddMenu(el) {
-    const add = (shape) => () => { if (this.editor.addSurface(newSurface(shape, this.project.surfaces.length))) this.toast('Drag it onto a real surface, then drag its corners into place.'); };
+    const add = (shape) => () => this.addShape(shape);
     const photo = !!this.project.backdrop?.show;
     this.openMenu([
       { label: 'Square', fn: add('square') }, { label: 'Circle', fn: add('circle') }, { label: 'Triangle', fn: add('triangle') },
       { sep: true },
-      { label: 'Find with the camera…', fn: () => $('scanBtn').click() },
+      { label: 'Find with the camera…', fn: () => this.openScan() },
       { label: 'Tap things on the photo', off: !photo, fn: () => this.setPick(true) },
     ], el);
+  },
+
+  // a new square, circle or triangle in the middle of the frame
+  addShape(shape) {
+    if (this.editor.addSurface(newSurface(shape, this.project.surfaces.length))) this.toast('Drag it onto a real surface, then drag its corners into place.');
   },
 
   setMode(mode) {
@@ -155,12 +169,6 @@ export const editUI = {
     // from the surfaces as they are now: this.geoms only catch up on the next frame
     const gs = S.map((s) => surfaceGeom(s, ...this.frame));
     return gs.map((h, j) => (j !== i && surfacesMeet(gs[i], h) ? j : -1)).filter((j) => j >= 0);
-  },
-
-  joinFromBar(el) {
-    const i = this.editor.sel, ns = this.neighbours(i);
-    if (ns.length === 1) this.join(i, ns[0]);
-    else if (ns.length) this.openMenu(ns.map((n) => ({ label: `Join with surface ${n + 1}`, fn: () => this.join(i, n) })), el);
   },
 
   // surface j joins surface i, which keeps its content

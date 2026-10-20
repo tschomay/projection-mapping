@@ -53,17 +53,37 @@ export default async function run() {
     // nudges in a row are one step; Ctrl+Z undoes
     await page.click('#addBtn'); await clickMenu('Square');
     const before = (await S())[0].pins;
-    for (let k = 0; k < 4; k++) await page.click('[data-nudge="1,0"]');
-    t.ok(Math.abs((await S())[0].pins[0][0] - before[0][0] - 4 / 1280) < 1e-6, 'the nudge pad moves it 4 px');
+    for (let k = 0; k < 4; k++) await page.keyboard.press('ArrowRight');
+    t.ok(Math.abs((await S())[0].pins[0][0] - before[0][0] - 4 / 1280) < 1e-6, 'the arrow keys move it 4 px');
     await page.keyboard.press('Control+z');
     t.ok(JSON.stringify((await S())[0].pins) === JSON.stringify(before), 'Ctrl+Z undoes the four nudges at once');
 
     // the bar: handle modes and Copy
     await page.click('#quickMode [data-mode="points"]');
-    t.ok(await page.evaluate(() => window.app.editor.mode === 'points' && document.querySelector('#modeSeg [data-mode="points"]').getAttribute('aria-pressed') === 'true'), 'Points in the bar switches the handles, and the drawer agrees');
+    t.ok(await page.evaluate(() => window.app.editor.mode === 'points' && document.querySelector('#quickMode [data-mode="points"]').getAttribute('aria-pressed') === 'true'), 'Points in the bar switches the handles');
     await page.click('#quickMode [data-mode="warp"]');
-    await page.click('#quickDup');
-    t.ok((await S()).length === 2, 'Copy duplicates it');
+    const bar = await page.evaluate(() => document.getElementById('quickBar').getBoundingClientRect().width / innerWidth);
+    t.ok(bar < 0.5, `the bar takes under half the width (${Math.round(bar * 100)}%)`);
+    await page.click('#quickMore');
+    t.ok((await menu())?.includes('Duplicate') && (await menu())?.includes('Soft edge…'), 'More opens the surface menu');
+    await clickMenu('Duplicate');
+    t.ok((await S()).length === 2, 'Duplicate copies it');
+
+    // taps: on the selected surface, its bar goes and comes back; on empty space, deselect, then the top buttons
+    const tapAt = async (x, y) => { const [cx, cy] = await at(x, y); await page.mouse.click(cx, cy); };
+    const sel = await page.evaluate(() => window.app.editor.sel);
+    const [sx, sy] = await centre(sel);
+    await tapAt(sx, sy);
+    t.ok(!(await visible('quickBar')) && await page.evaluate((i) => window.app.editor.sel === i, sel), 'a tap on the selected surface hides its bar and keeps it selected');
+    await tapAt(sx, sy);
+    t.ok(await visible('quickBar'), 'another tap brings the bar back');
+    await tapAt(1200, 360);
+    t.ok(await page.evaluate(() => window.app.editor.sel === -1) && await visible('toolbar'), 'a tap on empty space deselects, and the top buttons stay');
+    await tapAt(1200, 360);
+    t.ok(!(await visible('toolbar')), 'a second tap on empty space hides the top buttons');
+    await tapAt(1200, 360);
+    t.ok(await visible('toolbar'), 'and a third brings them back');
+    await page.evaluate((i) => window.app.editor.select(i), sel);
     await page.click('#toolsBtn');
     t.ok(!(await visible('quickBar')), 'the bar hides while the drawer is open');
     await page.click('#closeDrawer');
@@ -107,11 +127,15 @@ export default async function run() {
       ];
       app.editor.select(0); app.changed();
     });
-    t.ok(await visible('quickJoin'), 'Join shows in the bar for a surface that touches another');
+    await page.click('#quickMore');
+    t.ok((await menu())?.includes('Join with surface 2'), 'Join shows in the menu for a surface that touches another');
+    await page.keyboard.press('Escape');
     await page.evaluate(() => window.app.editor.select(2));
-    t.ok(!(await visible('quickJoin')), 'and not for one that touches nothing');
+    await page.click('#quickMore');
+    t.ok(!(await menu())?.some((l) => l.startsWith('Join')), 'and not for one that touches nothing');
+    await page.keyboard.press('Escape');
     await page.evaluate(() => window.app.editor.select(0));
-    await page.click('#quickJoin');
+    await page.click('#quickMore'); await clickMenu('Join with surface 2');
     s = await S();
     t.ok(s.length === 2 && s[0].id === 'l' && s[0].parts.length === 1 && s[0].parts[0].pts.length === 4, 'Join makes the two squares one surface with one outline');
     t.ok(s[0].content.effect === 'plasma' && Math.abs(s[0].pins[1][0] - 700 / 1280) < 1e-6, 'it keeps the first one\'s content, and its corners are the outer ones');

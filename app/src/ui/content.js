@@ -9,11 +9,6 @@ import { $ } from '../env.js';
 
 export const contentUI = {
   initContentUI() {
-    $('effectList').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-effect]'); if (!b) return;
-      if (e.target.closest('[data-del]')) { this.deleteEffect(b.dataset.effect); return; }
-      this.setContent({ kind: 'effect', effect: b.dataset.effect });
-    });
     this.renderEffectList();
     this.initAI();
     this.initISF();
@@ -35,20 +30,15 @@ export const contentUI = {
     };
   },
 
+  // the effects (built in and the project's own) are shown in the content tray (tray.js)
   renderEffectList() {
-    const own = this.project.effects || [];
-    const esc = (t) => String(t).replace(/[<&"]/g, '');
-    let group = '';
-    $('effectList').innerHTML = EFFECTS.map((e) => {
-      const head = (e.group || '') !== group && (group = e.group || '') ? `<span class="chip-group">${group}</span>` : '';
-      return head + `<button class="chip" data-effect="${e.id}">${e.name}</button>`;
-    }).join('') +
-      own.map((e) => `<span class="chip own" data-effect="${e.id}" role="button" tabindex="0" title="${esc(e.prompt || '')}">✦ ${esc(e.name)}<button data-del aria-label="Delete ${esc(e.name)}">×</button></span>`).join('');
+    this.buildTray();
     this.renderContentUI();
   },
 
   deleteEffect(id) {
     this.project.effects = (this.project.effects || []).filter((e) => e.id !== id);
+    this.thumbs.forget('fx:' + id);
     for (const s of this.project.surfaces) if (s.content?.effect === id) s.content = { kind: 'effect', effect: 'outline' };
     this.changed(); this.renderEffectList();
   },
@@ -152,7 +142,6 @@ export const contentUI = {
     $('composeBar').hidden = !on;
     $('composeBtn').setAttribute('aria-pressed', String(on));
     if (on) { this.toggleDrawer(false); if (ed.sel < 0) ed.select(0); }
-    this.renderNudge();
     this.changed({ geometry: false, save: false });
   },
 
@@ -183,27 +172,18 @@ export const contentUI = {
     const s = this.project.surfaces[this.editor.sel];
     $('contentTarget').textContent = s ? `Choosing what surface ${this.editor.sel + 1} shows.` : 'Select a surface to choose what it shows.';
     const c = s ? s.content || {} : {};
-    document.querySelectorAll('#effectList .chip').forEach((b) => b.setAttribute('aria-pressed', String(c.kind === 'effect' && c.effect === b.dataset.effect)));
-    document.querySelectorAll('#mediaList .chip').forEach((b) => b.setAttribute('aria-pressed', String(c.kind === 'media' && c.mediaId === b.dataset.media)));
     $('mediaOpts').hidden = c.kind !== 'media';
     document.querySelectorAll('#fitSeg button').forEach((b) => b.setAttribute('aria-pressed', String((c.fit || 'fill') === b.dataset.fit)));
     document.querySelectorAll('#spaceSeg button').forEach((b) => b.setAttribute('aria-pressed', String((c.space || 'surface') === b.dataset.space)));
     $('applyAll').disabled = !s;
     const over = this.project.surfaces.filter((x) => x.content?.kind === 'media').map((x) => x.content.mediaId);
     if (new Set(over).size > MAX_MEDIA) this.toast(`Up to ${MAX_MEDIA} different videos or images can show at once.`);
+    this.renderTrayState();
   },
 
+  // the videos and images are in the content tray too
   renderMediaUI() {
-    const list = $('mediaList');
-    list.innerHTML = '';
-    const visual = this.media.list().filter((m) => m.kind !== 'audio' && m.id !== this.project.backdrop?.mediaId);
-    for (const m of visual) {
-      const b = document.createElement('button');
-      b.className = 'chip'; b.textContent = (m.kind === 'video' ? 'Video: ' : 'Image: ') + m.name; b.dataset.media = m.id;
-      b.onclick = () => this.setContent({ kind: 'media', mediaId: m.id, fit: 'fill', space: 'surface' });
-      list.appendChild(b);
-    }
-    if (!visual.length) list.innerHTML = '<span class="note">Nothing added yet.</span>';
+    this.buildTray();
     this.renderContentUI();
     this.renderSoundUI();
     $('playBtn').hidden = !this.media.list().some((m) => m.kind !== 'image');

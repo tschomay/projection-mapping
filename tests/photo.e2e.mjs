@@ -50,19 +50,19 @@ export default async function run() {
     await page.waitForFunction(() => !document.getElementById('backdrop').hidden && document.getElementById('backdrop').complete);
     const st = await page.evaluate(() => ({
       blend: getComputedStyle(document.getElementById('gl')).mixBlendMode,
-      chips: document.querySelectorAll('#mediaList .chip').length,
+      chips: window.app.trayItems().filter((it) => it.kind === 'media').length,
       saved: window.app.project.backdrop,
       align: document.getElementById('alignSheet').open,
     }));
     t.ok(st.align && !st.saved.quad, 'a chosen photo opens the line-up sheet, covering the frame until a corner is dragged');
     await page.evaluate(() => { document.getElementById('closeAlign').click(); document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
     t.ok(st.blend === 'screen', 'the content is blended onto the photo as light');
-    t.ok(st.chips === 0, 'the photo stays out of the media list');
+    t.ok(st.chips === 0, 'the photo stays out of the looks');
     await page.fill('#backdropDim', '0.3'); await page.dispatchEvent('#backdropDim', 'input');
     t.ok(await page.evaluate(() => /0\.3/.test(document.getElementById('backdrop').style.filter)), 'the brightness slider dims the photo');
 
     // media used only in a cue survives a save and reload, as does the photo
-    await page.evaluate(() => { document.querySelector('[data-add="square"]').click(); window.app.editor.select(0); });
+    await page.evaluate(() => { window.app.addShape('square'); window.app.editor.select(0); });
     await page.setInputFiles('#addMedia', icon);
     await page.waitForFunction(() => window.app.project.surfaces[0].content.kind === 'media');
     await page.evaluate(() => {
@@ -111,7 +111,11 @@ async function cameraPhoto(browser, server, t) {
     window.app.showPattern = (f) => { window.__patternShown(f); orig(f); };
     document.getElementById('toolsBtn').click(); window.app.selectTab('project');
   });
-  t.ok(await page.evaluate(() => document.getElementById('pickBtn').disabled), 'picking on the photo waits for a photo');
+  // Add → Tap things on the photo
+  const pickItem = () => page.evaluate(() => { document.getElementById('addBtn').click(); const b = [...document.querySelectorAll('#ctxMenu button')].find((x) => x.textContent === 'Tap things on the photo'); const off = b.disabled; window.app.closeMenu(); return off; });
+  await page.evaluate(() => window.app.toggleDrawer(false));
+  t.ok(await pickItem(), 'picking on the photo waits for a photo');
+  await page.evaluate(() => { document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
   await page.click('#photoTake');
   await page.waitForFunction(() => !document.getElementById('photoStart').disabled, null, { timeout: 20000 });
   await page.click('#photoStart');
@@ -133,8 +137,9 @@ async function cameraPhoto(browser, server, t) {
 
   // tap things on the photo: a picture frame's artwork, then again for its mat, then the frame; then a panel
   await page.evaluate(() => { document.getElementById('toolsBtn').click(); window.app.selectTab('surfaces'); });
-  t.ok(await page.evaluate(() => !document.getElementById('pickBtn').disabled), 'picking is offered once there is a photo');
-  await page.click('#pickBtn');
+  t.ok(!(await pickItem()), 'picking is offered once there is a photo');
+  await page.click('#addBtn');
+  await page.evaluate(() => [...document.querySelectorAll('#ctxMenu button')].find((x) => x.textContent === 'Tap things on the photo').click());
   t.ok(await page.evaluate(() => !document.getElementById('pickBar').hidden && document.getElementById('drawer').hidden), 'pick mode shows its bar and puts the tools away');
   const tapAt = async (name) => {
     const pt = await page.evaluate((n) => {

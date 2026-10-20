@@ -17,7 +17,6 @@ export const photoUI = {
     $('backdrop').addEventListener('load', () => this.placeBackdrop());
     this.initPhotoSheet();
     this.initAlign();
-    $('pickBtn').onclick = () => this.setPick(!this.editor.pick);
     $('pickDone').onclick = () => this.setPick(false);
     this.pickKind = 'rect';
     document.querySelectorAll('#pickKind button').forEach((b) => { b.onclick = () => this.setPickKind(b.dataset.kind); });

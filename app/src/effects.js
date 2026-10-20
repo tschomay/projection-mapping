@@ -1,10 +1,10 @@
-// Built-in effects. Each defines `vec3 fx_<id>(Surf2 s, float t)`.
+// Built-in effects. Each defines `vec3 fx_<id>(Surf2 s, float t)`; `group` and `about` are for the content tray.
 // Available to every effect (see HEAD in renderer.js): the Surf2 fields, helpers (hash1, hash2, noise, fbm, hsv,
 // pal), and audio: uAudio = (bass, mid, treble, level) in 0..1, uBeat = pulse that jumps to 1 on a beat and
 // decays, uBeats = beat count, uHasAudio = 1 when sound is being analysed.
 
 export const EFFECTS = [
-  { id: 'outline', name: 'Alignment grid', code: `
+  { id: 'outline', name: 'Alignment grid', group: 'Basics', about: 'A checkerboard and bright outline for lining surfaces up. The dot marks the first corner.', code: `
 vec3 fx_outline(Surf2 s, float t) {
   // checkerboard in the surface's own uv plus a bright outline; the dot marks the first corner
   vec3 col = hsv(fract(s.id * 0.13), 0.7, 1.0);
@@ -14,9 +14,9 @@ vec3 fx_outline(Surf2 s, float t) {
   c += vec3(1.0, 0.8, 0.3) * smoothstep(0.07, 0.05, length(s.uv));
   return c;
 }` },
-  { id: 'white', name: 'White light', code: `
+  { id: 'white', name: 'White light', group: 'Basics', about: 'Plain white light: lights the object itself.', code: `
 vec3 fx_white(Surf2 s, float t) { return vec3(1.0); }` },
-  { id: 'sequence', name: 'Beat sequence', code: `
+  { id: 'sequence', name: 'Beat sequence', group: 'Music', about: 'Surfaces flash one after another, on the beat when music plays.', code: `
 vec3 fx_sequence(Surf2 s, float t) {
   // surfaces flash one after another: on real beats when there's sound, otherwise twice a second
   float beat = uHasAudio > 0.5 ? uBeats : floor(t * 2.0);
@@ -25,7 +25,7 @@ vec3 fx_sequence(Surf2 s, float t) {
   vec3 col = hsv(fract(s.id * 0.17 + beat * 0.03), 0.75, 1.0);
   return col * (on * phase * 0.9 + exp(-s.edge / 4.0) * 0.6);
 }` },
-  { id: 'pulse', name: 'Pulse to music', code: `
+  { id: 'pulse', name: 'Pulse to music', group: 'Music', about: 'Bass fills the surface from its centre; treble sparkles along the edge.', code: `
 vec3 fx_pulse(Surf2 s, float t) {
   // bass fills the surface from its centre, treble sparkles along the edge
   float r = length(s.uv - 0.5) * 2.0;
@@ -34,14 +34,14 @@ vec3 fx_pulse(Surf2 s, float t) {
   c += vec3(1.0) * exp(-s.edge / (2.0 + 10.0 * uAudio.z)) * (0.3 + uAudio.z);
   return c * (0.6 + 0.6 * uBeat);
 }` },
-  { id: 'sweep', name: 'Screen sweep', code: `
+  { id: 'sweep', name: 'Screen sweep', group: 'Ambient', about: 'A bright line sweeps across the whole frame, from one surface to the next.', code: `
 vec3 fx_sweep(Surf2 s, float t) {
   // defined across the whole frame, so it crosses shared edges with no seam
   float x = s.screen.x * 1.6 + s.screen.y * 0.6 - mod(t * 0.45, 2.8) + 0.3;
   vec3 c = vec3(0.2, 0.9, 1.0) * exp(-abs(x) * 16.0) * (1.0 + uBeat) + vec3(0.02, 0.03, 0.05);
   return c + vec3(0.6) * exp(-s.edge / 2.5) * 0.5;
 }` },
-  { id: 'tiles', name: 'Tiles', code: `
+  { id: 'tiles', name: 'Tiles', group: 'Music', about: 'Tiles sized to each surface switch on and off, flipping on the beat.', code: `
 vec3 fx_tiles(Surf2 s, float t) {
   // tile count follows each surface's size, and tiles follow its perspective
   vec2 n = max(floor(s.size / 40.0), 1.0);
@@ -52,7 +52,7 @@ vec3 fx_tiles(Surf2 s, float t) {
   float tile = step(0.1, f.x) * step(f.x, 0.9) * step(0.1, f.y) * step(f.y, 0.9);
   return tile * mix(vec3(0.05), hsv(0.08 + h * 0.1, 0.6, 1.0), on);
 }` },
-  { id: 'trace', name: 'Outline trace', code: `
+  { id: 'trace', name: 'Outline trace', group: 'Ambient', about: 'A light runs around the outline of each surface.', code: `
 vec3 fx_trace(Surf2 s, float t) {
   float a = atan(s.uv.y - 0.5, s.uv.x - 0.5);
   float run = fract(a / 6.2832 - t * 0.3 + s.id * 0.21);
@@ -60,17 +60,17 @@ vec3 fx_trace(Surf2 s, float t) {
   vec3 col = hsv(fract(s.id * 0.13 + t * 0.02), 0.7, 1.0);
   return col * exp(-s.edge / 3.0) * (0.4 + 2.0 * pulse + uBeat) + col * 0.03;
 }` },
-  { id: 'plasma', name: 'Plasma', code: `
+  { id: 'plasma', name: 'Plasma', group: 'Ambient', about: 'Slow, flowing colour across the whole frame.', code: `
 vec3 fx_plasma(Surf2 s, float t) {
   vec2 p = s.screen * vec2(uRes.x / uRes.y, 1.0) * 3.0;
   float v = sin(p.x * 2.0 + t) + sin(p.y * 3.0 - t * 1.3) + sin((p.x + p.y) * 2.0 + t * 0.7) + sin(length(p - 2.0) * 4.0 - t * 2.0);
   vec3 c = pal(v * 0.15 + t * 0.05 + uAudio.y * 0.3, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0, 0.33, 0.67));
   return c * (0.6 + 0.4 * exp(-s.edge / 6.0)) * (0.8 + 0.4 * uAudio.w);
 }` },
-  { id: 'off', name: 'Off', code: `
+  { id: 'off', name: 'Off', group: 'Basics', about: 'Nothing: the surface stays dark.', code: `
 vec3 fx_off(Surf2 s, float t) { return vec3(0.0); }` },
   // Halloween set: dark backgrounds with things moving in them, made for a single cabinet door or a few
-  { id: 'bats', name: 'Bats', group: 'Halloween', code: `
+  { id: 'bats', name: 'Bats', group: 'Halloween', about: 'Bats fly across the frame, from one surface to the next, in front of a moonlit haze.', code: `
 float bat_shape(vec2 p, float flap) {
   // one bat in its own units, about 2 wide: body, ears, and wings with a scalloped trailing edge
   p.x = abs(p.x);
@@ -110,7 +110,7 @@ vec3 fx_bats(Surf2 s, float t) {
   }
   return sky * shade + vec3(1.0, 0.5, 0.1) * exp(-s.edge / 3.0) * 0.25;
 }` },
-  { id: 'eyes', name: 'Glowing eyes', group: 'Halloween', code: `
+  { id: 'eyes', name: 'Glowing eyes', group: 'Halloween', about: 'Pairs of eyes open in the dark, look around, blink and close.', code: `
 vec3 fx_eyes(Surf2 s, float t) {
   // pairs of eyes open in the dark, look around, blink and close again
   vec2 n = max(floor(s.size / vec2(160.0, 110.0)), 1.0);
@@ -130,7 +130,7 @@ vec3 fx_eyes(Surf2 s, float t) {
   }
   return col * eyes * (0.8 + 0.4 * uBeat) * step(0.25, h);
 }` },
-  { id: 'fog', name: 'Ghostly fog', group: 'Halloween', code: `
+  { id: 'fog', name: 'Ghostly fog', group: 'Halloween', about: 'Pale green fog rolling across the frame, thicker towards the bottom.', code: `
 vec3 fx_fog(Surf2 s, float t) {
   // pale green fog rolling across the frame, thicker towards the bottom
   vec2 q = s.screen * vec2(uRes.x / uRes.y, 1.0) * 2.5;
@@ -139,7 +139,7 @@ vec3 fx_fog(Surf2 s, float t) {
   float wisp = fbm(vec3(q * 3.0 + vec2(t * 0.3, 0.0), t * 0.1));
   return vec3(0.45, 0.95, 0.6) * f * (0.4 + 0.6 * wisp) * (0.8 + 0.4 * uAudio.w);
 }` },
-  { id: 'lightning', name: 'Lightning', group: 'Halloween', code: `
+  { id: 'lightning', name: 'Lightning', group: 'Halloween', about: 'A dark storm with a double flash every few seconds, or on the beat.', code: `
 vec3 fx_lightning(Surf2 s, float t) {
   // a dark stormy purple; every few seconds (or on the beat) a double flash of cold light
   float slot = floor(t / 2.5), h = hash1(vec3(slot, 4.0, 1.0));
@@ -154,7 +154,7 @@ vec3 fx_lightning(Surf2 s, float t) {
   vec3 c = vec3(0.08, 0.02, 0.12) * (0.5 + cloud);
   return c + vec3(0.75, 0.8, 1.0) * flash * (0.35 + 0.65 * cloud) + vec3(0.9, 0.95, 1.0) * bolt * flash * 3.0;
 }` },
-  { id: 'candle', name: 'Candle glow', group: 'Halloween', code: `
+  { id: 'candle', name: 'Candle glow', group: 'Halloween', about: 'Warm flickering candlelight from below.', code: `
 vec3 fx_candle(Surf2 s, float t) {
   // warm light from below that flickers like candles, brighter near the bottom edge
   float flick = 0.75 + 0.15 * noise(vec3(t * 6.0, s.id, 0.0)) + 0.1 * noise(vec3(t * 17.0, s.id, 3.0));

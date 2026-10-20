@@ -18,8 +18,7 @@ export default async function run() {
       // a test effect that shows content uv as colour, so the mapping can be read back
       app.project.effects = [{ id: 'uvtest', name: 'uv', code: 'vec3 fx_custom(Surf2 s, float t) { return vec3(s.uv, 1.0); }' }];
       app.editor.addSurface({ id: 'a', pins: [[0.3, 0.8], [0.7, 0.8], [0.7, 0.2], [0.3, 0.2]], parts: [{ op: 1, pts: [[0, 0], [1, 0], [1, 1], [0, 1]] }], content: { kind: 'effect', effect: 'uvtest' } });
-      document.getElementById('toolsBtn').click();
-      document.querySelector('#modeSeg [data-mode="mesh"]').click();
+      document.querySelector('#quickMode [data-mode="mesh"]').click();
     });
     // read frame pixels (frame coordinates) straight after a render
     const read = (pts) => page.evaluate((pts) => {
@@ -27,8 +26,8 @@ export default async function run() {
       const gl = app.renderer.gl, c = app.renderer.canvas, [W, H] = app.frame, px = new Uint8Array(4);
       return pts.map(([x, y]) => { gl.readPixels(Math.round(x / W * c.width), Math.round(c.height - 1 - y / H * c.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return [...px]; });
     }, pts);
-    const st = await page.evaluate(() => ({ mesh: window.app.project.surfaces[0].mesh, size: document.getElementById('meshSize').value, frame: window.app.frame }));
-    t.ok(st.mesh && st.mesh.n[0] === 3 && st.size === '3', 'Bend mode gives the surface a 3 x 3 grid');
+    const st = await page.evaluate(() => ({ mesh: window.app.project.surfaces[0].mesh, frame: window.app.frame }));
+    t.ok(st.mesh && st.mesh.n[0] === 3, 'Bend mode gives the surface a 3 x 3 grid');
     const [W, H] = st.frame;
 
     // flat grid: same as before (the middle shows uv 0.5, 0.5)
@@ -75,7 +74,9 @@ export default async function run() {
     });
     t.ok(placed < 0.5, `a point placed through the bend lands within half a pixel (${placed.toFixed(3)})`);
     // grid off: flat again
-    await page.selectOption('#meshSize', '0');
+    await page.click('#quickMore');
+    await page.evaluate(() => [...document.querySelectorAll('#ctxMenu button')].find((b) => b.textContent === 'Bend grid…').click());
+    await page.evaluate(() => [...document.querySelectorAll('#ctxMenu button')].find((b) => b.textContent === 'Off (flat)').click());
     t.ok(await page.evaluate(() => !window.app.project.surfaces[0].mesh), 'turning the grid off makes it flat again');
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {

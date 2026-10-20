@@ -11,30 +11,30 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    works, with some lag. The phone screen becomes the projector frame.
 2. **Open the app full screen in landscape.** Install it to the home screen for
    true full screen: *Add to Home Screen* in Safari, *Install app* in Chrome.
-3. **Map.** In *Tools → Surfaces*, add a square, circle or triangle. It's
-   projected too, so drag it onto a real flat surface, then drag its four
-   corners onto the surface's corners. Use the nudge pad for the last pixel.
-   *Points* adds, moves and removes outline points. *Bend* puts a grid on the
-   surface whose points you drag onto a curved or bowed object; *Soft edge*
-   feathers the outline. *Combine* adds shapes
-   to a surface or cuts holes in it.
-   **Without opening Tools:** *Add* in the top bar adds a shape; tap a surface
-   and a bar along the bottom switches between *Corners*, *Points* and *Bend*,
-   and copies, deletes or joins it (*More* opens the full Surfaces pane).
-   Long-press a surface (or right-click it) for the same as a menu; long-press
-   empty space to add a shape right there. **Undo** (top bar, or Ctrl+Z) takes
-   back any change to the surfaces' shapes, one step at a time: drags, nudges,
-   points, bends, deletes, joins, picks. What a surface shows isn't touched.
-   Deleting a surface, joining two, or tapping a picked shape for a bigger one
-   also offers *Undo* in the message that pops up.
+3. **Map.** Tap *Add* in the top bar for a square, circle or triangle (or
+   long-press empty space to add one right there). It's projected too, so drag
+   it onto a real flat surface, then drag its four corners onto the surface's
+   corners; arrow keys nudge by a pixel (Shift: 10). The selected surface gets a
+   small bar at the bottom, on the side away from it: *Corners*, *Points* (add,
+   move and remove outline points) and *Bend* (a grid to drag over a curved or
+   bowed object), and *⋯* for the rest: join, *Soft edge* (a slider over the
+   frame), *Bend grid* size, add a shape to it or cut one out, duplicate,
+   delete. Long-press a surface (or right-click it) for the same menu. **Tap the
+   selected surface** to hide or show that bar; editing carries on either way.
+   **Tap empty space** to deselect, and again to hide or show the buttons at
+   the top. The full screen button hides the browser's own bars while editing.
+   **Undo** (top bar, or Ctrl+Z) takes back any change to the surfaces' shapes,
+   one step at a time: drags, nudges, points, bends, deletes, joins, picks.
+   What a surface shows isn't touched. Deleting a surface, joining two, or
+   tapping a picked shape for a bigger one also offers *Undo* in the message
+   that pops up.
    **Join:** snap two surfaces together (two squares corner to corner, say),
-   select one and tap *Join*. They become one surface with the first one's
+   select one and pick *Join* in its *⋯* menu. They become one surface with the first one's
    content running across both. Where they share an edge it disappears, and a
    joined rectangle gets the outer four corners as its corner pins, so content
    fills it exactly. Surfaces that only touch at a corner, or overlap, become
    one surface of two shapes. A bend grid is reset by joining.
-   **Or let the camera find them:** *Tools → Surfaces → Find surfaces with
-   the camera*. Prop the phone 30 cm to 1 m to the side of the projector,
+   **Or let the camera find them:** *Add → Find with the camera*. Prop the phone 30 cm to 1 m to the side of the projector,
    back camera facing the set, dim the lights and tap *Start*. The projector
    shows about 40 stripe frames while the camera photographs each one (half a
    minute or so; tap to cancel), then every flat face becomes a surface.
@@ -42,7 +42,7 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    **Or pick them on a photo:** for flat things on a wall that the stripes
    can't tell apart (picture frames, wainscoting panels, doors), take a photo
    from the projector (*Project → Design on a photo → Take it from the
-   projector*), then *Tools → Surfaces → Tap things on the photo* and tap one.
+   projector*), then *Add → Tap things on the photo* and tap one.
    Its corners become the surface's corners; tap inside it again for the
    one around it (the artwork, then its mat, then the frame). Switch the bar
    to *Any shape* for round and odd-shaped things (a mirror, a wreath, an
@@ -57,9 +57,15 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    model (about 14 MB, downloaded once, when you start) to tell what you
    tapped, and the photo's straight edges to place rectangles exactly; where
    the model can't load, edges and a colour fill do it alone, less reliably.
-4. **Fill.** In *Tools → Content*, pick an effect or add a video or image from
-   the phone (*Halloween* has bats, eyes, fog, lightning and candle glow). Or
-   *Describe a look* and an AI model writes a new effect for your surfaces:
+4. **Fill.** Tap *Looks* in the top bar. A tray of live previews opens: along
+   the bottom with the phone upright, down one side when it's on its side (⇆
+   moves it to the other side). Tap a look and it's on the selected surface, and
+   on the projector, straight away; *All* puts it on every surface. Search and
+   the groups (*Basics*, *Music*, *Ambient*, *Halloween*, your own, videos and
+   images) sit above the tiles (on its side, they scroll away with *This one*/*All*). ♪ marks looks that move
+   to music, ⇆ ones that flow from one surface to the next. *Halloween* has
+   bats, eyes, fog, lightning and candle glow. *＋ Video or image* adds one
+   from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:
    on your Claude plan in the studio artifact, or with your own Gemini or
    Anthropic API key here (stored only on the device). Media follows the surface's perspective. *One image across all*
    runs one video continuously across several surfaces. *Arrange content* picks which rectangle of that
@@ -94,8 +100,10 @@ Projects save automatically on the device, with media kept in IndexedDB.
 files there.
 
 **Second screen (Chrome):** *Project → Present to a screen* sends only the
-output to a Chromecast, a cast-capable projector or a display Chrome can
-present to, and the phone keeps its controls. Videos and images are copied to
+output to a screen Chrome can present to, and the phone keeps its controls: it
+becomes the remote, and can be held upright. Chromecasts and cast projectors
+only take Cast apps, which Surface Mapper isn't yet (#47); there, a cable or
+screen mirroring is the way. Videos and images are copied to
 the screen when it needs them. See [`docs/connecting.md`](../docs/connecting.md)
 for every path and what's been tested.
 
@@ -177,12 +185,13 @@ picking on a photo works from edges and colours alone there (the model's host is
 | File | What it does |
 |---|---|
 | `src/app.js` | The app: state, layout, frame loop, playback, Show mode, autosave, output window and second screen |
-| `src/ui/*.js` | One module per drawer pane (surfaces, content, sound, cues, project) plus camera capture and the design photo; mixed into the app |
+| `src/ui/*.js` | One module per drawer pane (surfaces, content, sound, cues, project), the content tray, quick editing on the frame, camera capture and the design photo; mixed into the app |
+| `src/thumbs.js` | Live previews for the content tray: one canvas behind the tiles, each effect drawn into its tile |
 | `src/env.js` | Small shared helpers (`$`, whether this page is an output display) |
 | `src/renderer.js` | WebGL2 renderer: one fragment shader for all surfaces, effects and media |
 | `src/effects.js` | Built-in effects (GLSL); audio uniforms are documented at the top |
 | `src/geometry.js` | Homographies, shapes, hit-testing |
-| `src/editor.js` | Touch editing: corners, points, combine and cut, snapping, nudging, arranging content rectangles |
+| `src/editor.js` | Touch editing: corners, points, combine and cut, snapping, nudging, taps that hide and show the bars, arranging content rectangles |
 | `src/audio.js` | Web Audio analysis: bass, mid, treble, level, beat |
 | `src/media.js` | The user's videos, images and audio (object URLs, IndexedDB) |
 | `src/store.js` | Projects in localStorage, media blobs in IndexedDB, import and export |

@@ -8,7 +8,8 @@ export const scanUI = {
   initScan() {
     const sheet = $('scanSheet');
     this.camera = new Camera($('scanVideo'));
-    $('scanBtn').onclick = () => {
+    // from the Add menu
+    this.openScan = () => {
       this.toggleDrawer(false);
       $('scanView').hidden = true; $('scanUndo').hidden = true;
       sheet.showModal();

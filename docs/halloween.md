@@ -21,12 +21,12 @@ need an API key or any AI for this; the Halloween effects are built in.
 2. **Connect the projector** (cable first; the *Connect* guide in the app
    shows the options). Hold the phone in landscape. The phone screen is now
    the projector picture.
-3. **Trace the cabinet door.** *Tools → Surfaces → Square*. Drag the square
+3. **Trace the cabinet door.** *Add → Square*. Drag the square
    onto the door as it appears on the wall, then drag each corner onto a
-   corner of the door. The checkerboard shows when it's lined up; use the
-   nudge pad for the last few millimetres. Add a second square for a second
+   corner of the door. The checkerboard shows when it's lined up; tap a corner
+   and drag it slowly for the last few millimetres. Add a second square for a second
    door, or a circle for a round thing like a pumpkin.
-4. **Pick the look.** *Tools → Content → Halloween*:
+4. **Pick the look.** *Looks → Halloween*:
    - **Bats**: silhouettes flapping across an orange moonlit haze. They fly
      from one surface to the next, so two doors side by side read as one sky.
    - **Glowing eyes**: pairs of eyes open in the dark, look around, blink.
@@ -65,7 +65,7 @@ face that flickers"). Two ways to pay for it:
 
 - **Picture is a trapezoid:** keystone is still on in the projector, or the
   phone is in portrait.
-- **Edges spill past the door:** select the surface and use the nudge pad on
-  each corner; *Soft edge* in *Surfaces* hides small errors.
+- **Edges spill past the door:** select the surface and drag each corner a
+  little (arrow keys on a laptop); *⋯ → Soft edge* hides small errors.
 - **Phone dims or locks:** stay in Show mode; it keeps the screen awake. Turn
   on Do Not Disturb so notifications don't appear on the cabinet.
