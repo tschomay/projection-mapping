@@ -2,6 +2,7 @@
 // topmost surface containing it (point-in-polygon against each part, combined as a signed distance), maps the
 // pixel into that surface's uv space through its inverse homography, and shades it with the surface's content.
 import { EFFECTS } from './effects.js';
+import { KIT } from './effects/kit.js';
 import { meshEvaluator, meshInverse } from './geometry.js';
 
 export const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_MEDIA = 4, EDGE_MARGIN = 64;
@@ -36,7 +37,7 @@ float noise(vec3 x) {
 float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p *= 2.02; a *= 0.5; } return s; }
 vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
 vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.28318 * (c * t + d)); }
-`;
+` + KIT;
 
 const HEAD = `#version 300 es
 precision highp float; precision highp int; precision highp sampler2D;
@@ -183,8 +184,9 @@ export class Renderer {
     this.inputTex = this.makeTexture(gl.NEAREST);
     this.inputData = new Float32Array(MAX_SURF * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SURF, 1, 0, gl.RGBA, gl.FLOAT, this.inputData);
-    this.effects = EFFECTS;
-    this.program = this.compile(buildFragment());
+    // just the basics to start with: the app's first sync() compiles the looks in use (setEffects)
+    this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
+    this.program = this.compile(buildFragment(this.effects));
   }
 
   // built-in effects plus the project's own (AI-written) ones; each custom effect is { id, code }. Only the

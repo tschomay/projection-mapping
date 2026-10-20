@@ -34,6 +34,13 @@ need an API key or any AI for this; the Halloween effects are built in.
    - **Ghostly fog**: pale green fog rolling across.
    - **Lightning**: a dark storm with a flash and a bolt every few seconds.
    - **Candle glow**: warm flicker from below.
+   - **Jack-o'-lantern**: trace a circle on a real pumpkin and it gets a
+     candlelit carved face. With music playing, the mouth sings along.
+   - **Haunted window**: trace a window or blind. Someone walks past inside,
+     a hand presses on the glass, the light goes out.
+   - **Dripping blood**, **Drifting ghosts**, **Witch across the moon**,
+     **Spider drop**, **Peeking skull**, **Jump scare** and more: the full
+     list, and what each suits, is in [looks.md](looks.md).
    Pick a surface first to give it its own look, or no surface to set all.
 5. **Sound (optional).** *Tools → Sound*: add a spooky track, tap *Play*,
    and Lightning flashes on the beat instead of at random.

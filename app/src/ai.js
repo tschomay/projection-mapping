@@ -5,6 +5,8 @@
 // - A Gemini API key (AIza…): Google's Interactions API, called straight from the browser.
 // - An Anthropic API key (sk-ant-…): the Claude API through the official SDK, loaded from a CDN when first needed.
 // Keys stay on this device only (never in project files), and the rest of the app still works offline.
+import { kitSummary } from './effects/kit.js';
+
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.127.0/+esm';
 const MODEL = 'claude-opus-5-5';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
@@ -55,6 +57,8 @@ Available everywhere:
   float noise(vec3 x); float fbm(vec3 p);    // value noise, 0..1
   vec3 hsv(float h, float s, float v);
   vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d);   // cosine palette
+And the kit, building blocks for shapes, glows and timing:
+${kitSummary()}
 
 Rules:
 - Projected light only adds: black is "off", so use black backgrounds and bright, saturated colours. Bright edges (exp(-s.edge / 3.0)) read well on real objects.
