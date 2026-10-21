@@ -47,7 +47,8 @@ export const trayUI = {
     $('tray').hidden = !on;
     document.body.classList.toggle('tray-open', on);
     $('trayBtn').setAttribute('aria-pressed', String(on));
-    if (!on) return;
+    // closed, it gives back the previews' graphics memory and its tiles' videos and images (they're rebuilt on opening)
+    if (!on) { this.thumbs.release(); $('trayTiles').replaceChildren(this.thumbs.canvas); return; }
     this.toggleDrawer(false); this.closeMenu();
     if (this.editor.sel < 0 && !this.tray.all) this.editor.select(0);
     this.buildTray();
@@ -102,7 +103,7 @@ export const trayUI = {
       if (it.group !== g) { g = it.group; html += `<div class="tray-group" data-group="${esc(g)}">${esc(g)}</div>`; }
       const badges = (it.music ? '<b title="Moves to music">♪</b>' : '') + (it.wide ? '<b title="Flows across surfaces">⇆</b>' : '');
       const thumb = it.kind === 'media'
-        ? (it.media.kind === 'video' ? `<video muted playsinline preload="metadata" src="${esc(it.media.el.src)}#t=0.5"></video>` : `<img alt="" src="${esc(it.media.el.src)}">`)
+        ? (it.media.kind === 'video' ? `<video muted playsinline preload="metadata" src="${esc(it.media.url)}#t=0.5"></video>` : `<img alt="" src="${esc(it.media.url)}">`)
         : '';
       html += `<div class="tile" role="button" tabindex="0" data-key="${esc(it.key)}" data-group="${esc(it.group)}" title="${esc(it.about)}">
         <div class="thumb">${thumb}${badges ? `<span class="badges">${badges}</span>` : ''}${it.own ? `<button class="del" data-del="${esc(it.id)}" aria-label="Delete ${esc(it.name)}" title="Delete this effect">×</button>` : ''}</div>

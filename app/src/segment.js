@@ -33,8 +33,25 @@ export function loadSegmenter(progress = () => {}) {
   })().catch((err) => { loading = null; throw err; });
 }
 
+// Let the model go: its sessions (and, on WebGPU, its buffers) are freed, and the next loadSegmenter() makes it again
+// from the browser's cache. For a hidden page, or when picking hasn't been used for a while.
+export async function releaseSegmenter() {
+  const was = loading;
+  loading = null;
+  const seg = was && await was.catch(() => null);
+  if (seg) await seg.dispose().catch(() => {});
+}
+
 class Segmenter {
   constructor(T, model, processor) { this.T = T; this.model = model; this.processor = processor; this.key = null; }
+
+  async dispose() {
+    const ready = this.ready;
+    this.key = null; this.ready = null; this.last = null;
+    const got = ready && await ready.catch(() => null);
+    for (const t of Object.values(got?.embeddings || {})) t?.dispose?.();
+    await this.model.dispose?.();
+  }
 
   // encode a photo (RGBA, w x h) once; `key` names it, so asking again for the same photo waits for the same work
   embed(rgba, w, h, key) {

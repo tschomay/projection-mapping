@@ -102,6 +102,12 @@ what your phone supports, and [`docs/connecting.md`](../docs/connecting.md)
 explains rehearsing with a TV.
 
 Projects save automatically on the device, with media kept in IndexedDB.
+
+**In a background tab** the editor gives back what it holds, so it can't run the browser out of graphics memory
+for other tabs: the frame's WebGL context, the tray's previews (also whenever the tray is closed), the shape model
+for picking on a photo (also two minutes after picking is put away), the camera, and idle audio. Everything comes
+back when the tab is shown again. A playing soundtrack keeps playing, and the output window and second screens
+keep everything.
 *Project → Export file* moves a mapping to another device; re-add the media
 files there.
 

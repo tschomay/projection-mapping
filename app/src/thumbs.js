@@ -2,7 +2,8 @@
 // straight into its tile's rectangle (viewport and scissor), so nothing is copied back from the GPU. Each effect is
 // compiled on its own (a rectangle stands in for a surface: uv = screen), in the background where the browser can
 // (KHR_parallel_shader_compile). With no sound playing, a pretend 120 bpm beat drives the audio uniforms so the
-// music effects show that they move to music.
+// music effects show that they move to music. The context and its shaders are made when the tray first draws and
+// given back when it closes (release), since a hidden tray needn't hold graphics memory.
 import { SURF_API } from './renderer.js';
 
 const VERT = '#version 300 es\nin vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }';
@@ -12,15 +13,35 @@ const NEW_PER_FRAME = 2;   // shaders started per frame, so opening the tray doe
 export class Thumbs {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = this.gl = canvas.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: false });
+    this.gl = null;
     this.programs = new Map();   // key -> { p, u, ready, failed }
-    if (!gl) return;
+  }
+
+  // the context, made on first use
+  init() {
+    const gl = this.gl = this.canvas.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: false });
+    if (!gl) return false;
     this.par = gl.getExtension('KHR_parallel_shader_compile');
     gl.bindVertexArray(gl.createVertexArray());
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     this.vs = this.shader(gl.VERTEX_SHADER, VERT);
+    return true;
+  }
+
+  // give the context and every compiled preview back. A lost context can't be used again, so the canvas is swapped
+  // for a fresh one (same id and styles) that init() starts on next time.
+  release() {
+    const gl = this.gl;
+    if (!gl) return;
+    for (const key of [...this.programs.keys()]) this.forget(key);
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    const fresh = this.canvas.cloneNode(false);
+    fresh.width = fresh.height = 1;
+    this.canvas.replaceWith(fresh);
+    this.canvas = fresh;
+    this.gl = null;
   }
 
   shader(type, src) { const gl = this.gl, s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
@@ -64,8 +85,8 @@ void main() {
 
   // tiles: [{ effect, rect }] with rects in CSS pixels relative to the canvas; clip: the visible part, likewise
   draw(tiles, clip, t, audio) {
+    if (!this.gl && !this.init()) return;
     const gl = this.gl;
-    if (!gl) return;
     // a long strip of tiles makes a wide canvas: lower its resolution rather than go past what the GPU can hold
     const c = this.canvas, max = Math.min(4096, this.gl.getParameter(this.gl.MAX_RENDERBUFFER_SIZE));
     const dpr = Math.min(devicePixelRatio || 1, 1.5, max / Math.max(c.clientWidth, c.clientHeight, 1));
