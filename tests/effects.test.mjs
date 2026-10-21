@@ -20,7 +20,7 @@ export default function run() {
   const ids = EFFECTS.map((e) => e.id);
   t.ok(new Set(ids).size === ids.length, `${ids.length} looks, each with its own id`);
   const groups = new Set(EFFECTS.map((e) => e.group));
-  t.ok(EFFECTS.length >= 40 && groups.size >= 4, `the library has 40 or more looks in four or more groups (${EFFECTS.length} in ${groups.size})`);
+  t.ok(EFFECTS.length >= 140 && groups.size >= 7, `the library has 140 or more looks in seven or more groups (${EFFECTS.length} in ${groups.size})`);
   const bad = EFFECTS.filter((e) => !/^[a-z][a-z0-9]*$/.test(e.id) || !e.name || !e.about || !LOOK_GROUPS.includes(e.group));
   t.ok(!bad.length, 'every look has a short lower-case id, a name, a description and one of the tray\'s groups' + (bad.length ? ': ' + bad.map((e) => e.id).join(', ') : ''));
   const noFx = EFFECTS.filter((e) => (e.code.match(new RegExp(`\\bvec3 fx_${e.id}\\(Surf2 s, float t\\)`, 'g')) || []).length !== 1);

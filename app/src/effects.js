@@ -7,9 +7,12 @@
 import { HALLOWEEN } from './effects/halloween.js';
 import { FALL } from './effects/fall.js';
 import { CHRISTMAS } from './effects/christmas.js';
+import { MUSIC } from './effects/music.js';
+import { AMBIENT } from './effects/ambient.js';
+import { CELEBRATIONS } from './effects/celebrations.js';
 
 // the tray shows effect groups in this order (then the project's own effects, then videos and images)
-export const LOOK_GROUPS = ['Basics', 'Music', 'Ambient', 'Halloween', 'Fall', 'Christmas'];
+export const LOOK_GROUPS = ['Basics', 'Music', 'Ambient', 'Halloween', 'Fall', 'Christmas', 'Celebrations'];
 
 export const EFFECTS = [
   { id: 'outline', name: 'Alignment grid', group: 'Basics', about: 'A checkerboard and bright outline for lining surfaces up. The dot marks the first corner.', code: `
@@ -85,9 +88,12 @@ vec3 fx_plasma(Surf2 s, float t) {
 }` },
   { id: 'off', name: 'Off', group: 'Basics', about: 'Nothing: the surface stays dark.', code: `
 vec3 fx_off(Surf2 s, float t) { return vec3(0.0); }` },
+  ...MUSIC,
+  ...AMBIENT,
   ...HALLOWEEN,
   ...FALL,
   ...CHRISTMAS,
+  ...CELEBRATIONS,
 ];
 
 // the tray's badges, read from the code: ♪ moves to music, ⇆ flows from one surface to the next

@@ -2,12 +2,12 @@
 
 The built-in looks in Surface Mapper's *Looks* tray, what's planned next, and
 how to add one. The code is in `app/src/effects.js` (Basics, Music, Ambient)
-and `app/src/effects/<group>.js` (seasonal sets). Issue #42 added the settings
+and `app/src/effects/<group>.js` (the Music, Ambient and Celebrations sets and the seasonal sets). Issue #42 added the settings
 and the bigger library.
 
 ## What's there
 
-41 looks in six groups. ♪ means it moves to music. ⇆ means it flows from one
+146 looks in seven groups. ♪ means it moves to music. ⇆ means it flows from one
 surface to the next (on a single surface, *Whole scene here* fits the whole
 scene on it).
 
@@ -16,7 +16,60 @@ off (the haunted window's walker, hand and blackout). They're in the *Looks*
 tray, above the search, for the selected surface, or with *All* for every
 surface showing that look. Each surface keeps its own, and cues capture them.
 
-### Halloween (20)
+### Music (27)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Beat sequence ♪ | `sequence` | several surfaces | Surfaces flash one after another, on the beat when music plays. |
+| Pulse to music ♪ | `pulse` | anything | Bass fills the surface from its centre; treble sparkles along the edge. |
+| Tiles ♪ | `tiles` | a wall, a door | Tiles sized to each surface switch on and off, flipping on the beat. |
+| Tunnel ♪ | `tunnel` | a wall, a doorway | Rings rush towards you down an endless tunnel, flashing on the beat. |
+| Kaleidoscope ♪ | `kaleido` | a wall, **a circle** | Flowing colours folded through mirrors into a turning kaleidoscope, brighter on the beat. |
+| Neon ♪ | `neon` | **any shape**: a door, a window, a sign | Two neon tubes follow the outline, humming, flickering now and then, glowing brighter on the beat. |
+| Colour wash ⇆ ♪ | `gradient` | several surfaces, a wall | Slow, smooth bands of colour drift across the whole frame, from one surface to the next. |
+| Strobe ♪ | `strobe` | anything; best as a cue | A short flash on every beat, or a few times a second without music. Kept to three flashes a second or fewer. |
+| Equaliser ♪ | `bars` | a wide wall, a box | LED bars jump with the music: bass on the left, treble on the right. |
+| Ripples ♪ | `rings` | a wall, **a circle** | A ring of light leaves the middle on every beat and spreads out, fading. |
+| Lasers ⇆ ♪ | `lasers` | a wall, a whole house front | Laser beams fan out from the bottom corners and sweep across the frame through a haze. |
+| Glitch ♪ | `glitch` | a box, a TV-sized thing | A test card breaks up: slices slide, the colours split apart and blocks flash, more on the beat. |
+| Hyperspace ♪ | `hyperspace` | a wall, a doorway | Stars stream out from the middle as streaks, as if jumping to light speed. Brighter on the beat. |
+| Moiré ♪ | `moire` | a wall | Two sets of fine rings drift over each other, and big slow shapes swim where they cross. |
+| Cells ⇆ ♪ | `cells` | a wall, several surfaces | Wobbling cells with glowing walls across the whole frame; a few light up on every beat. |
+| Oscilloscope ♪ | `scope` | a box, a screen-shaped thing | A glowing green trace over a grid, its waves made from the bass, mids and treble. |
+| Mirror ball ⇆ ♪ | `disco` | a wall, a ceiling, a whole room | A mirror ball's spots of light wheel slowly across the whole frame, twinkling, flashing on the beat. |
+| Triangles ⇆ ♪ | `tris` | a wall, several surfaces | A grid of triangles across the frame, flipping on and off with the beat. |
+| Synthwave ⇆ ♪ | `synthwave` | a wide wall, a garage door | A striped sunset sun over a neon grid racing towards you, across the whole frame. The grid pulses on the beat. |
+| Fractal ♪ | `julia` | a wall | A Julia set fractal slowly changes shape, its colours flowing. |
+| Spiral ♪ | `spiral` | a wall, **a circle** | A hypnotic spiral turning in or out, pulsing on the beat. |
+| Hexagons ⇆ ♪ | `hexes` | a wall, several surfaces | A honeycomb across the frame; a wave of light runs out through it from the middle on every beat. |
+| Halftone ⇆ ♪ | `halftone` | a wall, several surfaces | A grid of dots across the frame that swell and shrink in slow waves, bigger on the beat. |
+| Sunburst ♪ | `sunburst` | a wall, **a circle** | Rays of two colours turning round the middle, pulsing on the beat. |
+| Beat wave ⇆ ♪ | `beatwave` | several surfaces side by side | Each beat sends a band of light across the frame from left to right, through one surface after another. |
+| Digital rain ♪ | `matrix` | a wall, a door | Columns of glowing green characters stream down, each with a bright head. |
+| Op art | `opart` | a wall, a pillar | Black and white stripes bent by a slowly wandering bulge, so the surface seems to swell. |
+
+### Ambient (16)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Screen sweep ⇆ ♪ | `sweep` | several surfaces side by side | A bright line sweeps across the whole frame, from one surface to the next. |
+| Outline trace ♪ | `trace` | **any shape** | A light runs around the outline of each surface. |
+| Plasma ⇆ ♪ | `plasma` | a wall, several surfaces | Slow, flowing colour across the whole frame. |
+| Starry night ⇆ | `starry` | a wall, a ceiling | A deep sky of twinkling stars and the Milky Way across the frame, with now and then a shooting star. |
+| Pool light ⇆ | `caustics` | a wall, a ceiling, under a deck | The shifting web of light that sun through rippling water throws on the bottom of a pool. |
+| Fish tank | `aquarium` | a box, a window, a wall | Bright tropical fish swim back and forth past swaying weed, with bubbles rising and light from above. |
+| Lava lamp | `lavalamp` | a tall narrow surface, a pillar | Blobs of warm wax rise, fall and melt into each other in glowing liquid. |
+| Drifting clouds ⇆ | `clouds` | a wall, a ceiling | Clouds drift slowly across a day, sunset or night sky, from one surface to the next. |
+| Fireflies ⇆ | `fireflies` | a garden wall, a hedge | Fireflies wander and blink over dark grass on a summer night. |
+| Rain on a puddle | `puddle` | the ground, a path, a table top | Raindrops land on dark water, each sending out a ring of ripples. |
+| Sunset ⇆ | `sunset` | a wide wall | The sun sinks into the sea over a few minutes, the sky turning gold, then red, then dusk, and starts again. |
+| Nebula ⇆ | `nebula` | a wall, a ceiling | Clouds of coloured gas churn slowly among the stars, across the whole frame. |
+| Slow breath | `breathe` | a bedroom wall, anything | A soft glow that swells and fades like slow breathing, its colour drifting. Calming. |
+| Bubbles ⇆ | `bubbles` | a wall, several surfaces | Soap bubbles float up and drift across the frame, shimmering with rainbow colours. |
+| Cherry blossom ⇆ | `petals` | a wall, several surfaces | Pink blossom petals flutter down and drift across the frame on a breeze. |
+| Ocean waves ⇆ | `waves` | the ground, a floor, a wall | Seen from above: waves roll in to a sandy beach, wash up it in foam and slide back. |
+
+### Halloween (40)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
@@ -40,8 +93,28 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Pulsing veins ♪ | `veins` | a door, a pillar | Veins throb with a heartbeat that runs outwards, or with the beat. |
 | Hellfire ♪ | `hellfire` | a doorway, a fireplace | Tall red flames from the bottom edge, surging on the beat. |
 | Jump scare | `scare` | anything; best as a cue | Nearly dark, then a skull flashes up. |
+| Claws round the edge | `claws` | **a door**, a cupboard | Now and then a bony clawed hand creeps round the edge of a door and drums its fingers. |
+| Spinning web | `web` | a window, a corner, a door | A spider spins its web from nothing, spokes first and then the spiral, beaded with dew. It fades and starts again. |
+| Graveyard ⇆ | `graveyard` | a wide wall, a garage door | Crooked tombstones and a dead tree on a hill under the moon, with fog creeping between them. |
+| Dancing skeleton ♪ | `skeleton` | a door, a wall | A skeleton dances, swinging its arms and kicking its legs, in time with the music. |
+| Face in the wall | `ghostface` | **a sheet hung up**, a pale wall | Now and then a face pushes out of the wall as if through stretched cloth, mouth open, then sinks back. |
+| Zombie hands | `zombie` | the bottom of a wall, a flower bed | Rotting hands claw their way up out of the earth along the bottom, and sink back down. |
+| Cauldron ♪ | `cauldron` | a box, a wall | A witch's cauldron on a fire, its green brew bubbling and steaming, bubbling harder on the beat. |
+| Creepy crawlies | `crawlers` | a wall, a ceiling | Spiders scuttle over a dimly lit wall, stopping and starting. |
+| Shadow walker ⇆ | `shadow` | a wall, several surfaces | A tall, thin shadow walks slowly across a firelit wall, from one surface to the next. |
+| Bloody handprints | `handprints` | **a window**, a glass door | Bloody handprints slap onto the glass one after another, smear and run, then slowly fade. |
+| Werewolf moon ⇆ | `werewolf` | a wall, a garage door | A wolf on a rocky hill throws back its head and howls at the full moon, as clouds drift past. |
+| Haunted portrait | `portrait` | **a picture frame**, a rectangle | A dark old portrait in a gold frame. Its eyes follow you, and now and then the face turns to a skull. |
+| Black cat | `blackcat` | **a window** | A black cat sits on the sill against a warm-lit window, tail swishing, eyes glowing and blinking. |
+| Crows ⇆ | `crows` | a wall, several surfaces | A flock of crows flaps across a grey dusk sky, from one surface to the next. |
+| Mummy door | `mummy` | **a door** | Wraps a door in old bandages, and through a gap two eyes peer out, looking about and blinking. |
+| Will-o'-the-wisps ⇆ | `wisps` | a garden, the bottom of a wall | Little blue flames float and bob through the dark, low over the ground, fading in and out. |
+| The Reaper ⇆ | `reaper` | a wall, a garage door | A hooded figure with a scythe glides through green-lit fog across the frame, red eyes glinting under the hood. |
+| Pumpkin patch ⇆ | `pumpkins` | the bottom of a wide wall | A row of jack-o'-lanterns along the bottom of the frame, big and small, each with its own face and flicker. |
+| Something wants out ♪ | `knock` | **a door** | Something pounds on the other side of a door: with each blow, red light flares out round its edges. On the beat with music. |
+| Giant eyeball | `eyeball` | **a circle** | A bloodshot eyeball for something round: it looks about, its pupil widening and narrowing, and blinks. |
 
-### Fall (8)
+### Fall (13)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
@@ -53,24 +126,81 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Geese flying south ⇆ | `geese` | a wall | A dusk sky with a V of geese crossing every 16 s. |
 | Wheat field ⇆ | `wheat` | a wide wall | A golden field with gusts of wind running through it. |
 | Fireplace | `fireplace` | a fireplace, a box | Low flames on glowing coals, sparks drifting up. |
+| Bonfire | `bonfire` | a wall, a fire pit surround | A big bonfire roaring up from the bottom edge, throwing off sparks. |
+| Turkey | `turkey` | **a circle**, a door | A cheerful Thanksgiving turkey for something round: a fan of tail feathers, a wobbly wattle, a blink now and then. |
+| Owl | `owl` | **a circle**, a birdhouse | An owl face for something round: big amber eyes that blink, one at a time, as it tilts its head. |
+| Morning mist ⇆ | `mist` | a wide wall | A golden dawn behind two rows of dark trees, with mist drifting between them, across the frame. |
+| Squirrel ⇆ | `squirrel` | the bottom of a wall, a fence | Now and then a squirrel bounds along the bottom of the frame with an acorn, from one surface to the next. |
 
-### Christmas (4)
+### Christmas (29)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
 | Snow ⇆ | `snow` | a wall, a window, several surfaces | Soft flakes in three layers, blown by a wind you set. |
+| Big snowflakes ⇆ | `snowflakes` | a wall, a garage door | Big six-armed flakes drifting down, turning. |
+| Snowdrift | `snowdrift` | a window, the bottom of a door | Snow piles up along the bottom edge, then melts and starts again. |
+| Icicles | `icicles` | **the top of a window, a porch or a gutter** | Glinting icicles; now and then one drips. |
+| Frost | `frost` | a window | Feathery frost creeps in from the edges and breathes back. |
 | Twinkle lights ♪ | `twinkle` | **any shape**: a door, a wreath, a window | Bulbs round the outline in four colour sets; more light on the beat. |
+| Chasing lights ♪ | `chase` | **any shape** | Bulbs round the outline chase, alternate, or fill and empty; on the beat with music. |
+| Light curtain | `curtain` | a window, a wall | Strands of little lights hanging down, twinkling or falling like icicle lights. |
+| Tree of lights | `xtree` | a wall, **a triangle** | A tree drawn in rows of bulbs, with a star on top. |
+| Holly garland | `holly` | **a door or window frame** | Holly leaves and berries round the outline, little lights between. |
+| Wreath | `wreath` | **a circle on the door** | Green, with twinkling lights and a red bow. |
+| Ornaments | `ornaments` | a window, the top of a wall | Baubles hanging on strings, swaying, glinting. |
+| Jingle bells ♪ | `bells` | a door | Two golden bells under a bow, swinging and ringing; harder on the beat. |
 | Candy stripes | `candy` | a pillar, a door frame | Turning red and white stripes; colour, width and speed. |
+| Peppermint | `peppermint` | **a circle** | A turning red and white peppermint swirl. |
+| Plaid | `plaid` | a pillar, a box, a door | Red or green tartan, or buffalo check. |
+| Glitter ♪ | `glitter` | anything | Gold or silver glitter; more sparkle on the treble. |
+| Wrapped present | `present` | **a box**, a door | Patterned paper, a ribbon each way and a bow. |
+| Gingerbread house | `gingerbread` | a wall, a door | Gingerbread with icing scallops, gumdrops and a lattice. |
+| Stockings by the fire | `stockings` | a fireplace, a wall | Stockings hang from the top, lit by a fire along the bottom. |
+| Advent candles | `advent` | a shelf, a window sill | Four candles in greenery; set how many are lit. |
+| Santa ♪ | `santa` | **a circle** | Hat, beard and rosy cheeks. He winks, and laughs along with music. |
+| Snowman | `snowman` | **a circle** | Coal eyes that blink, a carrot nose, a smile of stones. |
+| Snow globe | `snowglobe` | **a circle** | A little house and tree under glass; shaken now and then. |
 | Northern lights ⇆ | `aurora` | a wall, a garage door | Green and violet curtains over a starry sky. |
+| Star of Bethlehem ⇆ | `star` | a wall | One bright star over hills and a little town. |
+| Sleigh across the moon ⇆ | `sleigh` | a garage door, a wall | Santa and four reindeer cross the moon, the leader's nose glowing. |
+| Winter village ⇆ | `village` | a wide wall | Snowy rooftops, lit windows, chimney smoke, falling snow. |
+| Christmas train ⇆ | `train` | the bottom of a wide wall | A little steam train with lit carriages chugs across. |
+
+### Celebrations (18)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Fireworks ⇆ ♪ | `fireworks` | a wall, a garage door, several surfaces | Rockets climb and burst into showers of coloured sparks across the whole frame, flashing on the beat. |
+| Waving flag | `flag` | **a rectangle**: a door, a banner | A flag fills the surface, rippling in the wind: the Stars and Stripes or a rainbow. |
+| Sparklers | `sparklers` | a wall, a window | Sparklers fizz and spit bright sparks in every direction, slowly burning down their sticks. |
+| Confetti ⇆ | `confetti` | a wall, several surfaces | Bright confetti flutters down across the whole frame, twisting and flashing as it turns. |
+| Balloons ⇆ | `balloons` | a wall, several surfaces | Shiny balloons on strings float up and away across the whole frame. |
+| Hearts ♪ | `hearts` | a door, a window | A big heart beats, lub-dub, or on the beat with music, as little hearts float up around it. |
+| Red lanterns | `lanterns` | a porch, the top of a wall | Round red paper lanterns with gold tassels hang and sway, glowing, for Lunar New Year. |
+| Diyas | `diyas` | a step, a window sill, a shelf | A row of little painted clay oil lamps, each with a flickering flame, for Diwali. |
+| Rangoli | `rangoli` | **a circle on the ground**, a doormat | A rangoli pattern of petals and dots in bright powder colours for something round, its rings slowly turning. |
+| Easter egg | `eggs` | **an oval**, a door | A big painted Easter egg in pastel bands of zigzags, dots and stripes, slowly turning. |
+| Shamrocks ⇆ | `shamrocks` | a wall, several surfaces | Green shamrocks tumble down across the frame with flecks of gold, for St Patrick's Day. |
+| Countdown | `countdown` | a wall, a door | Big glowing digits count down a second at a time, then burst into colour, and start again. For New Year. |
+| Menorah | `menorah` | a window, a wall | A golden menorah for Hanukkah: set the night, and the shamash and that many candles are lit, right to left. |
+| Kinara | `kinara` | a window, a wall | A kinara for Kwanzaa: three red candles, a black one in the middle, three green. Set the day, and that many are lit. |
+| Searchlights ⇆ | `searchlights` | a wide wall, a whole house front | Beams of light sweep the night sky from below, crossing and lighting up the clouds, like a premiere. |
+| Crescent and lanterns | `crescent` | a window, a wall | A golden crescent moon and star in a night sky, with glowing lanterns of coloured glass hanging and swaying, for Ramadan and Eid. |
+| Papel picado | `papel` | the top of a wall, a porch | Strings of bright cut-paper flags across the top, fluttering, for a fiesta or Day of the Dead. |
+| Sugar skull | `sugarskull` | **a circle** | A decorated sugar skull for something round, with flowers round its eyes, for Día de los Muertos. Its colours slowly shift. |
 
 ## Next
 
-- **More Christmas**: ornaments, a fireplace with stockings, a sleigh across
-  the moon (the witch's path).
-- **VJ**: tunnels, kaleidoscopic fields, neon outlines, gradients.
-- **More Halloween**: claws peeking round an edge, a web that spins itself,
-  tombstones in the fog, a skeleton that dances to the beat, a drop that falls
-  off the end of a drip.
+The library is about the size it should be. Add a look when there's a real
+object or occasion it's for, not a variation of one that's here (that's what
+settings are for). Ideas:
+
+- **Christmas**: Santa's legs kicking in a chimney, a reindeer on the roof, an
+  elf peeking round a door.
+- **Celebrations**: a birthday cake with candles for something round, a
+  graduation, a wedding.
+- **Tray**: past about 30 looks in a group, the tray will want subgroups or
+  tags.
 
 Lazy Lighting, the phone app to match, lists "45+ Halloween visuals". AtmosFX's
 filmed characters (ghost brides, haunted portraits) are better as videos than
