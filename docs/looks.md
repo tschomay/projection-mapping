@@ -114,7 +114,7 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Something wants out ♪ | `knock` | **a door** | Something pounds on the other side of a door: with each blow, red light flares out round its edges. On the beat with music. |
 | Giant eyeball | `eyeball` | **a circle** | A bloodshot eyeball for something round: it looks about, its pupil widening and narrowing, and blinks. |
 
-### Fall (8)
+### Fall (13)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
@@ -126,6 +126,11 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Geese flying south ⇆ | `geese` | a wall | A dusk sky with a V of geese crossing every 16 s. |
 | Wheat field ⇆ | `wheat` | a wide wall | A golden field with gusts of wind running through it. |
 | Fireplace | `fireplace` | a fireplace, a box | Low flames on glowing coals, sparks drifting up. |
+| Bonfire | `bonfire` | a wall, a fire pit surround | A big bonfire roaring up from the bottom edge, throwing off sparks. |
+| Turkey | `turkey` | **a circle**, a door | A cheerful Thanksgiving turkey for something round: a fan of tail feathers, a wobbly wattle, a blink now and then. |
+| Owl | `owl` | **a circle**, a birdhouse | An owl face for something round: big amber eyes that blink, one at a time, as it tilts its head. |
+| Morning mist ⇆ | `mist` | a wide wall | A golden dawn behind two rows of dark trees, with mist drifting between them, across the frame. |
+| Squirrel ⇆ | `squirrel` | the bottom of a wall, a fence | Now and then a squirrel bounds along the bottom of the frame with an acorn, from one surface to the next. |
 
 ### Christmas (29)
 

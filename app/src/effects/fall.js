@@ -145,4 +145,132 @@ vec3 fx_wheat(Surf2 s, float t) {
   return mix(field, sky, smoothstep(top - 0.003, top + 0.003, q.y));
 }` },
   fireLook({ id: 'fireplace', name: 'Fireplace', group: 'Fall', about: 'A low, cosy fire on a bed of glowing coals, with sparks drifting up.', height: 0.6, speed: 1.1, embers: true, coals: true }),
+  fireLook({ id: 'bonfire', name: 'Bonfire', group: 'Fall', about: 'A big bonfire roaring up from the bottom edge, throwing off sparks.', height: 0.95, speed: 1.4, embers: true }),
+  { id: 'turkey', name: 'Turkey', group: 'Fall', about: 'A cheerful Thanksgiving turkey for something round: a fan of tail feathers, a wobbly wattle, a blink now and then.', code: `
+vec3 fx_turkey(Surf2 s, float t) {
+  vec2 p = k_centred(s) * 1.05;
+  vec3 col = vec3(0.0);
+  // the tail: a fan of rounded feathers, banded brown, orange, red and gold, ruffling a little
+  vec2 c = p - vec2(0.0, -0.14);
+  float r = length(c), a = atan(c.y, c.x) + 0.02 * sin(t * 1.3);
+  float n = 13.0, f = a / 3.1416 * n, fk = fract(f);
+  float tip = 0.4 + 0.035 * sin(fk * 3.1416);
+  float fan = step(0.0, c.y + 0.05) * step(r, tip);
+  vec3 band = r < 0.2 ? vec3(0.4, 0.22, 0.08) : r < 0.28 ? vec3(0.95, 0.5, 0.08) : r < 0.35 ? vec3(0.85, 0.12, 0.05) : vec3(1.0, 0.75, 0.2);
+  col = band * fan * (0.55 + 0.45 * sin(fk * 3.1416)) * (0.85 + 0.15 * hash1(vec3(floor(f), 1.0, 2.0)));
+  // the body and the head on its neck
+  float body = k_oval(p - vec2(0.0, -0.17), vec2(0.17, 0.19));
+  col = mix(col, vec3(0.45, 0.25, 0.1) * (0.6 + 0.4 * smoothstep(0.1, -0.1, p.x)) * (0.85 + 0.15 * sin(p.y * 90.0)), k_fill(body, 0.004));
+  float bob = 0.012 * sin(t * 2.5);
+  vec2 hp = vec2(0.0, 0.08 + bob);
+  float head = min(k_circle(p - hp, 0.075), k_seg(p, vec2(0.0, -0.05), hp) - 0.045);
+  col = mix(col, vec3(0.55, 0.35, 0.25), k_fill(head, 0.004));
+  vec2 e = vec2(abs(p.x - hp.x) - 0.03, p.y - hp.y - 0.02);
+  vec2 bl = k_now_and_then(t, 4.0, 0.7, s.id);
+  float open = bl.x >= 0.0 && bl.x < 0.2 ? 0.15 : 1.0;
+  col = mix(col, vec3(0.95), k_fill(k_oval(e, vec2(0.02, 0.022 * open)), 0.002));
+  col = mix(col, vec3(0.02), k_fill(k_oval(e - vec2(0.004, 0.0), vec2(0.01, 0.012 * open)), 0.002));
+  col = mix(col, vec3(1.0, 0.75, 0.15), k_fill(k_tri(p, hp + vec2(-0.025, -0.01), hp + vec2(0.025, -0.01), hp + vec2(0.0, -0.06)), 0.002));
+  // the wattle, swinging
+  vec2 wp = (p - hp - vec2(0.03, -0.03)) * k_rot(0.3 * sin(t * 3.0));
+  col = mix(col, vec3(0.9, 0.1, 0.1), k_fill(min(k_seg(wp, vec2(0.0), vec2(0.0, -0.07)) - 0.014, k_circle(wp - vec2(0.0, -0.08), 0.022)), 0.003));
+  // feet
+  for (int i = 0; i < 2; i++) {
+    float x = float(i) * 0.12 - 0.06;
+    col = mix(col, vec3(1.0, 0.55, 0.1), k_fill(min(k_seg(p, vec2(x, -0.34), vec2(x, -0.42)), k_seg(p, vec2(x - 0.04, -0.43), vec2(x + 0.04, -0.43))) - 0.01, 0.003));
+  }
+  return col;
+}` },
+  { id: 'owl', name: 'Owl', group: 'Fall', about: 'An owl face for something round: big amber eyes that blink, one at a time, as it tilts its head.', code: `
+vec3 owl_eyes = vec3(1.0, 0.6, 0.05); // param: Eye colour
+vec3 fx_owl(Surf2 s, float t) {
+  vec2 p = k_centred(s) * 1.05 * k_rot(0.15 * sin(t * 0.4) * step(0.5, fract(t / 9.0)));
+  // brown feathers, streaked; a pale disc round each eye with fine lines running out from it
+  vec3 col = vec3(0.42, 0.28, 0.16) * (0.7 + 0.3 * noise(vec3(p.x * 50.0, p.y * 12.0, 1.0)));
+  vec2 m = vec2(abs(p.x), p.y);
+  vec2 ec = vec2(0.15, 0.05);
+  float dr = length(m - ec);
+  vec3 disc = vec3(0.85, 0.72, 0.52) * (0.8 + 0.2 * sin(atan(m.y - ec.y, m.x - ec.x) * 40.0));
+  col = mix(col, disc, k_fill(dr - 0.17 - 0.01 * sin(atan(m.y - ec.y, m.x - ec.x) * 9.0), 0.01));
+  // a chest of pale feathers with dark chevrons
+  vec2 ch = vec2(abs(fract(p.x * 10.0) - 0.5), fract(p.y * 9.0 + abs(fract(p.x * 10.0) - 0.5)));
+  col = mix(col, vec3(0.8, 0.7, 0.55) * (1.0 - 0.6 * step(0.8, ch.y)), k_fill(k_oval(p - vec2(0.0, -0.48), vec2(0.3, 0.27)), 0.02));
+  // brows and ear tufts
+  col = mix(col, vec3(0.2, 0.12, 0.06), k_fill(k_seg(m, vec2(0.02, 0.18), vec2(0.27, 0.25)) - 0.02, 0.006));
+  col = mix(col, vec3(0.3, 0.18, 0.08), k_fill(k_tri(m, vec2(0.22, 0.3), vec2(0.34, 0.26), vec2(0.36, 0.48)), 0.006));
+  // the eyes: amber, black pupils that widen and narrow, a glint; lids that close one at a time
+  float side = p.x < 0.0 ? 0.0 : 1.0;
+  vec2 bl = k_now_and_then(t, 3.0, 0.6, s.id + side * 7.0);
+  float shut = bl.x >= 0.0 && bl.x < 0.35 ? sin(bl.x / 0.35 * 3.1416) : 0.0;
+  vec2 ep = m - ec;
+  float iris = length(ep) - 0.095;
+  col = mix(col, owl_eyes * (0.6 + 0.4 * smoothstep(0.09, 0.03, length(ep))), k_fill(iris, 0.004));
+  col = mix(col, vec3(0.0), k_fill(length(ep) - 0.045 - 0.012 * sin(t * 0.5), 0.004));
+  col += vec3(1.0) * 0.8 * k_fill(length(ep - vec2(-0.03 * sign(p.x + 0.0001), 0.035)) - 0.014, 0.004);
+  float lid = ep.y - 0.1 + 0.2 * shut;
+  col = mix(col, vec3(0.35, 0.22, 0.12), step(0.0, lid) * k_fill(iris - 0.01, 0.004));
+  // the beak
+  col = mix(col, vec3(0.5, 0.45, 0.35) * (0.7 + 0.3 * smoothstep(0.02, -0.02, p.x)), k_fill(k_tri(p, vec2(-0.035, 0.0), vec2(0.035, 0.0), vec2(0.0, -0.11)), 0.004));
+  return col;
+}` },
+  { id: 'mist', name: 'Morning mist', group: 'Fall', about: 'A golden dawn behind two rows of dark trees, with mist drifting between them, across the frame.', code: `
+vec3 mist_light = vec3(1.0, 0.72, 0.4); // param: Light
+float mist_speed = 1.0; // param: Mist speed, 0.2..3
+vec3 fx_mist(Surf2 s, float t) {
+  vec2 q = k_frame(s);
+  float aspect = uRes.x / uRes.y;
+  vec2 sun = vec2(aspect * 0.3, 0.38);
+  vec3 col = mix(mist_light, vec3(0.45, 0.6, 0.8), smoothstep(0.25, 0.9, q.y));
+  col += mist_light * 0.6 * exp(-length(q - sun) * 6.0) + vec3(1.0) * k_fill(length(q - sun) - 0.04, 0.004);
+  // far trees: a row of pointed tops, hazy
+  for (int l = 0; l < 2; l++) {
+    float fl = float(l), cell = 0.03 + 0.02 * fl;
+    float c = floor(q.x / cell), h = hash1(vec3(c, fl, 5.0));
+    float x = fract(q.x / cell) - 0.5;
+    float top = 0.3 - 0.13 * fl + (0.04 + 0.04 * fl) * h - abs(x) * cell * 3.0 * (1.0 + h);
+    float tree = step(q.y, max(top, 0.24 - 0.13 * fl));
+    vec3 tc = mix(vec3(0.25, 0.25, 0.3), vec3(0.03, 0.04, 0.05), fl) + mist_light * (0.15 - 0.12 * fl) * exp(-length(q - sun) * 3.0);
+    col = mix(col, tc, tree);
+    // mist in front of this row
+    float m = fbm(vec3(q * vec2(2.0, 7.0) - vec2(t * 0.02 * mist_speed * (1.0 + fl), 0.0), fl * 3.0));
+    float band = exp(-pow((q.y - 0.22 + 0.12 * fl) / 0.06, 2.0));
+    col += mix(vec3(0.7, 0.72, 0.8), mist_light, exp(-abs(q.x - sun.x) * 2.0)) * smoothstep(0.3, 0.75, m) * band * 0.7;
+  }
+  return col;
+}` },
+  { id: 'squirrel', name: 'Squirrel', group: 'Fall', about: 'Now and then a squirrel bounds along the bottom of the frame with an acorn, from one surface to the next.', code: `
+float squirrel_every = 12.0; // param: Seconds between runs, 5..40
+float squirrel_shape(vec2 p, float run) {
+  // a squirrel bounding right, about 0.9 long with its tail: body, head, ear, legs and a big curled tail
+  float body = k_oval((p - vec2(0.0, 0.13)) * k_rot(-0.25 * sin(run)), vec2(0.17, 0.085));
+  float head = k_circle(p - vec2(0.19, 0.2 + 0.02 * sin(run)), 0.065);
+  float ear = k_tri(p, vec2(0.16, 0.25), vec2(0.2, 0.25), vec2(0.17, 0.31));
+  float legs = min(k_seg(p, vec2(0.11, 0.1), vec2(0.17 + 0.07 * sin(run), 0.01)), k_seg(p, vec2(-0.1, 0.1), vec2(-0.13 - 0.07 * sin(run), 0.01))) - 0.028;
+  float tail = 1e3;
+  for (int k = 0; k < 5; k++) {
+    float fk = float(k) / 4.0, a = 2.4 - 2.6 * fk + 0.25 * sin(run - fk * 2.0);
+    tail = min(tail, k_circle(p - vec2(-0.2, 0.32) - 0.17 * vec2(cos(a), sin(a)) * (0.6 + 0.4 * fk), 0.05 + 0.04 * fk));
+  }
+  return min(min(min(body, head), min(ear, legs)), tail);
+}
+vec3 fx_squirrel(Surf2 s, float t) {
+  vec2 q = k_frame(s);
+  float aspect = uRes.x / uRes.y;
+  float n = floor(t / squirrel_every), since = t - n * squirrel_every;
+  float x = -0.4 + since * 0.5;
+  if (x > aspect + 0.4) return vec3(0.0);
+  float dir = hash1(vec3(n, 2.0, 7.0)) < 0.5 ? 1.0 : -1.0;
+  if (dir < 0.0) x = aspect - x;
+  float run = since * 14.0;
+  vec2 p = (q - vec2(x, 0.02 + 0.06 * abs(sin(run * 0.5)))) / 0.36;
+  p.x *= dir;
+  float d = squirrel_shape(p, run);
+  float fluff = 0.85 + 0.15 * noise(vec3(p * 40.0, 1.0));
+  vec3 fur = mix(vec3(0.6, 0.35, 0.18), vec3(0.9, 0.75, 0.55), smoothstep(0.12, 0.05, p.y) * step(-0.15, p.x)) * fluff;
+  vec3 col = fur * k_fill(d, 0.01) * (0.6 + 0.4 * smoothstep(-0.1, 0.3, p.y));
+  col = mix(col, vec3(0.02), k_fill(length(p - vec2(0.21, 0.22)) - 0.012, 0.005));
+  col = mix(col, vec3(0.55, 0.35, 0.15), k_fill(k_oval(p - vec2(0.27, 0.15), vec2(0.03, 0.035)), 0.005));
+  col = mix(col, vec3(0.3, 0.2, 0.1), k_fill(k_oval(p - vec2(0.27, 0.18), vec2(0.035, 0.015)), 0.005));
+  return col;
+}` },
 ];
