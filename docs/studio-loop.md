@@ -59,6 +59,15 @@ you rebuild the project in the studio or carry it there and back.
   be its own small artifact (just `ai.js`, `renderer.js` and the effects kit). It
   would no longer have to be republished after every merge, only when the effect
   contract changes.
+- **Refine before sending:** under the preview, a box for "warmer colours",
+  "slower", "only pulse on the beat" and so on. Each note is another `sample`
+  turn on the same conversation (the earlier reply plus the note), compiled and
+  previewed again. A small history of versions lets you step back to one you
+  liked. The studio could also show the GLSL for hand edits, recompiling as you
+  type. Only the version on screen goes back to the app. The original request
+  and the notes travel with it, so the app can show how the effect was made.
+  `sample` is memoryless, so the studio resends the turns itself, just as the
+  repair round in `generateEffect` already does.
 - **App:** `generateEffect` gets a fourth backend, "hand off to the studio".
   The context the app sends is `describeSurfaces(...)`, which it already builds.
   It needs `share.js`-style encoding for `#gen=` and `#fx=` and a
