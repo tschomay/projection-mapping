@@ -3,7 +3,8 @@
 // Methods mixed into App (see app.js), so `this` is the app.
 import { MAX_MEDIA } from '../renderer.js';
 import { EFFECTS } from '../effects.js';
-import { generateEffect, describeSurfaces, getKey, setKey, keyKind, claudePlan, namespaced } from '../ai.js';
+import { generateEffect, describeSurfaces, getKey, setKey, keyKind, claudePlan, namespaced, effectName } from '../ai.js';
+import { writerPacket, readEffectLink, WRITER_URL } from '../share.js';
 import { toISF, fromISF, isfFilename } from '../isf.js';
 import { $ } from '../env.js';
 
@@ -46,7 +47,8 @@ export const contentUI = {
   initAI() {
     const status = $('aiStatus');
     this.aiPlan = null;   // the viewer's Claude plan, when running as a Claude artifact
-    this.aiReady = () => !!(this.aiPlan || getKey());
+    // Outside an artifact and without a key, Claude writes it in the writer (share.js): always ready
+    this.aiReady = () => !!(this.aiPlan || getKey() || !window.claude);
     const showKey = () => {
       const k = getKey(), plan = !!this.aiPlan;
       $('aiKeyRow').hidden = plan || !!k; $('aiKeyForget').hidden = plan || !k; $('aiKeyNote').hidden = plan; $('aiPlanNote').hidden = !plan;
@@ -59,10 +61,67 @@ export const contentUI = {
       setKey(k); $('aiKey').value = ''; showKey(); status.textContent = 'Key saved on this device.';
     };
     $('aiKeyForget').onclick = () => { setKey(''); showKey(); status.textContent = 'Key removed from this device.'; };
-    $('aiGo').onclick = () => this.runAI();
+    $('aiGo').onclick = () => (this.aiPlan || getKey() ? this.runAI() : this.handToWriter());
     $('aiCancel').onclick = () => this.aiAbort?.abort();
     showKey();
     claudePlan().then((sample) => { if (sample) { this.aiPlan = sample; showKey(); } });
+    this.takeEffectLink();
+  },
+
+  // Claude on the viewer's own plan, in the writer: copy the request (a claude.ai link can't carry it), open the
+  // writer, and the viewer pastes it there. Copied and opened in the same tap, while the browser allows both.
+  handToWriter() {
+    const request = $('aiPrompt').value.trim(), status = $('aiStatus');
+    if (!request) { status.textContent = 'Describe the look first, for example "slow blue waves that flash on the beat".'; return; }
+    if (!this.project.surfaces.length) { status.textContent = 'Add a surface first.'; return; }
+    const sel = this.project.surfaces[this.editor.sel];
+    const text = writerPacket({
+      request, context: describeSurfaces(this.project.surfaces, this.geoms, this.frame), frame: this.frame,
+      surfaces: this.project.surfaces, target: sel ? [sel.id] : null, back: location.origin + location.pathname,
+    });
+    this.save();   // the effect comes back to another copy of this page, which opens the saved project
+    const copied = navigator.clipboard?.writeText(text) || Promise.reject(new Error('no clipboard'));
+    window.open(WRITER_URL, '_blank', 'noopener');
+    $('aiPacket').hidden = true;
+    copied.then(() => {
+      status.textContent = 'Copied. In Claude, long-press the box and Paste. When the look is right, tap Add to Surface Mapper.';
+    }, () => {
+      $('aiPacket').hidden = false; $('aiPacket').value = text; $('aiPacket').select();
+      status.textContent = "Couldn't copy by itself. Copy all of the text below, then paste it in Claude.";
+    });
+  },
+
+  // an effect arriving from the writer in #fx=: added to the open project, which is saved at once (another tab of
+  // the app takes the saved copy when it's next shown, see catchUp)
+  async takeEffectLink() {
+    if (!location.hash.startsWith('#fx=')) return;
+    const hash = location.hash;
+    history.replaceState(null, '', location.pathname + location.search);
+    let fx;
+    try { fx = await readEffectLink(hash); } catch (err) { this.toast(err.message, 5000); return; }
+    await this.opening;
+    if (this.addEffect(fx)) this.save();
+  },
+
+  // add a written effect to the project and show it: on the surfaces it was written for, else the selected
+  // surface, or all of them
+  // id: when it's already been compiled here under that id. Returns whether it was added.
+  addEffect({ name, prompt, code, target }, { id = null, quiet = false } = {}) {
+    if (!id) {
+      id = 'u' + Math.random().toString(36).slice(2, 8);
+      const log = this.renderer.tryEffect(id, namespaced(id, code));
+      if (log) { this.toast(`"${name}" doesn't compile here: ${log.split('\n').find((l) => l.trim()) || log}`, 6000); return false; }
+    }
+    (this.project.effects ||= []).push({ id, name, prompt, code });
+    const surfaces = this.project.surfaces, picked = (target || []).map((t) => surfaces.find((s) => s.id === t)).filter(Boolean);
+    const targets = picked.length ? picked : this.editor.sel >= 0 ? [surfaces[this.editor.sel]] : surfaces;
+    const before = targets.map((s) => s.content);
+    for (const s of targets) s.content = { kind: 'effect', effect: id };
+    this.changed(); this.renderEffectList();
+    const where = targets.length === surfaces.length ? 'every surface' : targets.length === 1 ? `surface ${surfaces.indexOf(targets[0]) + 1}` : `${targets.length} surfaces`;
+    if (!quiet) this.toast(`"${name}" is on ${where}. It's in Looks, under Yours.`, 5000);
+    this.watchFrameRate(() => { targets.forEach((s, i) => { s.content = before[i]; }); this.changed(); }, name);
+    return true;
   },
 
   async runAI() {
@@ -79,15 +138,9 @@ export const contentUI = {
         compile: (code) => this.renderer.tryEffect(id, namespaced(id, code)),
         progress: (t) => { status.textContent = t; },
       });
-      const name = request.length > 28 ? request.slice(0, 27).trim() + '…' : request;
-      (this.project.effects ||= []).push({ id, name, prompt: request, code: res.code });
-      // show it on the selected surface, or on all of them
-      const targets = this.editor.sel >= 0 ? [this.project.surfaces[this.editor.sel]] : this.project.surfaces;
-      const before = targets.map((s) => s.content);
-      for (const s of targets) s.content = { kind: 'effect', effect: id };
-      this.changed(); this.renderEffectList();
+      const sel = this.project.surfaces[this.editor.sel];
+      this.addEffect({ name: effectName(request), prompt: request, code: res.code, target: sel ? [sel.id] : null }, { id, quiet: true });
       status.textContent = (res.note || 'Done.') + (res.repaired ? ' (Fixed a compile error on the way.)' : '');
-      this.watchFrameRate(() => { targets.forEach((s, i) => { s.content = before[i]; }); this.changed(); }, name);
     } catch (err) {
       status.textContent = err.message;
     } finally {

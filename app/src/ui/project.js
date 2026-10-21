@@ -30,6 +30,7 @@ export const projectUI = {
       send.onclick = (e) => { e.preventDefault(); this.sendLink(); };
     }
     this.importLink();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.catchUp(); });
     $('importProj').onchange = async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
@@ -111,6 +112,17 @@ export const projectUI = {
     } catch (err) {
       this.toast(err.message || "That link couldn't be read.", 5000);
     }
+  },
+
+  // another tab of the app saved this project while this one was out of sight (an effect from the writer arrives
+  // in a new tab): take that copy, so this tab doesn't save over it later
+  catchUp() {
+    const entry = store.listProjects().list.find((p) => p.id === this.project.id);
+    if (!entry || !(entry.updated > this.savedAt)) return;
+    const p = store.loadProject(this.project.id);
+    if (!p) return;
+    this.openProject(p);
+    this.toast('Brought up to date with changes from another tab.', 4000);
   },
 
   renderProjectList() {

@@ -1,10 +1,11 @@
 // AI-written effects (roadmap #9): describe a look, and an AI model writes a new effect for the mapped surfaces.
 // Three ways to reach a model, tried in this order:
-// - Running as a Claude artifact: the viewer's own Claude plan, through the artifact runtime's `sample`
-//   capability. No key; Claude asks the viewer once before the first request.
+// - Running as a Claude artifact (the writer, writer.js, or the studio): the viewer's own Claude plan, through the
+//   artifact runtime's `sample` capability. No key; Claude asks the viewer once before the first request.
 // - A Gemini API key (AIza…): Google's Interactions API, called straight from the browser.
 // - An Anthropic API key (sk-ant-…): the Claude API through the official SDK, loaded from a CDN when first needed.
-// Keys stay on this device only (never in project files), and the rest of the app still works offline.
+// Keys stay on this device only (never in project files), and the rest of the app still works offline. Without a
+// key, the app hands the request to the writer instead (ui/content.js).
 import { kitSummary } from './effects/kit.js';
 
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.127.0/+esm';
@@ -196,16 +197,23 @@ export function geminiText(body) {
     .filter((c) => c.type === 'text' && c.text).map((c) => c.text).join('\n');
 }
 
+// a change to an effect already written: the current code and what to change, in the same single turn
+// (the plan's sample() remembers nothing, and the code may have been edited by hand since)
+function reviseText({ code, note }) {
+  return `\n\nThe current version:\n\`\`\`glsl\n${code}\n\`\`\`\nChange it: ${note}\nReply with one short sentence saying what changed, then the whole function in a single \`\`\`glsl block.`;
+}
+
 // Ask for an effect; compile(code) returns null or the compiler log. One repair round on a compile error.
+// revise: { code, note } to change an effect rather than write a new one.
 // Uses the Claude plan when given one (sample), else the saved key. Returns { code, note, repaired }.
-export async function generateEffect({ sample = null, apiKey, request, context, compile, signal, progress = () => {} }) {
+export async function generateEffect({ sample = null, apiKey, request, context, revise = null, compile, signal, progress = () => {} }) {
   const kind = sample ? 'plan' : keyKind(apiKey || '');
   if (!kind) throw new Error('Add a Gemini or Anthropic API key first.');
   let backend = null;
   try {
     backend = kind === 'plan' ? planBackend(sample) : kind === 'gemini' ? geminiBackend(apiKey) : await anthropicBackend(apiKey);
-    const turns = [{ role: 'user', content: `${context}\n\nThe look I want: ${request}` }];
-    progress('Writing the effect…');
+    const turns = [{ role: 'user', content: `${context}\n\nThe look I want: ${request}` + (revise ? reviseText(revise) : '') }];
+    progress(revise ? 'Changing the effect…' : 'Writing the effect…');
     let reply = await backend.ask(turns, signal);
     let code = extractCode(reply.text);
     if (!code) throw new Error(`${backend.name}'s reply didn't contain an effect. Try again.`);
@@ -226,6 +234,9 @@ export async function generateEffect({ sample = null, apiKey, request, context, 
     throw msg ? new Error(msg) : err;
   }
 }
+
+// what a written effect is called: its request, cut short
+export const effectName = (request) => (request.length > 28 ? request.slice(0, 27).trim() + '…' : request);
 
 // a custom effect's code, made unique: fx_custom -> fx_<id>, c_helpers -> c<id>_helpers
 export function namespaced(id, code) {

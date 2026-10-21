@@ -1,6 +1,9 @@
 # Feasibility: the studio as a writing service for the app
 
-Status: idea, not built. Written as a hand-off for whoever builds it.
+Status: built. The writer is `app/writer.html` and `src/writer.js`, published by
+`tools/writer.mjs` (see `app/README.md` → *Deploying*). The way in is the
+clipboard, as the probe results below found. This note records how it was
+decided.
 
 ## The idea
 

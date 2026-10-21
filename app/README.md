@@ -195,6 +195,20 @@ its own preview URL to open on the phone.
 for example a tunnel or a Vercel preview, because the phone can't treat a LAN
 IP as secure.
 
+**The writer (a Claude artifact):** *Describe a look* without an API key hands
+the request to the writer, a small Claude artifact (`WRITER_URL` in
+`src/share.js`) where Claude writes the effect on the viewer's own plan. A
+claude.ai link can't carry anything into the page, so *Write it with Claude*
+copies the request (the look, the surfaces, which one is selected and the way
+back) and opens the writer, where the viewer pastes it. The writer shows the
+effect on their real surfaces (with pretend music for looks that react to it),
+takes changes ("slower", "warmer") and hand edits to the code as numbered
+versions, and *Add to Surface Mapper* opens the app with `#fx=`, which adds the
+shown version to the open project. Another tab of the app picks up the saved
+copy when it's shown again. To publish it, `node tools/writer.mjs <dir>` writes
+`index.html`, the modules it imports and a `files.json` map. Publish
+`<dir>/index.html` with those files and the capability `sample`.
+
 **As a Claude artifact (the studio):** `node tools/artifact.mjs <dir>` writes
 a copy of the page without the install bits, plus the modules, and a
 `files.json` map. Publish `<dir>/index.html` with those files and the
@@ -229,7 +243,8 @@ picking on a photo works from edges and colours alone there (the model's host is
 | `src/outline.js` | A mask as a surface: traced, simplified, given pins; and the colour fill used without the model |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
 | `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
-| `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper* |
+| `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper*; the request copied for the writer, and the effect it sends back in `#fx=` |
+| `writer.html`, `src/writer.js` | The writer, published as a Claude artifact: a pasted request written on the viewer's Claude plan, previewed on their surfaces, changed by asking or by hand, and sent back |
 | `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |
 | `src/diagnostics.js` | *Check this device*: what the phone supports, and a camera test |
 | `src/link.js` | Links to a second screen (Presentation API), including sending media files |
