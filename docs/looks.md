@@ -2,7 +2,7 @@
 
 The built-in looks in Surface Mapper's *Looks* tray, what's planned next, and
 how to add one. The code is in `app/src/effects.js` (Basics, Music, Ambient)
-and `app/src/effects/<group>.js` (seasonal sets). Issue #42 added the settings
+and `app/src/effects/<group>.js` (the Music set and the seasonal sets). Issue #42 added the settings
 and the bigger library.
 
 ## What's there
@@ -15,6 +15,38 @@ Most looks have **settings**: a colour, a speed, how many, or parts to switch
 off (the haunted window's walker, hand and blackout). They're in the *Looks*
 tray, above the search, for the selected surface, or with *All* for every
 surface showing that look. Each surface keeps its own, and cues capture them.
+
+### Music (27)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Beat sequence ♪ | `sequence` | several surfaces | Surfaces flash one after another, on the beat when music plays. |
+| Pulse to music ♪ | `pulse` | anything | Bass fills the surface from its centre; treble sparkles along the edge. |
+| Tiles ♪ | `tiles` | a wall, a door | Tiles sized to each surface switch on and off, flipping on the beat. |
+| Tunnel ♪ | `tunnel` | a wall, a doorway | Rings rush towards you down an endless tunnel, flashing on the beat. |
+| Kaleidoscope ♪ | `kaleido` | a wall, **a circle** | Flowing colours folded through mirrors into a turning kaleidoscope, brighter on the beat. |
+| Neon ♪ | `neon` | **any shape**: a door, a window, a sign | Two neon tubes follow the outline, humming, flickering now and then, glowing brighter on the beat. |
+| Colour wash ⇆ ♪ | `gradient` | several surfaces, a wall | Slow, smooth bands of colour drift across the whole frame, from one surface to the next. |
+| Strobe ♪ | `strobe` | anything; best as a cue | A short flash on every beat, or a few times a second without music. Kept to three flashes a second or fewer. |
+| Equaliser ♪ | `bars` | a wide wall, a box | LED bars jump with the music: bass on the left, treble on the right. |
+| Ripples ♪ | `rings` | a wall, **a circle** | A ring of light leaves the middle on every beat and spreads out, fading. |
+| Lasers ⇆ ♪ | `lasers` | a wall, a whole house front | Laser beams fan out from the bottom corners and sweep across the frame through a haze. |
+| Glitch ♪ | `glitch` | a box, a TV-sized thing | A test card breaks up: slices slide, the colours split apart and blocks flash, more on the beat. |
+| Hyperspace ♪ | `hyperspace` | a wall, a doorway | Stars stream out from the middle as streaks, as if jumping to light speed. Brighter on the beat. |
+| Moiré ♪ | `moire` | a wall | Two sets of fine rings drift over each other, and big slow shapes swim where they cross. |
+| Cells ⇆ ♪ | `cells` | a wall, several surfaces | Wobbling cells with glowing walls across the whole frame; a few light up on every beat. |
+| Oscilloscope ♪ | `scope` | a box, a screen-shaped thing | A glowing green trace over a grid, its waves made from the bass, mids and treble. |
+| Mirror ball ⇆ ♪ | `disco` | a wall, a ceiling, a whole room | A mirror ball's spots of light wheel slowly across the whole frame, twinkling, flashing on the beat. |
+| Triangles ⇆ ♪ | `tris` | a wall, several surfaces | A grid of triangles across the frame, flipping on and off with the beat. |
+| Synthwave ⇆ ♪ | `synthwave` | a wide wall, a garage door | A striped sunset sun over a neon grid racing towards you, across the whole frame. The grid pulses on the beat. |
+| Fractal ♪ | `julia` | a wall | A Julia set fractal slowly changes shape, its colours flowing. |
+| Spiral ♪ | `spiral` | a wall, **a circle** | A hypnotic spiral turning in or out, pulsing on the beat. |
+| Hexagons ⇆ ♪ | `hexes` | a wall, several surfaces | A honeycomb across the frame; a wave of light runs out through it from the middle on every beat. |
+| Halftone ⇆ ♪ | `halftone` | a wall, several surfaces | A grid of dots across the frame that swell and shrink in slow waves, bigger on the beat. |
+| Sunburst ♪ | `sunburst` | a wall, **a circle** | Rays of two colours turning round the middle, pulsing on the beat. |
+| Beat wave ⇆ ♪ | `beatwave` | several surfaces side by side | Each beat sends a band of light across the frame from left to right, through one surface after another. |
+| Digital rain ♪ | `matrix` | a wall, a door | Columns of glowing green characters stream down, each with a bright head. |
+| Op art | `opart` | a wall, a pillar | Black and white stripes bent by a slowly wandering bulge, so the surface seems to swell. |
 
 ### Halloween (20)
 
@@ -90,7 +122,6 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 
 ## Next
 
-- **VJ**: tunnels, kaleidoscopic fields, neon outlines, gradients.
 - **More Halloween**: claws peeking round an edge, a web that spins itself,
   tombstones in the fog, a skeleton that dances to the beat, a drop that falls
   off the end of a drip.
