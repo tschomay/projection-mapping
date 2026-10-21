@@ -11,6 +11,29 @@ import { newSurface, insideSurface } from '../geometry.js';
 import { $ } from '../env.js';
 
 const ANALYSIS_W = 1024;   // the photo is searched for rectangles at most this wide
+// The design photo is only shown behind the frame and searched at ANALYSIS_W, so a phone's 12 MP photo (48 MB once
+// decoded) is scaled down to this on its longer side when it's chosen: about 12 MB, still sharp zoomed in.
+export const PHOTO_MAX = 2048;
+
+// file, or a JPEG of it no bigger than PHOTO_MAX (its orientation applied, as the photo shows it)
+export async function shrinkPhoto(file) {
+  if (!file.type.startsWith('image/')) return file;
+  const url = URL.createObjectURL(file), img = new Image();
+  try {
+    img.src = url;
+    await img.decode();
+    const w0 = img.naturalWidth, h0 = img.naturalHeight, k = PHOTO_MAX / Math.max(w0, h0);
+    if (k >= 1) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(w0 * k); c.height = Math.round(h0 * k);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+    c.width = c.height = 0;
+    return blob ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; } finally { URL.revokeObjectURL(url); }
+}
 
 export const photoUI = {
   initPhotoUI() {
@@ -47,7 +70,7 @@ export const photoUI = {
 
   // put a design photo in place of the current one
   async setBackdropFile(file, quad) {
-    const m = await this.media.add(file);
+    const m = await this.media.add(await shrinkPhoto(file));
     if (m.kind !== 'image') { this.media.remove(m.id); throw new Error('Pick a photo (an image file).'); }
     const old = this.project.backdrop;
     this.project.backdrop = { mediaId: m.id, show: true, dim: old?.dim ?? 0.6 };
@@ -55,6 +78,19 @@ export const photoUI = {
     if (old && old.mediaId !== m.id && !this.isUsed(old.mediaId)) this.media.remove(old.mediaId);
     this.photoAnalysis = null;
     this.scheduleSave(); this.renderBackdrop(); this.renderMediaUI(); this.renderSurfaceUI();
+  },
+
+  // a project saved before photos were scaled down keeps a full-size one: scale it down once, saved in its place
+  async shrinkSavedBackdrop() {
+    const b = this.project.backdrop, m = b && this.media.get(b.mediaId);
+    if (!m || m.kind !== 'image' || !m.file) return;
+    await m.el.decode().catch(() => {});
+    if (Math.max(m.el.naturalWidth, m.el.naturalHeight) <= PHOTO_MAX) return;
+    const small = await shrinkPhoto(m.file);
+    if (small === m.file || this.project.backdrop?.mediaId !== m.id) return;
+    await this.media.swapFile(m.id, small);
+    this.photoAnalysis = null;
+    this.renderBackdrop(); this.scheduleSave();
   },
 
   // ---------- taking the photo from beside the projector's lens ----------
