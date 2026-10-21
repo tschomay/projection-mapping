@@ -57,11 +57,11 @@ tap in Show mode steps to the next one.
 surfaces ("green slime dripping down from the top edge", "a jack-o'-lantern
 face that flickers"). Two ways to pay for it:
 
-- **Your Claude plan, no key:** open the [Surface Mapper studio](https://claude.ai/artifact/QDTC5ZPeQj6U5AHwMxJieL)
-  in Claude, describe the look there, and tap *Project → Open in Surface
-  Mapper* when you're happy. The project (surfaces, effects, cues) opens in
-  the app on the same phone. The studio can't use the camera or go full
-  screen, so the show itself runs in the app.
+- **Your Claude plan, no key:** describe the look and tap *Write it with
+  Claude*. It copies your request and opens the
+  [writer](https://claude.ai/artifact/SNkGsUMc1BAPdug3UZzL2K) in Claude.
+  Long-press its box and paste. Watch the effect on your surfaces, ask for
+  changes, then tap *Add to Surface Mapper*.
 - **A Gemini API key:** paste a key from
   [Google AI Studio](https://aistudio.google.com/apikey) under *Describe a
   look*. An effect uses roughly 1,500 tokens in and 2,000 to 8,000 out

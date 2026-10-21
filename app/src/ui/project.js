@@ -48,7 +48,7 @@ export const projectUI = {
     for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
     $('closeConnect').onclick = () => sheet.close();
     sheet.addEventListener('close', () => store.setFlag('connectSeen'));
-    // (not in the Claude artifact studio, which is for designing; the show itself runs in the installed app)
+    // (not inside a Claude artifact, where the show can't run)
     if (!store.getFlag('connectSeen') && sheet.showModal && !window.claude) sheet.showModal();
   },
 

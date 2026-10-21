@@ -75,7 +75,7 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    own settings* resets them. See
    [`docs/looks.md`](../docs/looks.md) for the list, what each is best on, and how to add one. *＋ Video or image* adds one
    from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:
-   on your Claude plan in the studio artifact, or with your own Gemini or
+   on your Claude plan in the writer (a Claude artifact, see *Deploying*), or with your own Gemini or
    Anthropic API key here (stored only on the device). Media follows the surface's perspective. *One image across all*
    runs one video continuously across several surfaces. *Arrange content* picks which rectangle of that
    frame-wide content each surface shows (see below). *Import ISF file* brings in a generator from another VJ
@@ -195,7 +195,7 @@ its own preview URL to open on the phone.
 for example a tunnel or a Vercel preview, because the phone can't treat a LAN
 IP as secure.
 
-**The writer (a Claude artifact):** *Describe a look* without an API key hands
+**The writer:** *Describe a look* without an API key hands
 the request to the writer, a small Claude artifact (`WRITER_URL` in
 `src/share.js`) where Claude writes the effect on the viewer's own plan. A
 claude.ai link can't carry anything into the page, so *Write it with Claude*
@@ -208,15 +208,6 @@ shown version to the open project. Another tab of the app picks up the saved
 copy when it's shown again. To publish it, `node tools/writer.mjs <dir>` writes
 `index.html`, the modules it imports and a `files.json` map. Publish
 `<dir>/index.html` with those files and the capability `sample`.
-
-**As a Claude artifact (the studio):** `node tools/artifact.mjs <dir>` writes
-a copy of the page without the install bits, plus the modules, and a
-`files.json` map. Publish `<dir>/index.html` with those files and the
-capabilities `sample` and `downloads`. There, *Describe a look* runs on the
-viewer's Claude plan, and *Project → Open in Surface Mapper* hands the project
-to the deployed app (`APP_URL` in `src/share.js`). Camera capture, the
-microphone, full screen and second screens don't work inside an artifact, and
-picking on a photo works from edges and colours alone there (the model's host is out of reach).
 
 ## Layout
 
@@ -243,7 +234,7 @@ picking on a photo works from edges and colours alone there (the model's host is
 | `src/outline.js` | A mask as a surface: traced, simplified, given pins; and the colour fill used without the model |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
 | `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
-| `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link* and the studio's *Open in Surface Mapper*; the request copied for the writer, and the effect it sends back in `#fx=` |
+| `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link*; the request copied for the writer, and the effect it sends back in `#fx=` |
 | `writer.html`, `src/writer.js` | The writer, published as a Claude artifact: a pasted request written on the viewer's Claude plan, previewed on their surfaces, changed by asking or by hand, and sent back |
 | `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |
 | `src/diagnostics.js` | *Check this device*: what the phone supports, and a camera test |

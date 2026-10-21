@@ -1,6 +1,6 @@
 // AI-written effects (roadmap #9): describe a look, and an AI model writes a new effect for the mapped surfaces.
 // Three ways to reach a model, tried in this order:
-// - Running as a Claude artifact (the writer, writer.js, or the studio): the viewer's own Claude plan, through the
+// - Running as a Claude artifact (the writer, writer.js): the viewer's own Claude plan, through the
 //   artifact runtime's `sample` capability. No key; Claude asks the viewer once before the first request.
 // - A Gemini API key (AIza…): Google's Interactions API, called straight from the browser.
 // - An Anthropic API key (sk-ant-…): the Claude API through the official SDK, loaded from a CDN when first needed.
