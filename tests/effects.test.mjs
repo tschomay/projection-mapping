@@ -6,6 +6,7 @@
 import { EFFECTS, LOOK_GROUPS, movesToMusic, flowsAcross } from '../app/src/effects.js';
 import { SURF_API } from '../app/src/renderer.js';
 import { KIT, kitSummary } from '../app/src/effects/kit.js';
+import { parseParams, MAX_PARAMS } from '../app/src/params.js';
 import { reporter } from './serve.mjs';
 
 const FN = /^(?:float|int|bool|void|vec[234]|mat[234])\s+(\w+)\s*\(/gm;
@@ -18,6 +19,8 @@ export default function run() {
   const t = reporter('effects');
   const ids = EFFECTS.map((e) => e.id);
   t.ok(new Set(ids).size === ids.length, `${ids.length} looks, each with its own id`);
+  const groups = new Set(EFFECTS.map((e) => e.group));
+  t.ok(EFFECTS.length >= 40 && groups.size >= 4, `the library has 40 or more looks in four or more groups (${EFFECTS.length} in ${groups.size})`);
   const bad = EFFECTS.filter((e) => !/^[a-z][a-z0-9]*$/.test(e.id) || !e.name || !e.about || !LOOK_GROUPS.includes(e.group));
   t.ok(!bad.length, 'every look has a short lower-case id, a name, a description and one of the tray\'s groups' + (bad.length ? ': ' + bad.map((e) => e.id).join(', ') : ''));
   const noFx = EFFECTS.filter((e) => (e.code.match(new RegExp(`\\bvec3 fx_${e.id}\\(Surf2 s, float t\\)`, 'g')) || []).length !== 1);
@@ -26,14 +29,30 @@ export default function run() {
   // helpers: every name defined once across the kit, SURF_API and all the looks
   const owner = new Map(), clashes = [];
   for (const n of SURF_API.matchAll(FN)) owner.set(n[1], 'SURF_API');
-  for (const e of EFFECTS) for (const n of e.code.matchAll(FN)) {
-    if (owner.has(n[1])) clashes.push(`${n[1]} (${e.id} and ${owner.get(n[1])})`); else owner.set(n[1], e.id);
+  for (const e of EFFECTS) for (const n of [...e.code.matchAll(FN)].map((m) => m[1]).concat(parseParams(e.code).map((p) => p.name))) {
+    if (owner.has(n)) clashes.push(`${n} (${e.id} and ${owner.get(n)})`); else owner.set(n, e.id);
   }
   t.ok(!clashes.length, 'no two looks, or a look and the kit, define the same function' + (clashes.length ? ': ' + clashes.join(', ') : ''));
   const kitNames = EFFECTS.filter((e) => [...e.code.matchAll(FN)].some((n) => n[1].startsWith('k_')));
   t.ok(!kitNames.length, 'k_ names are left to the kit' + (kitNames.length ? ': ' + kitNames.map((e) => e.id).join(', ') : ''));
   const prefixed = EFFECTS.filter((e) => [...e.code.matchAll(FN)].some((n) => n[1] !== 'fx_' + e.id && !n[1].startsWith(e.id + '_') && !['bat_shape'].includes(n[1])));
   t.ok(!prefixed.length, 'a look\'s helpers are named <id>_something' + (prefixed.length ? ': ' + prefixed.map((e) => e.id).join(', ') : ''));
+
+  // settings (params.js): named for the look, labelled, sensible defaults, no more than the renderer passes
+  const badSettings = [];
+  for (const e of EFFECTS) {
+    const ps = parseParams(e.code), declared = (e.code.match(/\/\/\s*param:/g) || []).length;
+    if (ps.length !== declared) badSettings.push(`${e.id}: ${declared - ps.length} "// param:" line(s) not read`);
+    if (ps.length > MAX_PARAMS) badSettings.push(`${e.id}: ${ps.length} settings`);
+    for (const p of ps) {
+      if (!p.name.startsWith(e.id + '_') || !p.label) badSettings.push(`${e.id}: ${p.name}`);
+      if (p.kind === 'range' && !(p.min < p.max && p.def >= p.min && p.def <= p.max)) badSettings.push(`${p.name} ${p.def} outside ${p.min}..${p.max}`);
+      if (p.kind === 'choice' && !p.options.some((o) => o.value === p.def)) badSettings.push(`${p.name}: default not a choice`);
+      if (new RegExp(`\\b${p.name}\\s*(=|\\+=|-=|\\*=|/=)[^=]`).test(e.code.replace(/^.*\/\/\s*param:.*$/m, '').split('\n').filter((l) => !/\/\/\s*param:/.test(l)).join('\n'))) badSettings.push(`${p.name} is assigned`);
+    }
+  }
+  const withSettings = EFFECTS.filter((e) => parseParams(e.code).length).length;
+  t.ok(!badSettings.length, `settings are named <id>_something, labelled, with defaults in range, at most ${MAX_PARAMS}, never assigned (${withSettings} looks have some)` + (badSettings.length ? ': ' + badSettings.join(', ') : ''));
 
   // GLSL ES 1.00
   const es3 = EFFECTS.filter((e) => ES3_ONLY.test(e.code)).map((e) => e.id).concat(ES3_ONLY.test(KIT) ? ['the kit'] : []);

@@ -3,6 +3,7 @@
 // pixel into that surface's uv space through its inverse homography, and shades it with the surface's content.
 import { EFFECTS } from './effects.js';
 import { KIT } from './effects/kit.js';
+import { parseParams, assignGLSL, MAX_PARAMS } from './params.js';
 import { meshEvaluator, meshInverse } from './geometry.js';
 
 export const MAX_SURF = 16, MAX_PARTS = 48, MAX_PART_VERTS = 128, MAX_MEDIA = 4, EDGE_MARGIN = 64;
@@ -59,6 +60,7 @@ uniform vec4 uPart[${MAX_PARTS}];      // first vertex, vertex count, op (+1 add
 uniform vec4 uPartBox[${MAX_PARTS}];
 uniform sampler2D uMedia0; uniform sampler2D uMedia1; uniform sampler2D uMedia2; uniform sampler2D uMedia3;
 uniform vec4 uMediaInfo[${MAX_MEDIA}]; // aspect, ready
+uniform sampler2D uParams;             // effect settings (params.js): per surface a row for its look, then one for the look fading out
 uniform vec4 uAudio;                   // bass, mid, treble, level (0..1)
 uniform float uBeat, uBeats, uHasAudio;
 out vec4 outColor;
@@ -127,10 +129,10 @@ void main() {
       vec4 inp = texelFetch(uInput, ivec2(si, 0), 0);
       s.screen = inp.z > 0.0 ? inp.xy + s.uv * inp.zw : vec2(px.x / uRes.x, 1.0 - px.y / uRes.y);
       s.id = float(si); s.count = float(uSurfCount); s.edge = max(-D, 0.0); s.size = info.zw;
-      col = clamp(content(uSurfFx[si], s, uTime), 0.0, 1.0);
+      col = clamp(content(uSurfFx[si], s, uTime, si * 2), 0.0, 1.0);
       if (uMix >= 0.0) {
         float w = uMixType == 0 ? uMix : uMixType == 1 ? step(0.5, uMix) : smoothstep(s.screen.x + 0.04, s.screen.x - 0.04, uMix * 1.16 - 0.08);
-        if (w < 1.0) col = mix(clamp(content(uSurfFxFrom[si], s, uTime), 0.0, 1.0), col, w);
+        if (w < 1.0) col = mix(clamp(content(uSurfFxFrom[si], s, uTime, si * 2 + 1), 0.0, 1.0), col, w);
       }
       col *= ex.y > 0.5 ? smoothstep(0.0, ex.y, 0.5 - D) : clamp(0.5 - D, 0.0, 1.0);   // feathered or crisp edge
       break;
@@ -140,10 +142,11 @@ void main() {
 }`;
 
 export function buildFragment(effects = EFFECTS) {
-  const dispatch = effects.map((e, i) => `  if (k == ${i}) return fx_${e.id}(s, t);`).join('\n');
+  // a look with settings has its globals set from this surface's row first
+  const dispatch = effects.map((e, i) => `  if (k == ${i}) { ${assignGLSL(parseParams(e.code), 'row')} return fx_${e.id}(s, t); }`).join('\n');
   return HEAD + effects.map((e) => e.code).join('\n') + `
 vec3 media(vec4 fx, Surf2 s);
-vec3 content(vec4 fx, Surf2 s, float t) {
+vec3 content(vec4 fx, Surf2 s, float t, int row) {
   int k = int(fx.x);
   if (k < 0) return media(fx, s);
 ${dispatch}
@@ -166,6 +169,7 @@ export class Renderer {
     this.warpData = new Float32Array(WARP_RES * MAX_SURF * WARP_RES * 2);
     this.warpKeys = new Array(MAX_SURF).fill('');
     this.inputData = new Float32Array(MAX_SURF * 4);
+    this.paramData = new Float32Array(MAX_PARAMS * 4 * MAX_SURF * 2);
     // just the basics to start with: the app's first sync() compiles the looks in use (setEffects)
     this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
     // The context can be lost: the browser drops it when graphics memory runs short (or the GPU resets), and
@@ -202,6 +206,8 @@ export class Renderer {
     // (a texture, not a uniform array: the fragment shader's uniforms are already near WebGL2's guaranteed 224 vectors)
     this.inputTex = this.makeTexture(gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SURF, 1, 0, gl.RGBA, gl.FLOAT, this.inputData);
+    this.paramTex = this.makeTexture(gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_PARAMS, MAX_SURF * 2, 0, gl.RGBA, gl.FLOAT, this.paramData);
     try { this.program = this.compile(buildFragment(this.effects)); } catch {
       this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
       this.program = this.compile(buildFragment(this.effects));
@@ -270,15 +276,16 @@ export class Renderer {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     const u = {};
-    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uSurfExtra', 'uWarp', 'uInput', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3']) u[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uTime', 'uRes', 'uView', 'uPoly', 'uSurfCount', 'uHinv', 'uSurfInfo', 'uSurfFx', 'uSurfFxFrom', 'uSurfExtra', 'uWarp', 'uInput', 'uMix', 'uMixType', 'uPart', 'uPartBox', 'uMediaInfo', 'uAudio', 'uBeat', 'uBeats', 'uHasAudio', 'uMedia0', 'uMedia1', 'uMedia2', 'uMedia3', 'uParams']) u[n] = gl.getUniformLocation(p, n);
     this.u = u;
     return p;
   }
 
   // geoms: output of surfaceGeom per surface (frame pixels, plus the composition rectangle as input); fx: [effectIndex, mediaSlot, space, fit] per surface;
-  // fxFrom: the same for the previous look while a cue transition runs.
+  // fxFrom: the same for the previous look while a cue transition runs. rows, rowsFrom: each surface's settings for
+  // those looks (paramRow in params.js), or nothing for none.
   // Returns what fitted: { surfaces drawn, of how many, droppedParts } so the app can say when a limit is reached.
-  setSurfaces(geoms, fx, fxFrom = fx) {
+  setSurfaces(geoms, fx, fxFrom = fx, rows = [], rowsFrom = rows) {
     const S = this.surf;
     let vi = 0, pi = 0, droppedParts = 0;
     const n = Math.min(geoms.length, MAX_SURF);
@@ -304,6 +311,9 @@ export class Renderer {
       const r = g.input;
       this.inputData.set(r ? [r.x, r.y, r.w, r.h] : [0, 0, 0, 0], si * 4);
       S.fxFrom.set(fxFrom[si], si * 4);
+      const at = si * 2 * MAX_PARAMS * 4, none = new Float32Array(MAX_PARAMS * 4);
+      this.paramData.set(rows[si] || none, at);
+      this.paramData.set(rowsFrom[si] || none, at + MAX_PARAMS * 4);
     }
     S.count = n;
     const gl = this.gl;
@@ -311,6 +321,8 @@ export class Renderer {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, POLY_W, POLY_H, gl.RGBA, gl.FLOAT, this.poly);
     gl.bindTexture(gl.TEXTURE_2D, this.inputTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SURF, 1, gl.RGBA, gl.FLOAT, this.inputData);
+    gl.bindTexture(gl.TEXTURE_2D, this.paramTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_PARAMS, MAX_SURF * 2, gl.RGBA, gl.FLOAT, this.paramData);
     return { surfaces: n, of: geoms.length, droppedParts };
   }
 
@@ -383,6 +395,7 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.polyTex); gl.uniform1i(u.uPoly, 0);
     gl.activeTexture(gl.TEXTURE1 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.warpTex); gl.uniform1i(u.uWarp, 1 + MAX_MEDIA);
     gl.activeTexture(gl.TEXTURE2 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.inputTex); gl.uniform1i(u.uInput, 2 + MAX_MEDIA);
+    gl.activeTexture(gl.TEXTURE3 + MAX_MEDIA); gl.bindTexture(gl.TEXTURE_2D, this.paramTex); gl.uniform1i(u.uParams, 3 + MAX_MEDIA);
     for (let i = 0; i < MAX_MEDIA; i++) { gl.activeTexture(gl.TEXTURE1 + i); gl.bindTexture(gl.TEXTURE_2D, this.mediaTex[i]); gl.uniform1i(u['uMedia' + i], 1 + i); }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

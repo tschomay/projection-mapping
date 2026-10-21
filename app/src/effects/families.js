@@ -5,15 +5,17 @@
 
 // flames rising from the bottom edge: fbm scrolled upwards, hotter near the bottom, with sparks and coals if asked
 export const fireLook = ({ id, height, speed, tint = 'vec3(1.0)', embers = false, coals = false, music = false, ...meta }) => ({ id, ...meta, code: `
+float ${id}_height = ${height.toFixed(2)}; // param: Height, 0.2..1.5
+vec3 ${id}_tint = ${tint}; // param: Tint
 vec3 fx_${id}(Surf2 s, float t) {
   vec2 q = k_square(s);
   float surge = ${music ? '0.25 * k_pulse(t, 100.0)' : '0.0'};
   float n = fbm(vec3(q.x * 4.0, q.y * 2.5 - t * ${speed.toFixed(2)}, t * 0.3 + s.id * 7.0));
   float n2 = noise(vec3(q.x * 10.0, q.y * 6.0 - t * ${(speed * 2.2).toFixed(2)}, t * 0.7));
-  float heat = clamp(1.0 - q.y / (${height.toFixed(2)} * (1.0 + surge)), 0.0, 1.0);
+  float heat = clamp(1.0 - q.y / (${id}_height * (1.0 + surge)), 0.0, 1.0);
   // tongues: the noise eats into the heat, more so higher up, so flames break up into black at their tips
   float f = heat * heat * (0.2 + 1.3 * n) + 0.25 * heat * (n2 - 0.5) - 0.1 * (1.0 - heat);
-  vec3 c = k_fire(f * 1.1) * ${tint};${coals ? `
+  vec3 c = k_fire(f * 1.1) * ${id}_tint;${coals ? `
   // the glowing bed of coals along the bottom
   c += vec3(1.0, 0.32, 0.04) * smoothstep(0.1, 0.0, q.y) * (0.35 + 0.65 * noise(vec3(q.x * 14.0, t * 0.6, 2.0)));` : ''}${embers ? `
   // sparks drifting up
@@ -23,11 +25,13 @@ vec3 fx_${id}(Surf2 s, float t) {
 }` });
 
 // something oozing down from the top edge: a wet band along the top with drips that grow, run and start again
-export const dripLook = ({ id, colour, shine, period, ...meta }) => ({ id, ...meta, code: `
+export const dripLook = ({ id, colour, period, ...meta }) => ({ id, ...meta, code: `
+vec3 ${id}_colour = ${colour}; // param: Colour
+float ${id}_speed = 1.0; // param: Speed, 0.3..3
 vec3 fx_${id}(Surf2 s, float t) {
   vec2 q = k_square(s);
   float w = 0.1, col = floor(q.x / w), h = hash1(vec3(col, s.id, 3.0));
-  float ph = fract(t / (${period.toFixed(1)} * (0.7 + 0.6 * h)) + h * 3.0);
+  float ph = fract(t * ${id}_speed / (${period.toFixed(1)} * (0.7 + 0.6 * h)) + h * 3.0);
   // each column's drip: a stem from the top and a round bead at its tip; a few columns don't drip
   float len = h < 0.3 ? 0.0 : (0.05 + 0.9 * h) * ph * ph;
   float cx = (col + 0.5 + 0.2 * (fract(h * 7.0) - 0.5)) * w;
@@ -43,7 +47,7 @@ vec3 fx_${id}(Surf2 s, float t) {
   float gx = (q.x - cx + w * 0.09) / (w * 0.05);
   float gloss = exp(-gx * gx) * step(0.3, h) * fade * step(tip.y - w * 0.1, q.y);
   float depth = smoothstep(0.0, -0.02, d);
-  return inside * (${colour} * (0.55 + 0.45 * depth) + ${shine} * gloss * 0.6) + ${colour} * 0.3 * k_glow(d, 0.01) * (1.0 - inside);
+  return inside * (${id}_colour * (0.55 + 0.45 * depth) + mix(${id}_colour, vec3(1.0), 0.6) * gloss * 0.6) + ${id}_colour * 0.3 * k_glow(d, 0.01) * (1.0 - inside);
 }` });
 
 // a skull about 1 tall, centred: x = distance to its outline, y = to its holes (eyes, nose, teeth), z = to its eyes

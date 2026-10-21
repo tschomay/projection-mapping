@@ -12,8 +12,8 @@ viewpoint, so they come out pre-warped and continuous across edges.
   and outdoor practicalities.
 - [`docs/halloween.md`](docs/halloween.md): **a one-night setup**, bats on a
   kitchen cabinet with a phone and a projector in about 15 minutes.
-- [`docs/looks.md`](docs/looks.md): **the looks library**: the 37 built-in
-  looks (20 for Halloween, 8 for fall) and what each is best on, what's next,
+- [`docs/looks.md`](docs/looks.md): **the looks library**: the 41 built-in
+  looks (20 for Halloween, 8 for fall, 4 for Christmas) and their settings and what each is best on, what's next,
   and how to add one.
 - [`docs/testing.md`](docs/testing.md): **what to test on a real phone, TV and
   projector**, as a checklist, with where to report results.

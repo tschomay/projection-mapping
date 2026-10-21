@@ -11,6 +11,8 @@ import { ConnectionPort, presentationSupported, presentationReceiver } from './l
 import { drawPattern } from './capture.js';
 import { ShowRunner } from './show.js';
 import { namespaced } from './ai.js';
+import { EFFECTS } from './effects.js';
+import { parseParams, paramRow } from './params.js';
 import { $, IS_OUTPUT, COARSE, FIT_CODE, MAX_RENDER_PIXELS, session } from './env.js';
 import * as store from './store.js';
 import { surfacesUI } from './ui/surfaces.js';
@@ -133,13 +135,22 @@ class App {
       }
       return [this.renderer.effectIndex(c.effect), 0, 0, 0];
     };
-    const fx = this.project.surfaces.map((s) => fxOf(s.content));
+    // each look's settings: what the surface keeps, defaults for the rest
+    const rowOf = (c) => (c && c.kind !== 'media' ? paramRow(this.lookParams(c.effect), c.params) : null);
+    const fx = this.project.surfaces.map((s) => fxOf(s.content)), rows = this.project.surfaces.map((s) => rowOf(s.content));
     // during a cue transition, the previous look too
     const from = this.show.fade && this.show.fade.from;
-    const fit = this.renderer.setSurfaces(this.geoms, fx, from ? this.project.surfaces.map((s) => fxOf(from[s.id] || s.content)) : fx);
+    const fromLooks = from ? this.project.surfaces.map((s) => from[s.id] || s.content) : null;
+    const fit = this.renderer.setSurfaces(this.geoms, fx, fromLooks ? fromLooks.map(fxOf) : fx, rows, fromLooks ? fromLooks.map(rowOf) : rows);
     const over = fit.surfaces < fit.of || fit.droppedParts > 0 ? fit : null;
     if (!IS_OUTPUT && JSON.stringify(over) !== JSON.stringify(this.overLimit || null)) { this.overLimit = over; this.renderSurfaceUI(); }
     this.dirty = false;
+  }
+
+  // the settings a look offers (params.js), from its code: built in, or one of the project's own
+  lookParams(id) {
+    const e = EFFECTS.find((x) => x.id === (id || 'outline')) || (this.project.effects || []).find((x) => x.id === id);
+    return e ? parseParams(e.code) : [];
   }
 
   frameLoop(now) {

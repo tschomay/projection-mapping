@@ -2,11 +2,13 @@
 // VDMX, Resolume (through Wire), Synesthesia and others.
 // - Export: any effect as an ISF generator (.fs). The effect code goes in unchanged, behind a small adapter
 //   that builds Surf2 from ISF's built-ins; the music levels become ISF inputs a host can drive.
-// - Import: an ISF generator (no image or audio inputs, one pass) becomes an effect in the project. Its inputs
-//   are fixed at their defaults, and the whole surface is its canvas.
+// - Import: an ISF generator (no image or audio inputs, one pass) becomes an effect in the project, and the whole
+//   surface is its canvas. Its inputs become the effect's settings (params.js); point2D and event inputs stay fixed.
+// - Settings go out as INPUTS too, with the surface's current values as their defaults, and come back as settings.
 import { SURF_API } from './renderer.js';
 import { EFFECTS } from './effects.js';
 import { namespaced } from './ai.js';
+import { parseParams, MAX_PARAMS } from './params.js';
 
 // the music levels an exported effect reads; a host can wire these to its own audio analysis
 const AUDIO_INPUTS = [
@@ -21,17 +23,38 @@ const AUDIO_INPUTS = [
   { NAME: 'surfaceCount', LABEL: 'Surfaces', TYPE: 'float', DEFAULT: 1, MIN: 1, MAX: 16 },
 ];
 
+// a setting as an ISF input, with the value it has now as its default. Returns { input, decl }: decl stands in for
+// the global's declaration (a vec3 colour is an ISF colour, a vec4, so its name becomes a macro)
+function settingInput(p, v) {
+  const r = (x) => Math.round(x * 1e4) / 1e4;
+  if (p.kind === 'colour') {
+    const c = (v.length === 3 ? [...v, 1] : v).map(r);
+    return p.type === 'vec3'
+      ? { input: { NAME: p.name + '_rgba', LABEL: p.label, TYPE: 'color', DEFAULT: c }, decl: `#define ${p.name} ${p.name}_rgba.rgb` }
+      : { input: { NAME: p.name, LABEL: p.label, TYPE: 'color', DEFAULT: c }, decl: '' };
+  }
+  if (p.kind === 'toggle') return { input: { NAME: p.name, LABEL: p.label, TYPE: 'bool', DEFAULT: !!v }, decl: '' };
+  if (p.kind === 'choice') return { input: { NAME: p.name, LABEL: p.label, TYPE: 'long', DEFAULT: v, VALUES: p.options.map((o) => o.value), LABELS: p.options.map((o) => o.label) }, decl: '' };
+  const input = { NAME: p.name, LABEL: p.label, TYPE: 'float', DEFAULT: r(v), MIN: p.min, MAX: p.max };
+  // an int range has no ISF type of its own: a float input, rounded
+  return p.type === 'int' ? { input: { ...input, NAME: p.name + '_f' }, decl: `#define ${p.name} int(floor(${p.name}_f + 0.5))` } : { input, decl: '' };
+}
+
 // effect: a built-in ({ id, name, code } with fx_<id>) or one of the project's own ({ id, name, code, prompt }
-// with fx_custom). Returns the .fs file's text.
-export function toISF(effect) {
+// with fx_custom); values: a surface's settings for it. Returns the .fs file's text.
+export function toISF(effect, values = {}) {
   const builtin = EFFECTS.some((e) => e.id === effect.id && e.code === effect.code);
-  const code = builtin ? effect.code : namespaced(effect.id, effect.code);
+  let code = builtin ? effect.code : namespaced(effect.id, effect.code);
+  // settings: their values (kept by the un-namespaced name) go out as inputs, which replace the globals
+  const raw = parseParams(effect.code), settings = parseParams(code).map((p, i) => settingInput(p, values[raw[i]?.name] ?? p.def));
+  let i = 0;
+  code = code.replace(/^[ \t]*(float|int|bool|vec3|vec4)\s+\w+\s*=\s*[^;]+;[ \t]*\/\/\s*param:.*$/gm, () => settings[i++].decl);
   const header = {
     DESCRIPTION: effect.prompt || effect.name,
     CREDIT: 'Surface Mapper',
     ISFVSN: '2',
     CATEGORIES: ['Generator'],
-    INPUTS: AUDIO_INPUTS,
+    INPUTS: settings.map((x) => x.input).concat(AUDIO_INPUTS),
   };
   return `/*${JSON.stringify(header, null, 2)}*/
 
@@ -151,6 +174,29 @@ function resolveGLES(body) {
 
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, '');
 
+// an ISF input as a setting of the imported effect (params.js), or a constant for what can't be set (point2D, event)
+const label = (i) => String(i.LABEL || i.NAME).replace(/[\r\n,|=]/g, ' ').trim() || i.NAME;
+const LIVE = { audioBass: 'uAudio.x', audioMid: 'uAudio.y', audioTreble: 'uAudio.z', audioLevel: 'uAudio.w', audioBeat: 'uBeat', audioBeatCount: 'uBeats', hasAudio: '(uHasAudio > 0.5)', surfaceId: 'c_sid', surfaceCount: 'c_scount' };
+function inputDecl(i, setting = true) {
+  const name = 'c_in_' + i.NAME, d = i.DEFAULT;
+  if (!setting) return `const ${GLSL_TYPE[i.TYPE]} ${name} = ${literal(i.TYPE, d ?? (i.TYPE === 'float' ? i.MIN ?? 0 : 0))};`;
+  if (i.TYPE === 'float') {
+    const v = Number(d ?? i.MIN ?? 0), lo = Math.min(Number(i.MIN ?? 0), v), hi = Math.max(Number(i.MAX ?? 1), v);
+    return `float ${name} = ${literal('float', v)}; // param: ${label(i)}, ${lo}..${hi > lo ? hi : lo + 1}`;
+  }
+  if (i.TYPE === 'bool') return `bool ${name} = ${literal('bool', d)}; // param: ${label(i)}, toggle`;
+  if (i.TYPE === 'color') return `vec4 ${name} = ${literal('color', d)}; // param: ${label(i)}`;
+  if (i.TYPE === 'long') {
+    const values = Array.isArray(i.VALUES) && i.VALUES.length ? i.VALUES.map(Number) : null;
+    const lo = Math.round(Number(i.MIN ?? 0)), hi = Math.round(Number(i.MAX ?? lo));
+    const opts = values ? values.map((v, k) => `${String(i.LABELS?.[k] ?? v).replace(/[\r\n,|=]/g, ' ').trim() || v}=${Math.round(v)}`)
+      : hi - lo <= 32 ? Array.from({ length: hi - lo + 1 }, (_, k) => `${lo + k}=${lo + k}`) : null;
+    const v = Math.round(Number(d ?? (values ? values[0] : lo)));
+    if (opts) return `int ${name} = ${v}; // param: ${label(i)}, choice: ${opts.join('|')}`;
+  }
+  return `const ${GLSL_TYPE[i.TYPE]} ${name} = ${literal(i.TYPE, d ?? (i.TYPE === 'float' ? i.MIN ?? 0 : 0))};`;
+}
+
 // text of an ISF .fs file -> { name, code } with code defining fx_custom (the same form as AI-written effects,
 // so it's namespaced per effect when compiled). Throws with a plain-words reason when it can't be used.
 export function fromISF(text, filename = 'ISF effect') {
@@ -180,9 +226,14 @@ export function fromISF(text, filename = 'ISF effect') {
     const re = new RegExp(`(?<![.\\w])(${[...rename.keys()].join('|')})\\b`, 'g');
     body = body.replace(re, (n) => rename.get(n));
   }
-  const consts = inputs.map((i) => `const ${GLSL_TYPE[i.TYPE]} c_in_${i.NAME} = ${literal(i.TYPE, i.DEFAULT ?? (i.TYPE === 'float' ? i.MIN ?? 0 : 0))};`).join('\n');
+  // the music and surface inputs this app's own exports have are wired to the app's live values again; the rest
+  // become settings, up to MAX_PARAMS of them, and constants after that
+  const live = inputs.filter((i) => LIVE[i.NAME]);
+  if (live.length) body = body.replace(new RegExp(`(?<![.\\w])c_in_(${live.map((i) => i.NAME).join('|')})\\b`, 'g'), (_, n) => LIVE[n]);
+  let n = 0;
+  const consts = inputs.filter((i) => !LIVE[i.NAME]).map((i) => inputDecl(i, n++ < MAX_PARAMS)).join('\n');
   const code = `// imported from the ISF file "${filename.replace(/[\r\n]/g, ' ')}"${header.CREDIT ? ', ' + (/^by\b/i.test(header.CREDIT) ? '' : 'by ') + String(header.CREDIT).replace(/[\r\n]/g, ' ') : ''}
-vec2 c_norm; vec4 c_coord; vec2 c_size; float c_time; vec4 c_out;
+vec2 c_norm; vec4 c_coord; vec2 c_size; float c_time; vec4 c_out; float c_sid; float c_scount;
 ${consts}
 ${body.trim()}
 
@@ -191,7 +242,7 @@ vec3 fx_custom(Surf2 s, float t) {
   c_size = max(s.size, vec2(1.0));
   c_norm = s.uv;
   c_coord = vec4(s.uv * c_size, 0.0, 1.0);
-  c_time = t;
+  c_time = t; c_sid = s.id; c_scount = s.count;
   c_out = vec4(0.0);
   c_main();
   return c_out.rgb * clamp(c_out.a, 0.0, 1.0);

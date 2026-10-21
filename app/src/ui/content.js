@@ -102,7 +102,7 @@ export const contentUI = {
       if (!c || c.kind !== 'effect') { this.toast('Select a surface that shows an effect, then export it.'); return; }
       const e = EFFECTS.find((x) => x.id === (c.effect || 'outline')) || (this.project.effects || []).find((x) => x.id === c.effect);
       if (!e) return;
-      this.download(isfFilename(e.name), toISF(e), 'text/plain');
+      this.download(isfFilename(e.name), toISF(e, c.params), 'text/plain');
       this.toast(`"${e.name}" saved as an ISF file, for MadMapper, VDMX, Resolume and other VJ apps.`, 4000);
     };
     $('importISF').onchange = async (ev) => {

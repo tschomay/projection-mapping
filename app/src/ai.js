@@ -64,6 +64,13 @@ Rules:
 - Projected light only adds: black is "off", so use black backgrounds and bright, saturated colours. Bright edges (exp(-s.edge / 3.0)) read well on real objects.
 - When the look should react to music, also make it move without sound (check uHasAudio).
 - Name any helper functions with a c_ prefix (c_ring, c_rotate). No uniforms, textures, #version or main().
+- Give the look up to four settings people would want to change (its main colour, speed, how many, an on/off for a part of it). Declare each as a global with a c_ name, its default and a "// param:" comment, and never assign to it:
+    vec3 c_colour = vec3(1.0, 0.4, 0.1);   // param: Colour
+    float c_speed = 1.0;                  // param: Speed, 0.2..3
+    float c_count = 6.0;                  // param: How many, 1..12, whole
+    bool c_flash = true;                  // param: Flash on the beat, toggle
+    int c_shape = 0;                      // param: Shape, choice: Circles|Stars|Hearts
+  Write loops with constant bounds and break on the setting (if (float(i) >= c_count) break;).
 - It runs on phones: keep loops short (under 32 iterations) and avoid raymarching.
 - Reply with one short sentence describing the look, then the code in a single \`\`\`glsl block.`;
 
