@@ -30,6 +30,15 @@ export async function loadPlaywright() {
 
 export const BROWSER_ARGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'];
 
+// a hidden tab, as switching to another one makes it (headless pages always count as visible, so it's faked)
+export function setHidden(page, hidden) {
+  return page.evaluate((hidden) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+}
+
 // tiny reporting helpers shared by the tests
 export function reporter(name) {
   let failed = 0;

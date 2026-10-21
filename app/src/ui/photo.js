@@ -5,7 +5,7 @@
 import { Camera, CaptureError, listCameras, runFramePhoto } from '../camera.js';
 import { coverQuad, cssMatrix, frameQuad, photoToFrame, framePointToPhoto, photoPointToFrame } from '../photo.js';
 import { analysePhoto } from '../regions.js';
-import { loadSegmenter } from '../segment.js';
+import { loadSegmenter, releaseSegmenter } from '../segment.js';
 import { findAt, shapesOf, DEFAULTS } from '../pick.js';
 import { newSurface, insideSurface } from '../geometry.js';
 import { $ } from '../env.js';
@@ -197,6 +197,9 @@ export const photoUI = {
     $('pickSense').value = this.pickSetting('sense'); $('pickSimple').value = this.pickSetting('simple');
     this.renderPickTune();
     if (on) { this.pickHint(); this.prepareModel(); }
+    // the model holds a lot of memory: let it go once picking has been put away for a couple of minutes
+    clearTimeout(this.modelIdle);
+    if (!on) this.modelIdle = setTimeout(() => this.releaseModel(), 120000);
     if (on) this.toggleDrawer(false);
     this.renderSurfaceUI();
   },
@@ -225,6 +228,13 @@ export const photoUI = {
       });
     }
     return this.segLoad;
+  },
+
+  // let the model go (it loads again, from the browser's cache, when picking needs it); not in the middle of a pick
+  releaseModel() {
+    if (!this.segLoad || this.picking) return;
+    this.segLoad = null; this.segReady = false;
+    releaseSegmenter();
   },
 
   // start the model's download, and then encoding the photo, as soon as picking starts rather than on the first tap

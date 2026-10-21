@@ -3,7 +3,7 @@
 // - with a fake transformers.js in place of the CDN module, whose "model" answers a tap with the true outlines of
 //   the things under it (glass, then glass and ring): the surface takes the outline, and a second tap steps out;
 // - with the model unreachable: the app says so and the colour fill outlines the mirror instead.
-import { serveApp, loadPlaywright, BROWSER_ARGS, reporter } from './serve.mjs';
+import { serveApp, loadPlaywright, BROWSER_ARGS, reporter, setHidden } from './serve.mjs';
 import { buildWall } from './scene.mjs';
 
 const LIB = /cdn\.jsdelivr\.net\/npm\/@huggingface\/transformers/;
@@ -16,6 +16,7 @@ export const SamModel = { async from_pretrained(id, o) { window.__fakeModel = { 
   o.progress_callback?.({ status: 'progress', file: 'a', loaded: 5, total: 10 }); o.progress_callback?.({ status: 'progress', file: 'a', loaded: 10, total: 10 });
   const model = async ({ input_points }) => ({ pred_masks: input_points, iou_scores: { data: [0.9, 0.9, 0.9] } });
   model.get_image_embeddings = async () => { window.__fakeEncoded = (window.__fakeEncoded || 0) + 1; return {}; };
+  model.dispose = async () => { window.__fakeDisposed = (window.__fakeDisposed || 0) + 1; };
   return model; } };
 export const AutoProcessor = { async from_pretrained() {
   const p = async (img) => ({ original_sizes: [[img.height, img.width]], reshaped_input_sizes: [[img.height, img.width]], w: img.width, h: img.height });
@@ -140,6 +141,12 @@ export default async function run() {
     await page.mouse.move(r2[0], r2[1]); await page.mouse.wheel(0, -400); await page.waitForTimeout(200);
     t.ok(await page.evaluate(() => window.app.view.s > 1), 'the mouse wheel zooms too');
     await page.click('#viewFit');
+
+    // hidden, the model is let go; shown again while still picking, it loads and encodes the photo again
+    await setHidden(page, true);
+    t.ok(await page.waitForFunction(() => window.__fakeDisposed === 1, null, { timeout: 5000 }).then(() => true, () => false), 'hidden, the shape model is let go');
+    await setHidden(page, false);
+    t.ok(await page.waitForFunction(() => window.__fakeEncoded === 2, null, { timeout: 15000 }).then(() => true, () => false), 'shown again while picking, it loads and encodes the photo again');
     await ctx.close();
 
     // without the model, on a phone held upright: the pick bar fits and leaves the toolbar uncovered

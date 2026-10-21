@@ -49,7 +49,8 @@ class App {
 
     if (IS_OUTPUT) this.initOutput(); else this.initEditor();
     window.addEventListener('resize', () => this.layout());
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.keepAwake(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.sleep(); else { this.wake(); this.keepAwake(); } });
+    this.renderer.onrestore = () => { this.dirty = true; };   // after a lost context: send the surfaces again
     this.layout();
     requestAnimationFrame((t) => this.frameLoop(t));
   }
@@ -207,6 +208,34 @@ class App {
 
   restart() { for (const m of this.media.list()) if (m.kind !== 'image') m.el.currentTime = 0; this.broadcast(true); }
   currentTime() { const el = this.soundtrackEl() || this.playingEls()[0]; return el ? el.currentTime : 0; }
+
+  // ---------- a hidden tab gives back what it can ----------
+  // Graphics memory above all: when the browser's GPU process runs out of it, every tab crashes together. The shape
+  // model and the camera go too, and idle audio stops. All of it comes back when the tab is shown again. Videos are
+  // left to the browser, which suspends paused ones in a hidden tab by itself (unloading them here made every return
+  // load them again, and memory grew with each switch). The output window and second screens keep everything:
+  // they're what is being projected.
+  sleep() {
+    if (IS_OUTPUT || this.asleep) return;
+    this.asleep = true;
+    this.renderer.release();
+    this.thumbs.release();
+    this.releaseModel();
+    this.photoAnalysis = null;
+    if (!this.scanning) this.camera.close();
+    if (!this.photographing) this.photoCamera.close();
+    if (this.audio.ctx && !this.playing && !this.audio.mic) this.audio.ctx.suspend().catch(() => {});
+  }
+
+  wake() {
+    if (!this.asleep) return;
+    this.asleep = false;
+    this.renderer.restore();
+    this.dirty = true;
+    if ($('scanSheet').open && !this.camera.stream) this.openCamera($('scanCam').value);
+    if ($('photoSheet').open && !this.photoCamera.stream) this.openPhotoCamera($('photoCam').value);
+    if (this.editor.pick) this.prepareModel();
+  }
 
   // first touch anywhere: unlock audio and keep the screen awake
   gesture() { this.audio.ensure(); this.keepAwake(); }

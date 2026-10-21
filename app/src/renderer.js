@@ -159,6 +159,29 @@ export class Renderer {
     this.gl = gl;
     this.canvas = canvas;
     this.frame = [1280, 720];
+    // what the GPU objects are made from, kept here so they can be made again after the context is lost
+    this.poly = new Float32Array(MAX_VERTS * 4);
+    this.media = new Array(MAX_MEDIA).fill(null);   // { el, aspect, ready, isVideo, uploaded }
+    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), extra: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    this.warpData = new Float32Array(WARP_RES * MAX_SURF * WARP_RES * 2);
+    this.warpKeys = new Array(MAX_SURF).fill('');
+    this.inputData = new Float32Array(MAX_SURF * 4);
+    // just the basics to start with: the app's first sync() compiles the looks in use (setEffects)
+    this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
+    // The context can be lost: the browser drops it when graphics memory runs short (or the GPU resets), and
+    // release() gives it up while the page is hidden. Everything is made again when it comes back; onrestore lets
+    // the app send its surfaces again.
+    this.lost = false;
+    this.loseExt = gl.getExtension('WEBGL_lose_context');
+    this.onrestore = () => {};
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
+    canvas.addEventListener('webglcontextrestored', () => { this.setup(); this.lost = false; this.onrestore(); });
+    this.setup();
+  }
+
+  // the GPU side: the triangle, the textures (filled from the kept data) and the program
+  setup() {
+    const gl = this.gl;
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     const buf = gl.createBuffer();
@@ -166,7 +189,6 @@ export class Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    this.poly = new Float32Array(MAX_VERTS * 4);
     this.polyTex = this.makeTexture(gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, POLY_W, POLY_H, 0, gl.RGBA, gl.FLOAT, this.poly);
     this.mediaTex = Array.from({ length: MAX_MEDIA }, () => {
@@ -174,20 +196,22 @@ export class Renderer {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
       return t;
     });
-    this.media = new Array(MAX_MEDIA).fill(null);   // { el, aspect, ready, isVideo, uploaded }
-    this.surf = { count: 0, hinv: new Float32Array(MAX_SURF * 9), info: new Float32Array(MAX_SURF * 4), fx: new Float32Array(MAX_SURF * 4), fxFrom: new Float32Array(MAX_SURF * 4), extra: new Float32Array(MAX_SURF * 4), part: new Float32Array(MAX_PARTS * 4), box: new Float32Array(MAX_PARTS * 4) };
+    for (const m of this.media) if (m) m.uploaded = false;
     this.warpTex = this.makeTexture(gl.LINEAR);
-    this.warpData = new Float32Array(WARP_RES * MAX_SURF * WARP_RES * 2);
-    this.warpKeys = new Array(MAX_SURF).fill('');
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, WARP_RES * MAX_SURF, WARP_RES, 0, gl.RG, gl.FLOAT, this.warpData);
     // (a texture, not a uniform array: the fragment shader's uniforms are already near WebGL2's guaranteed 224 vectors)
     this.inputTex = this.makeTexture(gl.NEAREST);
-    this.inputData = new Float32Array(MAX_SURF * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SURF, 1, 0, gl.RGBA, gl.FLOAT, this.inputData);
-    // just the basics to start with: the app's first sync() compiles the looks in use (setEffects)
-    this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
-    this.program = this.compile(buildFragment(this.effects));
+    try { this.program = this.compile(buildFragment(this.effects)); } catch {
+      this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
+      this.program = this.compile(buildFragment(this.effects));
+    }
   }
+
+  // give the GPU memory back (a hidden page), and take it again: the context comes back with everything made anew
+  // (lost is set at once, not when the event arrives, so a quick hide and show still restores it)
+  release() { if (!this.lost && this.loseExt) { this.lost = true; this.loseExt.loseContext(); } }
+  restore() { if (this.lost && this.loseExt) this.loseExt.restoreContext(); }
 
   // built-in effects plus the project's own (AI-written) ones; each custom effect is { id, code }. Only the
   // effects in `used` (ids) are compiled, with the alignment grid and Off always there: a GPU pays for every
@@ -195,6 +219,7 @@ export class Renderer {
   // Returns null, or the compiler log (the previous effects stay in place).
   setEffects(custom = [], used = null) {
     const all = EFFECTS.concat(custom).filter((e) => !used || used.has(e.id) || e.id === 'outline' || e.id === 'off');
+    if (this.lost) { this.effects = all; return null; }   // compiled when the context comes back
     if (all.map((e) => e.id).join() === this.effects.map((e) => e.id).join() && all.every((e, i) => e.code === this.effects[i].code)) return null;
     const old = { program: this.program, u: this.u };
     try {
@@ -211,6 +236,7 @@ export class Renderer {
   // compile a candidate effect alongside the current ones, without using it; null or the compiler log,
   // with line numbers counted from the candidate's first line
   tryEffect(id, code) {
+    if (this.lost) return 'The graphics are being reset. Try again in a moment.';
     const gl = this.gl, src = buildFragment(this.effects.concat([{ id, code: '#line 1\n' + code + '\n#line 9000' }]));
     const sh = gl.createShader(gl.FRAGMENT_SHADER);
     gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -330,6 +356,7 @@ export class Renderer {
 
   // mix: { amount 0..1, type } while a cue transition runs, else null
   render(time, audio, mix = null) {
+    if (this.lost) return;
     const gl = this.gl, u = this.u, S = this.surf;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.uploadMedia();
