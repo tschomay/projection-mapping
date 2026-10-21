@@ -7,7 +7,7 @@ and the bigger library.
 
 ## What's there
 
-41 looks in six groups. ♪ means it moves to music. ⇆ means it flows from one
+146 looks in seven groups. ♪ means it moves to music. ⇆ means it flows from one
 surface to the next (on a single surface, *Whole scene here* fits the whole
 scene on it).
 
@@ -191,7 +191,16 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 
 ## Next
 
-- **More Halloween**: a drop that falls off the end of a drip.
+The library is about the size it should be. Add a look when there's a real
+object or occasion it's for, not a variation of one that's here (that's what
+settings are for). Ideas:
+
+- **Christmas**: Santa's legs kicking in a chimney, a reindeer on the roof, an
+  elf peeking round a door.
+- **Celebrations**: a birthday cake with candles for something round, a
+  graduation, a wedding.
+- **Tray**: past about 30 looks in a group, the tray will want subgroups or
+  tags.
 
 Lazy Lighting, the phone app to match, lists "45+ Halloween visuals". AtmosFX's
 filmed characters (ghost brides, haunted portraits) are better as videos than

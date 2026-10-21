@@ -36,12 +36,17 @@ vec3 fx_${id}(Surf2 s, float t) {
   float len = h < 0.3 ? 0.0 : (0.05 + 0.9 * h) * ph * ph;
   float cx = (col + 0.5 + 0.2 * (fract(h * 7.0) - 0.5)) * w;
   vec2 tip = vec2(cx, 1.0 - 0.05 - len);
-  float d = min(k_seg(q, vec2(cx, 1.0), tip) - w * (0.17 + 0.15 * (q.y - tip.y)), k_circle(q - tip, w * (0.28 + 0.05 * h)));
+  // the bead at the tip lets go near the end, and falls away
+  float hold = step(ph, 0.85);
+  float d = min(k_seg(q, vec2(cx, 1.0), tip) - w * (0.17 + 0.15 * (q.y - tip.y)), k_circle(q - tip, w * (0.28 + 0.05 * h)) + (1.0 - hold));
   d = h < 0.3 ? 1.0 : d;
   float band = 1.0 - q.y - 0.04 - 0.025 * noise(vec3(q.x * 12.0, 1.0, s.id));
   d = k_smin(d, band, 0.03);
   float fade = smoothstep(1.0, 0.88, ph);
   d = mix(band, d, fade);
+  float since = max(ph - 0.85, 0.0) * ${period.toFixed(1)} * (0.7 + 0.6 * h) / ${id}_speed;
+  float drop = k_oval(q - vec2(cx, 1.0 - 0.05 - (0.05 + 0.9 * h) * 0.7225 - 0.75 * since * since), vec2(w * 0.24, w * 0.3));
+  d = min(d, h < 0.3 || hold > 0.5 ? 1.0 : drop);
   float inside = k_fill(d, 0.004);
   // a glossy highlight down the left of each stem and bead
   float gx = (q.x - cx + w * 0.09) / (w * 0.05);
