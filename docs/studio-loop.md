@@ -51,11 +51,25 @@ A probe artifact printed what it received when opened with `#gen=hello` and
 - **`sample` started as `prompt`**, so the first call shows Allow. Still to
   check: whether Allow is remembered on the next visit.
 
+Second run, Chrome on Android (the web viewer):
+
+- **The URL doesn't reach the page there either**, so this isn't specific to
+  the Claude app.
+- **Allow is remembered.** `sample` read `granted` at load on a later visit, so
+  the Allow tap happens once, not on every round trip.
+- **`navigator.clipboard.readText` is blocked** by the frame's permissions
+  policy (`clipboard-read` not allowed). A *Paste* button can't work, but
+  long-press → Paste into a text box does.
+- **`localStorage` persists** in the frame across visits (the load counter
+  reached 7). The studio can remember the last surfaces it was given.
+
 **Revised way in:** *Write it with Claude* copies a compact packet (a
 `SM1:` prefix and the gzipped request and context) to the clipboard, then opens
-the studio. The studio reads it with a *Paste* button if
-`navigator.clipboard.readText` works in the frame, or else from a paste box.
-That's one more tap than the plan above.
+the studio. The studio opens on a focused paste box. When text starting with
+`SM1:` lands in it, writing starts at once, with no Go button. That's a
+long-press and Paste more than the plan above. The studio keeps the last
+packet's surfaces in `localStorage`. Once it has seen them, you can type a new
+look straight into the studio and skip the paste, until the surfaces change.
 
 ## What to test before building
 
