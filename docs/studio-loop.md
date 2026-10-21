@@ -37,6 +37,26 @@ So the loop becomes: type the look → **Write it with Claude** → (Allow, firs
 time per view) → wait → **Add to Surface Mapper**. That's two taps where today
 you rebuild the project in the studio or carry it there and back.
 
+## Probe results (2026-10-21, Claude Android app)
+
+A probe artifact printed what it received when opened with `#gen=hello` and
+`?gen=hello`:
+
+- **The URL doesn't reach the page.** The page loads from
+  `<uuid>.frame.claudeusercontent.com/_f/<version>/`. Neither the fragment nor
+  the query gets through, and the referrer is empty. On Android, claude.ai
+  links open in the Claude app, so this is how most phone viewers would see it.
+  The way in falls back to the clipboard (below).
+- **`top.opener` is null**, so a return with no tap is out, at least here.
+- **`sample` started as `prompt`**, so the first call shows Allow. Still to
+  check: whether Allow is remembered on the next visit.
+
+**Revised way in:** *Write it with Claude* copies a compact packet (a
+`SM1:` prefix and the gzipped request and context) to the clipboard, then opens
+the studio. The studio reads it with a *Paste* button if
+`navigator.clipboard.readText` works in the frame, or else from a paste box.
+That's one more tap than the plan above.
+
 ## What to test before building
 
 1. **Does the fragment or query reach the page?** Publish a probe artifact that
