@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Surface Mapper Writer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* The writer: Claude writes an effect for Surface Mapper on the viewer's own plan, shows it on their surfaces, takes
+   changes, and sends it back. Published as a Claude artifact (tools/writer.mjs); the same dark palette as the app. */
+:root {
+  --bg: #000;
+  --panel: #12161e;
+  --raise: #1d2430;
+  --line: #2c3544;
+  --fg: #e3e8ef;
+  --muted: #8d98aa;
+  --lamp: #ffb547;
+  --lamp-dim: #ffb5472e;
+  --bad: #ff6b6b;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans); }
+main { max-width: 760px; margin: 0 auto; padding: 16px 16px 40px; }
+header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+header h1 { font-size: 19px; font-weight: 600; margin: 0; }
+header span { color: var(--lamp); font: 500 12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+h2 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+.note { color: var(--muted); font-size: 13px; }
+.mono { font: 12.5px/1.5 var(--mono); color: var(--muted); white-space: pre-line; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+button, textarea { font: inherit; color: inherit; }
+textarea { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; resize: vertical; display: block; }
+textarea:focus-visible, .btn:focus-visible, summary:focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
+.btn { color: inherit; text-decoration: none; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn.primary { background: var(--lamp); color: #1a1205; border-color: var(--lamp); font-weight: 600; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: default; pointer-events: none; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+#paste { min-height: 96px; font: 13px var(--mono); }
+#pasteStatus:empty, #status:empty, #codeStatus:empty { display: none; }
+.bad { color: var(--bad); }
+.request { font-size: 17px; font-weight: 500; margin: 0 0 10px; }
+.request small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+.stage { position: relative; background: #000; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stage canvas { display: block; width: 100%; height: auto; }
+#busy { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #000b; text-align: center; padding: 16px; }
+#busy[hidden] { display: none; }
+#versions { display: flex; gap: 6px; flex-wrap: wrap; }
+#versions button { min-width: 40px; min-height: 34px; padding: 4px 10px; font: 500 13px var(--mono); }
+#versions button[aria-pressed="true"] { border-color: var(--lamp); color: var(--lamp); background: var(--lamp-dim); }
+.toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; margin-left: auto; cursor: pointer; }
+.toggle input { accent-color: var(--lamp); width: 18px; height: 18px; }
+#note { margin: 10px 0 0; }
+details summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+#code { font: 12px/1.5 var(--mono); min-height: 220px; white-space: pre; tab-size: 2; margin-top: 8px; }
+.send { display: flex; flex-direction: column; gap: 6px; }
+.send .btn { min-height: 48px; font-size: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Surface Mapper</h1><span>Writer</span></header>
+
+  <section id="start">
+    <div class="card">
+      <h2>Paste your request</h2>
+      <p class="note">In Surface Mapper, describe a look and tap <b>Write it with Claude</b>. It copies the request. Then long-press the box below and tap Paste. Claude starts writing straight away.</p>
+      <textarea id="paste" placeholder="Long-press here and Paste" aria-label="Paste the request from Surface Mapper" spellcheck="false"></textarea>
+      <p class="mono" id="pasteStatus" role="status" aria-live="polite"></p>
+    </div>
+    <div class="card" id="again" hidden>
+      <h2>Or another look for the same surfaces</h2>
+      <p class="note" id="againNote"></p>
+      <textarea id="againPrompt" rows="2" placeholder="e.g. slow blue waves that flash white on the beat" aria-label="Describe the look"></textarea>
+      <div class="row"><button class="btn primary" id="againGo">Write it</button></div>
+    </div>
+    <p class="note" id="unavailable" hidden>Writing needs Claude. Open this page in Claude (claude.ai or the Claude app) and allow it to use Claude when asked.</p>
+  </section>
+
+  <section id="work" hidden>
+    <p class="request" id="reqText"></p>
+    <div class="stage">
+      <canvas id="gl" width="640" height="360" aria-label="Preview of the effect on your surfaces"></canvas>
+      <div id="busy"><span id="busyText">Writing…</span><span class="mono" id="busyTime"></span><button class="btn" id="stop">Stop</button></div>
+    </div>
+    <div class="row">
+      <div id="versions" role="group" aria-label="Versions"></div>
+      <label class="toggle"><input type="checkbox" id="fakeMusic" checked> Pretend music is playing</label>
+    </div>
+    <p id="note"></p>
+    <p class="mono" id="status" role="status" aria-live="polite"></p>
+    <button class="btn" id="retry" hidden>Try again</button>
+
+    <div class="card">
+      <h2>Change something</h2>
+      <textarea id="change" rows="2" placeholder="e.g. slower, warmer colours, only flash on the beat" aria-label="What to change"></textarea>
+      <div class="row"><button class="btn" id="changeGo">Rewrite it</button></div>
+      <details id="codeBox">
+        <summary>Edit the code</summary>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="The effect's GLSL code"></textarea>
+        <p class="mono" id="codeStatus"></p>
+      </details>
+    </div>
+
+    <div class="send">
+      <a class="btn primary" id="send" target="_blank" rel="noopener" aria-disabled="true">Add to Surface Mapper</a>
+      <p class="note" id="sendNote"></p>
+      <div class="row"><button class="btn" id="startOver">Start a new request</button></div>
+    </div>
+  </section>
+</main>
+<script type="module" src="src/writer.js"></script>
+</body>
+</html>

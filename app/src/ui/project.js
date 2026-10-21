@@ -30,6 +30,7 @@ export const projectUI = {
       send.onclick = (e) => { e.preventDefault(); this.sendLink(); };
     }
     this.importLink();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.catchUp(); });
     $('importProj').onchange = async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
@@ -47,7 +48,7 @@ export const projectUI = {
     for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
     $('closeConnect').onclick = () => sheet.close();
     sheet.addEventListener('close', () => store.setFlag('connectSeen'));
-    // (not in the Claude artifact studio, which is for designing; the show itself runs in the installed app)
+    // (not inside a Claude artifact, where the show can't run)
     if (!store.getFlag('connectSeen') && sheet.showModal && !window.claude) sheet.showModal();
   },
 
@@ -111,6 +112,17 @@ export const projectUI = {
     } catch (err) {
       this.toast(err.message || "That link couldn't be read.", 5000);
     }
+  },
+
+  // another tab of the app saved this project while this one was out of sight (an effect from the writer arrives
+  // in a new tab): take that copy, so this tab doesn't save over it later
+  catchUp() {
+    const entry = store.listProjects().list.find((p) => p.id === this.project.id);
+    if (!entry || !(entry.updated > this.savedAt)) return;
+    const p = store.loadProject(this.project.id);
+    if (!p) return;
+    this.openProject(p);
+    this.toast('Brought up to date with changes from another tab.', 4000);
   },
 
   renderProjectList() {

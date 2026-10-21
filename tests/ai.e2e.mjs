@@ -44,7 +44,7 @@ export default async function run() {
     await page.evaluate(() => { document.getElementById('connectSheet').close(); document.getElementById('toolsBtn').click(); window.app.selectTab('content'); window.__aiRequests = []; window.__aiReplies = []; });
     await page.evaluate(() => { window.app.addShape('square'); window.app.addShape('triangle'); window.app.editor.select(-1); });
 
-    t.ok(await page.evaluate(() => document.getElementById('aiGo').disabled), 'Write it is off until there is a key');
+    t.ok(await page.evaluate(() => !document.getElementById('aiGo').disabled && /Claude/.test(document.getElementById('aiGo').textContent)), 'without a key, Write it with Claude is on (it hands the request to the writer, see writer.e2e)');
     await page.fill('#aiKey', 'not-a-key'); await page.click('#aiKeySave');
     t.ok(/doesn't look like/.test(await page.textContent('#aiStatus')), 'a malformed key is refused');
     await page.fill('#aiKey', 'sk-ant-test-123'); await page.click('#aiKeySave');
@@ -84,7 +84,7 @@ export default async function run() {
     await drawer();
     t.ok(await page.evaluate(() => !window.app.project.effects.length && window.app.project.surfaces.every((s) => s.content.effect === 'outline')), 'deleting the effect resets the surfaces using it');
     await page.click('#aiKeyForget');
-    t.ok(await page.evaluate(() => !localStorage.getItem('pm.anthropicKey') && document.getElementById('aiGo').disabled), 'Forget my key removes it');
+    t.ok(await page.evaluate(() => !localStorage.getItem('pm.anthropicKey') && !document.getElementById('aiKeyRow').hidden && !document.getElementById('aiGo').disabled), 'Forget my key removes it (the button then hands off to the writer again)');
 
     // ---- a Gemini key, through the Interactions API ----
     const gemini = [];

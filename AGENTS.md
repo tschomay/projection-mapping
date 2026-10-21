@@ -8,12 +8,12 @@ Issues live as GitHub Issues on this repo, operated via the `gh` CLI. See `docs/
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root, created lazily as terms and decisions resolve. See `docs/agents/domain.md`.
 
-### After every merge to `main`: update the studio artifact
+### After a merge that changes the writer: update the writer artifact
 
-The app also runs as a Claude artifact, the **studio**: https://claude.ai/artifact/QDTC5ZPeQj6U5AHwMxJieL. It doesn't update by itself, so republish it after each merge. Update that URL in place; never publish it as a new artifact.
+The **writer** is the small Claude artifact the app hands AI requests to: https://claude.ai/artifact/SNkGsUMc1BAPdug3UZzL2K (`WRITER_URL` in `app/src/share.js`). Republish it when a merge changes `app/writer.html` or a module it imports (`tools/writer.mjs` lists them in `files.json`). Update that URL in place; never publish it as a new artifact.
 
-1. Check out the merged `main` and run `node tools/artifact.mjs <scratch-dir>`. This writes `index.html`, the modules under `src/`, and `files.json`.
-2. Publish `<scratch-dir>/index.html` to the URL above, with every entry in `files.json` as `files`. Leave out `capabilities` so it keeps `sample` and `downloads`.
-3. If the publish is refused because live files are unread: read them, and check they match the previous `main` (`git show <old-main>:app/src/<file>`). Only then publish. If one differs, someone edited the studio directly: ask before overwriting it.
+1. Check out the merged `main` and run `node tools/writer.mjs <scratch-dir>`.
+2. Publish `<scratch-dir>/index.html` to the URL above, with every entry in `files.json` as `files`. Leave out `capabilities` so it keeps `sample`.
+3. If the publish is refused because live files are unread: read them, and check they match the previous `main` (`git show <old-main>:app/<file>`). Only then publish. If one differs, someone edited the writer directly: ask before overwriting it.
 
-See `app/README.md` → *Deploying* → *As a Claude artifact*.
+See `app/README.md` → *Deploying* → *The writer*.

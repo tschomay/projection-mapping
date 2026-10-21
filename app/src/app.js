@@ -321,6 +321,7 @@ class App {
   save() {
     this.project.media = this.media.meta().filter((m) => this.isUsed(m.id));
     const ok = store.saveProject(this.project);
+    this.savedAt = Date.now();
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
     this.refreshSendLink();
@@ -336,6 +337,7 @@ class App {
   async openProject(p) {
     this.pause();
     this.project = p;
+    this.savedAt = Date.now();   // what's in storage is no newer than this (catchUp)
     this.show.index = -1; this.show.fade = null;
     if (this.editor?.pick) this.setPick(false);
     p.settings = { snap: true, sensitivity: 1, loop: true, ...(p.settings || {}) };

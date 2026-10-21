@@ -76,15 +76,17 @@ in the issue listed, or paste the *Check this device* report there.
       in on the beat count you set? (#13, #21)
 - [ ] Reload: cues and any media used only in a cue are still there.
 
-### Halloween effects and the studio
+### Halloween effects and the writer
 - [ ] *Content → Halloween*: Bats, Glowing eyes, Ghostly fog, Lightning and
       Candle glow each look right on the phone, and the frame rate stays
       smooth with two or three surfaces showing them.
-- [ ] Open the [studio artifact](https://claude.ai/artifact/QDTC5ZPeQj6U5AHwMxJieL)
-      in the Claude app on the phone. *Describe a look* shows no key box and
-      says it uses your Claude plan. Write an effect; Claude asks once.
-- [ ] In the studio, *Project → Open in Surface Mapper*: the app opens with
-      the same surfaces, effects and cues, as a new project.
+- [ ] Without an API key, *Content → Describe a look*, *Write it with Claude*
+      on the phone: the writer opens in Claude. Long-press its box and paste;
+      Claude asks once, then writes the effect and shows it on your surfaces.
+- [ ] In the writer, ask for a change and edit the code by hand; tap between
+      the versions, then *Add to Surface Mapper*: the app opens with the shown
+      version on the surface that was selected. Switch back to the first app
+      tab: it shows the effect too.
 - [ ] In the app, *Project → Share a link* on the phone: the share sheet
       opens; send it to another device and open it there.
 
