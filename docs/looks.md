@@ -69,7 +69,7 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Cherry blossom ⇆ | `petals` | a wall, several surfaces | Pink blossom petals flutter down and drift across the frame on a breeze. |
 | Ocean waves ⇆ | `waves` | the ground, a floor, a wall | Seen from above: waves roll in to a sandy beach, wash up it in foam and slide back. |
 
-### Halloween (20)
+### Halloween (40)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
@@ -93,6 +93,26 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Pulsing veins ♪ | `veins` | a door, a pillar | Veins throb with a heartbeat that runs outwards, or with the beat. |
 | Hellfire ♪ | `hellfire` | a doorway, a fireplace | Tall red flames from the bottom edge, surging on the beat. |
 | Jump scare | `scare` | anything; best as a cue | Nearly dark, then a skull flashes up. |
+| Claws round the edge | `claws` | **a door**, a cupboard | Now and then a bony clawed hand creeps round the edge of a door and drums its fingers. |
+| Spinning web | `web` | a window, a corner, a door | A spider spins its web from nothing, spokes first and then the spiral, beaded with dew. It fades and starts again. |
+| Graveyard ⇆ | `graveyard` | a wide wall, a garage door | Crooked tombstones and a dead tree on a hill under the moon, with fog creeping between them. |
+| Dancing skeleton ♪ | `skeleton` | a door, a wall | A skeleton dances, swinging its arms and kicking its legs, in time with the music. |
+| Face in the wall | `ghostface` | **a sheet hung up**, a pale wall | Now and then a face pushes out of the wall as if through stretched cloth, mouth open, then sinks back. |
+| Zombie hands | `zombie` | the bottom of a wall, a flower bed | Rotting hands claw their way up out of the earth along the bottom, and sink back down. |
+| Cauldron ♪ | `cauldron` | a box, a wall | A witch's cauldron on a fire, its green brew bubbling and steaming, bubbling harder on the beat. |
+| Creepy crawlies | `crawlers` | a wall, a ceiling | Spiders scuttle over a dimly lit wall, stopping and starting. |
+| Shadow walker ⇆ | `shadow` | a wall, several surfaces | A tall, thin shadow walks slowly across a firelit wall, from one surface to the next. |
+| Bloody handprints | `handprints` | **a window**, a glass door | Bloody handprints slap onto the glass one after another, smear and run, then slowly fade. |
+| Werewolf moon ⇆ | `werewolf` | a wall, a garage door | A wolf on a rocky hill throws back its head and howls at the full moon, as clouds drift past. |
+| Haunted portrait | `portrait` | **a picture frame**, a rectangle | A dark old portrait in a gold frame. Its eyes follow you, and now and then the face turns to a skull. |
+| Black cat | `blackcat` | **a window** | A black cat sits on the sill against a warm-lit window, tail swishing, eyes glowing and blinking. |
+| Crows ⇆ | `crows` | a wall, several surfaces | A flock of crows flaps across a grey dusk sky, from one surface to the next. |
+| Mummy door | `mummy` | **a door** | Wraps a door in old bandages, and through a gap two eyes peer out, looking about and blinking. |
+| Will-o'-the-wisps ⇆ | `wisps` | a garden, the bottom of a wall | Little blue flames float and bob through the dark, low over the ground, fading in and out. |
+| The Reaper ⇆ | `reaper` | a wall, a garage door | A hooded figure with a scythe glides through green-lit fog across the frame, red eyes glinting under the hood. |
+| Pumpkin patch ⇆ | `pumpkins` | the bottom of a wide wall | A row of jack-o'-lanterns along the bottom of the frame, big and small, each with its own face and flicker. |
+| Something wants out ♪ | `knock` | **a door** | Something pounds on the other side of a door: with each blow, red light flares out round its edges. On the beat with music. |
+| Giant eyeball | `eyeball` | **a circle** | A bloodshot eyeball for something round: it looks about, its pupil widening and narrowing, and blinks. |
 
 ### Fall (8)
 
@@ -143,9 +163,7 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 
 ## Next
 
-- **More Halloween**: claws peeking round an edge, a web that spins itself,
-  tombstones in the fog, a skeleton that dances to the beat, a drop that falls
-  off the end of a drip.
+- **More Halloween**: a drop that falls off the end of a drip.
 
 Lazy Lighting, the phone app to match, lists "45+ Halloween visuals". AtmosFX's
 filmed characters (ghost brides, haunted portraits) are better as videos than
