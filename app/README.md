@@ -103,6 +103,10 @@ explains rehearsing with a TV.
 
 Projects save automatically on the device, with media kept in IndexedDB.
 
+A design photo is scaled down to 2048 px on its longer side when it's chosen (projects saved with a bigger one have
+it scaled down, in place, when they open): a phone's 12 MP photo would otherwise hold about 100 MB more while the
+project is open, and the frame never shows that much detail.
+
 **In a background tab** the editor gives back what it holds, so it can't run the browser out of graphics memory
 for other tabs: the frame's WebGL context, the tray's previews (also whenever the tray is closed), the shape model
 for picking on a photo (also two minutes after picking is put away), the camera, and idle audio. Everything comes

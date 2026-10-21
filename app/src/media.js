@@ -40,6 +40,15 @@ export class MediaLibrary {
     return this.add(file, { persist: false, id });
   }
 
+  // the same item with new bytes (a design photo scaled down), saved over the old ones
+  swapFile(id, file) {
+    const old = this.items.get(id);
+    if (!old) return null;
+    URL.revokeObjectURL(old.url);
+    this.items.delete(id);
+    return this.add(file, { id });
+  }
+
   makeElement(kind, url) {
     if (kind === 'image') { const img = new Image(); img.src = url; return img; }
     const el = document.createElement(kind === 'video' ? 'video' : 'audio');

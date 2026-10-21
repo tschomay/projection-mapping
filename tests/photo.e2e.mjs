@@ -53,7 +53,9 @@ export default async function run() {
       chips: window.app.trayItems().filter((it) => it.kind === 'media').length,
       saved: window.app.project.backdrop,
       align: document.getElementById('alignSheet').open,
+      kept: window.app.media.get(window.app.project.backdrop.mediaId).file.type,
     }));
+    t.ok(st.kept === 'image/png', `a photo that's already small is kept as it is (${st.kept})`);
     t.ok(st.align && !st.saved.quad, 'a chosen photo opens the line-up sheet, covering the frame until a corner is dragged');
     await page.evaluate(() => { document.getElementById('closeAlign').click(); document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
     t.ok(st.blend === 'screen', 'the content is blended onto the photo as light');
@@ -94,6 +96,45 @@ export default async function run() {
     t.ok(await page.evaluate(() => document.getElementById('backdrop').hidden && !document.body.classList.contains('photo')), 'the photo can be hidden');
     await page.click('#removeBackdrop');
     t.ok(await page.evaluate(() => !window.app.project.backdrop && document.getElementById('backdropOpts').hidden), 'and removed');
+
+    // a phone-sized photo (4000 x 3000) is scaled down to 2048 on its longer side, saved that way
+    const bigPhoto = () => page.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 4000; c.height = 3000;
+      const g = c.getContext('2d'); g.fillStyle = '#f00'; g.fillRect(0, 0, 2000, 3000); g.fillStyle = '#00f'; g.fillRect(2000, 0, 2000, 3000);
+      const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    });
+    const png = Buffer.from(await bigPhoto());
+    await page.setInputFiles('#addBackdrop', { name: 'Set.png', mimeType: 'image/png', buffer: png });
+    await page.waitForFunction(() => window.app.project.backdrop && document.getElementById('backdrop').complete && document.getElementById('backdrop').naturalWidth, null, { timeout: 10000 });
+    const small = await page.evaluate(async () => {
+      const { getBlob } = await import('./src/store.js');
+      const app = window.app, id = app.project.backdrop.mediaId, img = document.getElementById('backdrop');
+      const rec = await getBlob(id), bmp = await createImageBitmap(rec.blob);
+      const c = document.createElement('canvas'); c.width = 2; c.height = 1;
+      c.getContext('2d').drawImage(bmp, 0, 0, 2, 1);
+      const [r1, , b1, , r2, , b2] = c.getContext('2d').getImageData(0, 0, 2, 1).data;
+      return { w: img.naturalWidth, h: img.naturalHeight, saved: [bmp.width, bmp.height, rec.type], left: r1 > 200 && b1 < 60, right: b2 > 200 && r2 < 60 };
+    });
+    t.ok(small.w === 2048 && small.h === 1536, `a 4000 x 3000 photo is shown at 2048 x 1536 (${small.w} x ${small.h})`);
+    t.ok(small.saved.join() === '2048,1536,image/jpeg' && small.left && small.right, `and saved that size, the same picture (${small.saved})`);
+
+    // a project saved earlier with a full-size photo has it scaled down when it opens
+    await page.evaluate(async (bytes) => {
+      const { putBlob } = await import('./src/store.js');
+      const app = window.app, id = app.project.backdrop.mediaId;
+      await putBlob(id, { name: 'Old.png', type: 'image/png', blob: new Blob([new Uint8Array(bytes)], { type: 'image/png' }) });
+      app.save();
+    }, [...png]);
+    await page.waitForTimeout(500);
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app.project.backdrop, null, { timeout: 10000 });
+    const shrunk = await page.waitForFunction(async () => {
+      const { getBlob } = await import('./src/store.js');
+      const app = window.app, rec = await getBlob(app.project.backdrop.mediaId), img = document.getElementById('backdrop');
+      return rec && rec.type === 'image/jpeg' && img.naturalWidth === 2048;
+    }, null, { timeout: 10000 }).then(() => true, () => false);
+    t.ok(shrunk, 'a full-size photo saved by an earlier version is scaled down on opening, in place');
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
     await cameraPhoto(browser, server, t);
   } finally {

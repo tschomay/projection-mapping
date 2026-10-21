@@ -333,6 +333,7 @@ class App {
     this.editor.snap = p.settings.snap;
     this.audio.sensitivity = p.settings.sensitivity;
     const missing = await this.media.restore(p.media || []);
+    if (!IS_OUTPUT) this.shrinkSavedBackdrop();
     const warn = $('missingMedia');
     warn.hidden = !missing.length;
     warn.textContent = missing.length ? `Not on this device: ${missing.map((m) => m.name).join(', ')}. Add the files again and reassign them.` : '';
