@@ -2,7 +2,7 @@
 
 The built-in looks in Surface Mapper's *Looks* tray, what's planned next, and
 how to add one. The code is in `app/src/effects.js` (Basics, Music, Ambient)
-and `app/src/effects/<group>.js` (the Music and Ambient sets and the seasonal sets). Issue #42 added the settings
+and `app/src/effects/<group>.js` (the Music, Ambient and Celebrations sets and the seasonal sets). Issue #42 added the settings
 and the bigger library.
 
 ## What's there
@@ -165,6 +165,29 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Sleigh across the moon ⇆ | `sleigh` | a garage door, a wall | Santa and four reindeer cross the moon, the leader's nose glowing. |
 | Winter village ⇆ | `village` | a wide wall | Snowy rooftops, lit windows, chimney smoke, falling snow. |
 | Christmas train ⇆ | `train` | the bottom of a wide wall | A little steam train with lit carriages chugs across. |
+
+### Celebrations (18)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Fireworks ⇆ ♪ | `fireworks` | a wall, a garage door, several surfaces | Rockets climb and burst into showers of coloured sparks across the whole frame, flashing on the beat. |
+| Waving flag | `flag` | **a rectangle**: a door, a banner | A flag fills the surface, rippling in the wind: the Stars and Stripes or a rainbow. |
+| Sparklers | `sparklers` | a wall, a window | Sparklers fizz and spit bright sparks in every direction, slowly burning down their sticks. |
+| Confetti ⇆ | `confetti` | a wall, several surfaces | Bright confetti flutters down across the whole frame, twisting and flashing as it turns. |
+| Balloons ⇆ | `balloons` | a wall, several surfaces | Shiny balloons on strings float up and away across the whole frame. |
+| Hearts ♪ | `hearts` | a door, a window | A big heart beats, lub-dub, or on the beat with music, as little hearts float up around it. |
+| Red lanterns | `lanterns` | a porch, the top of a wall | Round red paper lanterns with gold tassels hang and sway, glowing, for Lunar New Year. |
+| Diyas | `diyas` | a step, a window sill, a shelf | A row of little painted clay oil lamps, each with a flickering flame, for Diwali. |
+| Rangoli | `rangoli` | **a circle on the ground**, a doormat | A rangoli pattern of petals and dots in bright powder colours for something round, its rings slowly turning. |
+| Easter egg | `eggs` | **an oval**, a door | A big painted Easter egg in pastel bands of zigzags, dots and stripes, slowly turning. |
+| Shamrocks ⇆ | `shamrocks` | a wall, several surfaces | Green shamrocks tumble down across the frame with flecks of gold, for St Patrick's Day. |
+| Countdown | `countdown` | a wall, a door | Big glowing digits count down a second at a time, then burst into colour, and start again. For New Year. |
+| Menorah | `menorah` | a window, a wall | A golden menorah for Hanukkah: set the night, and the shamash and that many candles are lit, right to left. |
+| Kinara | `kinara` | a window, a wall | A kinara for Kwanzaa: three red candles, a black one in the middle, three green. Set the day, and that many are lit. |
+| Searchlights ⇆ | `searchlights` | a wide wall, a whole house front | Beams of light sweep the night sky from below, crossing and lighting up the clouds, like a premiere. |
+| Crescent and lanterns | `crescent` | a window, a wall | A golden crescent moon and star in a night sky, with glowing lanterns of coloured glass hanging and swaying, for Ramadan and Eid. |
+| Papel picado | `papel` | the top of a wall, a porch | Strings of bright cut-paper flags across the top, fluttering, for a fiesta or Day of the Dead. |
+| Sugar skull | `sugarskull` | **a circle** | A decorated sugar skull for something round, with flowers round its eyes, for Día de los Muertos. Its colours slowly shift. |
 
 ## Next
 
