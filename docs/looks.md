@@ -54,19 +54,42 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Wheat field ⇆ | `wheat` | a wide wall | A golden field with gusts of wind running through it. |
 | Fireplace | `fireplace` | a fireplace, a box | Low flames on glowing coals, sparks drifting up. |
 
-### Christmas (4)
+### Christmas (29)
 
 | Look | Id | Best on | Notes |
 |---|---|---|---|
 | Snow ⇆ | `snow` | a wall, a window, several surfaces | Soft flakes in three layers, blown by a wind you set. |
+| Big snowflakes ⇆ | `snowflakes` | a wall, a garage door | Big six-armed flakes drifting down, turning. |
+| Snowdrift | `snowdrift` | a window, the bottom of a door | Snow piles up along the bottom edge, then melts and starts again. |
+| Icicles | `icicles` | **the top of a window, a porch or a gutter** | Glinting icicles; now and then one drips. |
+| Frost | `frost` | a window | Feathery frost creeps in from the edges and breathes back. |
 | Twinkle lights ♪ | `twinkle` | **any shape**: a door, a wreath, a window | Bulbs round the outline in four colour sets; more light on the beat. |
+| Chasing lights ♪ | `chase` | **any shape** | Bulbs round the outline chase, alternate, or fill and empty; on the beat with music. |
+| Light curtain | `curtain` | a window, a wall | Strands of little lights hanging down, twinkling or falling like icicle lights. |
+| Tree of lights | `xtree` | a wall, **a triangle** | A tree drawn in rows of bulbs, with a star on top. |
+| Holly garland | `holly` | **a door or window frame** | Holly leaves and berries round the outline, little lights between. |
+| Wreath | `wreath` | **a circle on the door** | Green, with twinkling lights and a red bow. |
+| Ornaments | `ornaments` | a window, the top of a wall | Baubles hanging on strings, swaying, glinting. |
+| Jingle bells ♪ | `bells` | a door | Two golden bells under a bow, swinging and ringing; harder on the beat. |
 | Candy stripes | `candy` | a pillar, a door frame | Turning red and white stripes; colour, width and speed. |
+| Peppermint | `peppermint` | **a circle** | A turning red and white peppermint swirl. |
+| Plaid | `plaid` | a pillar, a box, a door | Red or green tartan, or buffalo check. |
+| Glitter ♪ | `glitter` | anything | Gold or silver glitter; more sparkle on the treble. |
+| Wrapped present | `present` | **a box**, a door | Patterned paper, a ribbon each way and a bow. |
+| Gingerbread house | `gingerbread` | a wall, a door | Gingerbread with icing scallops, gumdrops and a lattice. |
+| Stockings by the fire | `stockings` | a fireplace, a wall | Stockings hang from the top, lit by a fire along the bottom. |
+| Advent candles | `advent` | a shelf, a window sill | Four candles in greenery; set how many are lit. |
+| Santa ♪ | `santa` | **a circle** | Hat, beard and rosy cheeks. He winks, and laughs along with music. |
+| Snowman | `snowman` | **a circle** | Coal eyes that blink, a carrot nose, a smile of stones. |
+| Snow globe | `snowglobe` | **a circle** | A little house and tree under glass; shaken now and then. |
 | Northern lights ⇆ | `aurora` | a wall, a garage door | Green and violet curtains over a starry sky. |
+| Star of Bethlehem ⇆ | `star` | a wall | One bright star over hills and a little town. |
+| Sleigh across the moon ⇆ | `sleigh` | a garage door, a wall | Santa and four reindeer cross the moon, the leader's nose glowing. |
+| Winter village ⇆ | `village` | a wide wall | Snowy rooftops, lit windows, chimney smoke, falling snow. |
+| Christmas train ⇆ | `train` | the bottom of a wide wall | A little steam train with lit carriages chugs across. |
 
 ## Next
 
-- **More Christmas**: ornaments, a fireplace with stockings, a sleigh across
-  the moon (the witch's path).
 - **VJ**: tunnels, kaleidoscopic fields, neon outlines, gradients.
 - **More Halloween**: claws peeking round an edge, a web that spins itself,
   tombstones in the fog, a skeleton that dances to the beat, a drop that falls

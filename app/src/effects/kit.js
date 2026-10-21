@@ -32,6 +32,26 @@ float k_tri(vec2 p, vec2 a, vec2 b, vec2 c) {
   vec2 d = min(min(vec2(dot(q0, q0), sg * (v0.x * e0.y - v0.y * e0.x)), vec2(dot(q1, q1), sg * (v1.x * e1.y - v1.y * e1.x))), vec2(dot(q2, q2), sg * (v2.x * e2.y - v2.y * e2.x)));
   return -sqrt(d.x) * sign(d.y);
 }
+// signed distance to a five-pointed star of radius r, point up; inner 0..1 sets how deep the notches are (0.4 is classic)
+float k_star(vec2 p, float r, float inner) {
+  vec2 k1 = vec2(0.809017, -0.587785), k2 = vec2(-0.809017, -0.587785);
+  p.x = abs(p.x);
+  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+  p.x = abs(p.x);
+  p.y -= r;
+  vec2 ba = inner * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+// signed distance to a heart about r tall, centred on p = 0
+float k_heart(vec2 p, float r) {
+  p = p / r + vec2(0.0, 0.5);
+  p.x = abs(p.x) * 1.15;
+  vec2 a = p - vec2(0.25, 0.75), b = p - 0.5 * max(p.x + p.y, 0.0), c = p - vec2(0.0, 1.0);
+  float d = p.y + p.x > 1.0 ? sqrt(dot(a, a)) - 0.353553 : sqrt(min(dot(c, c), dot(b, b))) * sign(p.x - p.y);
+  return d * r * 0.8;
+}
 // smooth union of two distances, blending over k
 float k_smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
 // 1 inside a shape, 0 outside, from its distance d, softened over w (same units)
