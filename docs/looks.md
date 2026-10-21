@@ -2,7 +2,7 @@
 
 The built-in looks in Surface Mapper's *Looks* tray, what's planned next, and
 how to add one. The code is in `app/src/effects.js` (Basics, Music, Ambient)
-and `app/src/effects/<group>.js` (the Music set and the seasonal sets). Issue #42 added the settings
+and `app/src/effects/<group>.js` (the Music and Ambient sets and the seasonal sets). Issue #42 added the settings
 and the bigger library.
 
 ## What's there
@@ -47,6 +47,27 @@ surface showing that look. Each surface keeps its own, and cues capture them.
 | Beat wave ⇆ ♪ | `beatwave` | several surfaces side by side | Each beat sends a band of light across the frame from left to right, through one surface after another. |
 | Digital rain ♪ | `matrix` | a wall, a door | Columns of glowing green characters stream down, each with a bright head. |
 | Op art | `opart` | a wall, a pillar | Black and white stripes bent by a slowly wandering bulge, so the surface seems to swell. |
+
+### Ambient (16)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Screen sweep ⇆ ♪ | `sweep` | several surfaces side by side | A bright line sweeps across the whole frame, from one surface to the next. |
+| Outline trace ♪ | `trace` | **any shape** | A light runs around the outline of each surface. |
+| Plasma ⇆ ♪ | `plasma` | a wall, several surfaces | Slow, flowing colour across the whole frame. |
+| Starry night ⇆ | `starry` | a wall, a ceiling | A deep sky of twinkling stars and the Milky Way across the frame, with now and then a shooting star. |
+| Pool light ⇆ | `caustics` | a wall, a ceiling, under a deck | The shifting web of light that sun through rippling water throws on the bottom of a pool. |
+| Fish tank | `aquarium` | a box, a window, a wall | Bright tropical fish swim back and forth past swaying weed, with bubbles rising and light from above. |
+| Lava lamp | `lavalamp` | a tall narrow surface, a pillar | Blobs of warm wax rise, fall and melt into each other in glowing liquid. |
+| Drifting clouds ⇆ | `clouds` | a wall, a ceiling | Clouds drift slowly across a day, sunset or night sky, from one surface to the next. |
+| Fireflies ⇆ | `fireflies` | a garden wall, a hedge | Fireflies wander and blink over dark grass on a summer night. |
+| Rain on a puddle | `puddle` | the ground, a path, a table top | Raindrops land on dark water, each sending out a ring of ripples. |
+| Sunset ⇆ | `sunset` | a wide wall | The sun sinks into the sea over a few minutes, the sky turning gold, then red, then dusk, and starts again. |
+| Nebula ⇆ | `nebula` | a wall, a ceiling | Clouds of coloured gas churn slowly among the stars, across the whole frame. |
+| Slow breath | `breathe` | a bedroom wall, anything | A soft glow that swells and fades like slow breathing, its colour drifting. Calming. |
+| Bubbles ⇆ | `bubbles` | a wall, several surfaces | Soap bubbles float up and drift across the frame, shimmering with rainbow colours. |
+| Cherry blossom ⇆ | `petals` | a wall, several surfaces | Pink blossom petals flutter down and drift across the frame on a breeze. |
+| Ocean waves ⇆ | `waves` | the ground, a floor, a wall | Seen from above: waves roll in to a sandy beach, wash up it in foam and slide back. |
 
 ### Halloween (20)
 

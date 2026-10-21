@@ -8,6 +8,7 @@ import { HALLOWEEN } from './effects/halloween.js';
 import { FALL } from './effects/fall.js';
 import { CHRISTMAS } from './effects/christmas.js';
 import { MUSIC } from './effects/music.js';
+import { AMBIENT } from './effects/ambient.js';
 
 // the tray shows effect groups in this order (then the project's own effects, then videos and images)
 export const LOOK_GROUPS = ['Basics', 'Music', 'Ambient', 'Halloween', 'Fall', 'Christmas'];
@@ -87,6 +88,7 @@ vec3 fx_plasma(Surf2 s, float t) {
   { id: 'off', name: 'Off', group: 'Basics', about: 'Nothing: the surface stays dark.', code: `
 vec3 fx_off(Surf2 s, float t) { return vec3(0.0); }` },
   ...MUSIC,
+  ...AMBIENT,
   ...HALLOWEEN,
   ...FALL,
   ...CHRISTMAS,
