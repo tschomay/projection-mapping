@@ -2,14 +2,19 @@
 
 The built-in looks in Surface Mapper's *Looks* tray, what's planned next, and
 how to add one. The code is in `app/src/effects.js` (Basics, Music, Ambient)
-and `app/src/effects/<group>.js` (seasonal sets). Issue #42 tracks the bigger
-library and effect settings.
+and `app/src/effects/<group>.js` (seasonal sets). Issue #42 added the settings
+and the bigger library.
 
 ## What's there
 
-37 looks in five groups. ♪ means it moves to music. ⇆ means it flows from one
+41 looks in six groups. ♪ means it moves to music. ⇆ means it flows from one
 surface to the next (on a single surface, *Whole scene here* fits the whole
 scene on it).
+
+Most looks have **settings**: a colour, a speed, how many, or parts to switch
+off (the haunted window's walker, hand and blackout). They're in the *Looks*
+tray, above the search, for the selected surface, or with *All* for every
+surface showing that look. Each surface keeps its own, and cues capture them.
 
 ### Halloween (20)
 
@@ -49,14 +54,19 @@ scene on it).
 | Wheat field ⇆ | `wheat` | a wide wall | A golden field with gusts of wind running through it. |
 | Fireplace | `fireplace` | a fireplace, a box | Low flames on glowing coals, sparks drifting up. |
 
+### Christmas (4)
+
+| Look | Id | Best on | Notes |
+|---|---|---|---|
+| Snow ⇆ | `snow` | a wall, a window, several surfaces | Soft flakes in three layers, blown by a wind you set. |
+| Twinkle lights ♪ | `twinkle` | **any shape**: a door, a wreath, a window | Bulbs round the outline in four colour sets; more light on the beat. |
+| Candy stripes | `candy` | a pillar, a door frame | Turning red and white stripes; colour, width and speed. |
+| Northern lights ⇆ | `aurora` | a wall, a garage door | Green and violet curtains over a starry sky. |
+
 ## Next
 
-- **Effect settings** (#42): colour, speed and how many, per surface. Then
-  *Dripping blood* and *Oozing slime* become one look with a colour, and *Hellfire*
-  and *Fireplace* one fire.
-- **Christmas**: snow, twinkle lights along the outline, candy stripes,
-  ornaments, a fireplace with stockings, a sleigh across the moon (the witch's
-  path).
+- **More Christmas**: ornaments, a fireplace with stockings, a sleigh across
+  the moon (the witch's path).
 - **VJ**: tunnels, kaleidoscopic fields, neon outlines, gradients.
 - **More Halloween**: claws peeking round an edge, a web that spins itself,
   tombstones in the fog, a skeleton that dances to the beat, a drop that falls
@@ -105,6 +115,22 @@ as code, so they come in through *＋ Video or image*.
    }` },
    ```
 
+   **Settings** are globals with a default and a `// param:` comment, named
+   `<id>_something`. The code reads them and never assigns them:
+
+   ```glsl
+   vec3 mylook_colour = vec3(1.0, 0.5, 0.1); // param: Colour
+   float mylook_speed = 1.0;                 // param: Speed, 0.2..3
+   float mylook_count = 6.0;                 // param: How many, 1..12, whole
+   bool mylook_glow = true;                  // param: Glow, toggle
+   int mylook_shape = 0;                     // param: Shape, choice: Round=0|Square=1
+   ```
+
+   The tray shows a control for each (up to 8). A look runs as it is with the
+   defaults: in the previews, and in ISF hosts, which get the settings as
+   inputs. For a "how many", loop to the most and break:
+   `if (float(i) >= mylook_count) break;`. Format: `app/src/params.js`.
+
    A look's code has to stand alone, because the renderer compiles only the
    looks in use. To share code between looks, write it in
    `app/src/effects/families.js`:
@@ -122,7 +148,8 @@ as code, so they come in through *＋ Video or image*.
    tray's preview tile shows it live.
 4. **Check it.** `node tools/sw.mjs` if you added a file. Then
    `cd tests && node run.mjs --quick`, which runs `effects.test.mjs`: ids,
-   groups, unique helper names, no ES 3.00-only code. Then
+   groups, unique helper and setting names, settings that parse, no ES
+   3.00-only code. Then
    `node run.mjs --only isf.e2e`, which compiles each look as ISF (GLSL ES
    1.00) and all of them together in the app.
 

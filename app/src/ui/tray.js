@@ -7,6 +7,7 @@
 import { EFFECTS, LOOK_GROUPS, movesToMusic, flowsAcross } from '../effects.js';
 import { namespaced } from '../ai.js';
 import { Thumbs, previewAudio } from '../thumbs.js';
+import { toHex, fromHex } from '../params.js';
 import { $ } from '../env.js';
 
 const GROUPS = [...LOOK_GROUPS, 'Yours', 'Videos & images'];
@@ -27,6 +28,14 @@ export const trayUI = {
     document.querySelectorAll('#trayScope button').forEach((b) => { b.onclick = () => { this.tray.all = b.dataset.all === '1'; this.renderTrayState(); }; });
     document.querySelectorAll('#trayScene button').forEach((b) => { b.onclick = () => this.setWholeScene(b.dataset.whole === '1'); });
     $('traySearch').oninput = (e) => { this.tray.query = e.target.value.trim().toLowerCase(); this.filterTray(); };
+    // a setting moving: every target surface takes it at once (and the projector shows it), without rebuilding the tray
+    const onSetting = (e) => { const el = e.target.closest('[data-p]'); if (el) this.setSetting(el.dataset.p, el); };
+    $('trayParamsBody').addEventListener('input', onSetting);
+    $('trayParamsBody').addEventListener('change', onSetting);
+    $('trayParamsReset').onclick = () => {
+      for (const s of this.settingsTargets().surfaces) { const { params, ...rest } = s.content; s.content = rest; }
+      this.tray.settingsKey = null; this.settingsChanged();
+    };
     $('trayFilters').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { this.tray.filter = b.dataset.g; this.filterTray(); } };
     $('trayTiles').addEventListener('click', (e) => {
       const del = e.target.closest('[data-del]');
@@ -128,6 +137,69 @@ export const trayUI = {
     if (!$('tray').hidden) this.sizeTrayGL();
   },
 
+  // ---------- the look's settings (params.js) ----------
+  // the surfaces they apply to: the selected one, or with All every surface showing the same look
+  settingsTargets() {
+    const sel = this.project.surfaces[this.editor.sel] || (this.tray?.all ? this.project.surfaces[0] : null);
+    const c = sel?.content || (sel ? { kind: 'effect', effect: 'outline' } : null);
+    if (!c || c.kind === 'media') return { look: null, surfaces: [], values: {} };
+    const look = c.effect || 'outline', same = (s) => s.content?.kind !== 'media' && (s.content?.effect || 'outline') === look;
+    return { look, surfaces: this.tray?.all ? this.project.surfaces.filter(same) : [sel], values: c.params || {} };
+  },
+
+  renderLookSettings() {
+    const { look, surfaces, values } = this.settingsTargets(), T = this.tray;
+    const params = look ? this.lookParams(look) : [];
+    $('trayParams').hidden = !params.length;
+    if (!params.length) { T.settingsKey = null; return; }
+    // the controls are rebuilt only when the look or its surfaces change, so one being dragged keeps its place
+    const key = look + '|' + surfaces.map((s) => s.id).join();
+    if (T.settingsKey !== key) {
+      T.settingsKey = key;
+      const e = this.trayItems().find((it) => it.kind === 'effect' && it.id === look);
+      $('trayParamsTitle').textContent = `${e ? e.name : 'Look'} settings` + (surfaces.length > 1 ? ` · ${surfaces.length} surfaces` : '');
+      $('trayParamsBody').innerHTML = params.map((p) => {
+        const label = esc(p.label), at = `data-p="${esc(p.name)}" aria-label="${label}"`;
+        if (p.kind === 'toggle') return `<label class="check"><input type="checkbox" ${at}> ${label}</label>`;
+        if (p.kind === 'colour') return `<label class="param"><span>${label}</span><input type="color" ${at}><output></output></label>`;
+        if (p.kind === 'choice') return `<label class="param"><span>${label}</span><select ${at}>${p.options.map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join('')}</select><output></output></label>`;
+        return `<label class="param"><span>${label}</span><input type="range" ${at} min="${p.min}" max="${p.max}" step="${p.step}"><output></output></label>`;
+      }).join('');
+    }
+    for (const p of params) {
+      const el = $('trayParamsBody').querySelector(`[data-p="${CSS.escape(p.name)}"]`);
+      if (!el || el === document.activeElement) continue;
+      const v = values[p.name] ?? p.def;
+      if (p.kind === 'toggle') el.checked = !!v;
+      else if (p.kind === 'colour') el.value = toHex(v);
+      else el.value = String(v);
+      this.showSettingValue(p, el);
+    }
+  },
+
+  showSettingValue(p, el) {
+    const out = el.parentElement.querySelector('output');
+    if (out) out.textContent = p.kind === 'range' ? (p.step >= 1 ? String(Math.round(el.value)) : Number(el.value).toFixed(p.max - p.min > 10 ? 0 : 2)) : '';
+  },
+
+  setSetting(name, el) {
+    const { look, surfaces } = this.settingsTargets();
+    const p = this.lookParams(look).find((x) => x.name === name);
+    if (!p) return;
+    const v = p.kind === 'toggle' ? el.checked : p.kind === 'colour' ? fromHex(el.value, p.type === 'vec4' ? (p.def[3] ?? 1) : undefined) : Number(el.value);
+    for (const s of surfaces) s.content = { ...(s.content || { kind: 'effect', effect: look }), params: { ...(s.content?.params || {}), [name]: v } };
+    this.showSettingValue(p, el);
+    this.settingsChanged();
+  },
+
+  // what changes with a setting: the frame, the save, a connected output; not the tray or the panels
+  settingsChanged() {
+    this.dirty = true;
+    this.scheduleSave();
+    this.broadcast();
+    this.renderLookSettings();
+  },
+
   // which surface, and which look is on it: cheap, so it runs on every change
   renderTrayState() {
     if (!this.tray || $('tray').hidden) return;
@@ -137,6 +209,7 @@ export const trayUI = {
     const cur = sel >= 0 ? keyOf(this.project.surfaces[sel]?.content) : null;
     const on = T.all ? new Set(this.project.surfaces.map((s) => keyOf(s.content))) : new Set([cur]);
     for (const t of T.tiles) t.el.setAttribute('aria-pressed', String(on.has(t.item.key)));
+    this.renderLookSettings();
     // for looks that are one scene across the frame: flow across the surfaces, or the whole scene on this one
     const targets = this.sceneTargets();
     $('trayScene').hidden = !targets.length;
@@ -171,8 +244,10 @@ export const trayUI = {
 
   applyLook(it) {
     const look = it.kind === 'media' ? { kind: 'media', mediaId: it.id, fit: 'fill', space: 'surface' } : { kind: 'effect', effect: it.id };
-    if (!this.tray.all) { this.setContent(look); return; }
-    for (const s of this.project.surfaces) s.content = { ...look };
+    // tapping the look a surface already shows keeps its settings
+    const keep = (s) => (look.kind === 'effect' && s?.content?.kind !== 'media' && (s?.content?.effect || 'outline') === look.effect && s?.content?.params ? { ...look, params: s.content.params } : { ...look });
+    if (!this.tray.all) { this.setContent(keep(this.project.surfaces[this.editor.sel])); return; }
+    for (const s of this.project.surfaces) s.content = keep(s);
     if (it.kind === 'media' && this.playing) this.media.get(it.id)?.el.play?.().catch(() => {});
     this.changed();
   },

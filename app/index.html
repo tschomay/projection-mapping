@@ -155,6 +155,19 @@ body.fullscreen #toolbar #fullBtn .out { display: inline; }
 #trayFind { display: grid; gap: 8px; padding: 10px 10px 0; }
 #trayScene button { white-space: nowrap; min-height: 36px; }
 #traySearch { width: 100%; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-height: 38px; }
+/* the look's settings (params.js), for the surface it's on */
+#trayParams { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; background: #0d1118; }
+#trayParams summary { cursor: pointer; font-size: 13px; color: var(--muted); min-height: 28px; display: flex; align-items: center; gap: 6px; }
+#trayParams summary span { color: var(--fg); }
+#trayParams summary::-webkit-details-marker { display: none; }
+#trayParams summary::before { content: "▸"; font-size: 11px; transition: transform .15s; }
+#trayParams[open] summary::before { transform: rotate(90deg); }
+#trayParamsBody { display: grid; gap: 4px; margin: 4px 0 8px; }
+#trayParamsBody .param { display: grid; grid-template-columns: minmax(70px, 34%) 1fr 34px; align-items: center; gap: 8px; font-size: 12.5px; min-height: 34px; }
+#trayParamsBody .param output { font: 11px var(--mono); color: var(--muted); text-align: right; }
+#trayParamsBody input[type=color] { width: 100%; height: 30px; padding: 0 2px; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; }
+#trayParamsBody select { min-height: 32px; padding: 4px 6px; }
+#trayParamsReset { min-height: 32px; padding: 4px 10px; font-size: 12.5px; }
 #trayFilters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 #trayFilters .chip { flex: none; min-height: 32px; padding: 4px 11px; font-size: 13px; }
 #trayTiles { position: relative; display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 10px; }
@@ -532,6 +545,11 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     </div>
     <div id="trayFind">
       <div class="seg" id="trayScene" role="group" aria-label="Where the scene goes" hidden title="This look is one scene across the whole frame"><button data-whole="0" aria-pressed="true">⇆ Flow across</button><button data-whole="1" aria-pressed="false">Whole scene here</button></div>
+      <details id="trayParams" open hidden>
+        <summary><span id="trayParamsTitle">Settings</span></summary>
+        <div id="trayParamsBody"></div>
+        <button class="btn" id="trayParamsReset">Back to the look's own settings</button>
+      </details>
       <input type="search" id="traySearch" placeholder="Search looks" aria-label="Search looks" autocomplete="off">
       <div id="trayFilters" role="group" aria-label="Show only"></div>
     </div>

@@ -68,7 +68,11 @@ Plain static files: HTML, ES modules and WebGL2, with no build step.
    surface instead. *Halloween* has
    20 looks, among them a singing jack-o'-lantern for a real pumpkin, a haunted
    window, ghosts, a witch across the moon, dripping blood and a jump scare;
-   *Fall* has falling leaves, a harvest moon, a fireplace and more. See
+   *Fall* has falling leaves, a harvest moon, a fireplace and more; *Christmas* has snow,
+   twinkle lights round the outline, candy stripes and northern lights. **Settings**: most looks have a colour,
+   speed, how many or parts to switch off, shown in the tray above the search for the selected surface (or every
+   surface showing that look, with *All*). Each surface keeps its own, cues capture them, and *Back to the look's
+   own settings* resets them. See
    [`docs/looks.md`](../docs/looks.md) for the list, what each is best on, and how to add one. *＋ Video or image* adds one
    from the phone. Or *✦ Describe a look* and an AI model writes a new effect for your surfaces:
    on your Claude plan in the studio artifact, or with your own Gemini or
@@ -159,6 +163,7 @@ plain GLSL ES 1.00, the strictest dialect hosts use; the tests compile every bui
 | `s.edge` | distance to the canvas border, not to the surface's outline |
 | `uAudio`, `uBeat`, `uBeats`, `uHasAudio` | inputs `audioBass`, `audioMid`, `audioTreble`, `audioLevel`, `audioBeat`, `audioBeatCount`, `hasAudio`; wire them to the host's audio analysis |
 | `s.id`, `s.count` | inputs `surfaceId`, `surfaceCount` |
+| the effect's settings | inputs, with the surface's current values as defaults: a range is a `float`, a toggle a `bool`, a choice a `long` with its labels, a colour a `color` |
 
 What doesn't carry over: the surface's real shape (outline, cut-outs, soft edge and bend stay in the app), and
 the continuity of `s.screen` across several surfaces (a host gives each layer its own canvas). The sandbox's
@@ -166,7 +171,9 @@ the continuity of `s.screen` across several surfaces (a host gives each layer it
 
 **Import** (*Content → Import ISF file*) adds an ISF generator to the project's effects (marked ✦), and onto
 the selected surface. The surface is the ISF canvas: `isf_FragNormCoord` runs between its corner pins and
-`RENDERSIZE` is its size. Inputs are fixed at their defaults. The file's names are renamed so they can't
+`RENDERSIZE` is its size. Its `float`, `bool`, `long` and `color` inputs become the effect's settings (up to eight);
+`point2D` and `event` inputs are fixed at their defaults. A file this app exported has its music and surface
+inputs wired back to the app's own sound analysis, so it still moves to music. The file's names are renamed so they can't
 collide with the app's or another effect's, and code behind `#ifndef GL_ES` is left out. Not imported yet:
 image and audio inputs (filters, audio-reactive ISF), several passes or persistent buffers, and imported
 images. Desktop-only GLSL that GLSL ES 3.00 rejects is reported with the compiler's message.

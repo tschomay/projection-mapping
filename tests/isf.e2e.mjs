@@ -35,7 +35,7 @@ export default async function run() {
       for (const e of EFFECTS) {
         const file = toISF(e), header = JSON.parse(file.match(/^\/\*([\s\S]*?)\*\//)[1]);
         // what an ISF host puts before the file's code: its built-ins and one uniform per input
-        const decl = header.INPUTS.map((i) => `uniform ${i.TYPE === 'bool' ? 'bool' : 'float'} ${i.NAME};`).join('\n');
+        const decl = header.INPUTS.map((i) => `uniform ${{ bool: 'bool', long: 'int', color: 'vec4' }[i.TYPE] || 'float'} ${i.NAME};`).join('\n');
         const fs = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fs, `precision highp float;\nuniform float TIME;\nuniform vec2 RENDERSIZE;\nvarying vec2 isf_FragNormCoord;\n${decl}\n${file.slice(file.indexOf('*/') + 2)}`);
         gl.compileShader(fs);
@@ -44,6 +44,12 @@ export default async function run() {
         gl.useProgram(prog); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
         gl.uniform1f(gl.getUniformLocation(prog, 'TIME'), 1.7); gl.uniform2f(gl.getUniformLocation(prog, 'RENDERSIZE'), 64, 36);
         gl.uniform1f(gl.getUniformLocation(prog, 'surfaceCount'), 1);
+        // the look's settings at their defaults, as a host sets inputs
+        for (const i of header.INPUTS) {
+          const loc = gl.getUniformLocation(prog, i.NAME);
+          if (!loc || i.NAME.startsWith('audio') || i.NAME === 'hasAudio' || i.NAME.startsWith('surface')) continue;
+          if (i.TYPE === 'color') gl.uniform4fv(loc, i.DEFAULT); else if (i.TYPE === 'long' || i.TYPE === 'bool') gl.uniform1i(loc, Number(i.DEFAULT)); else gl.uniform1f(loc, i.DEFAULT);
+        }
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         const px = new Uint8Array(64 * 36 * 4); gl.readPixels(0, 0, 64, 36, gl.RGBA, gl.UNSIGNED_BYTE, px);
         let lit = 0; for (let i = 0; i < px.length; i += 4) lit = Math.max(lit, px[i] + px[i + 1] + px[i + 2]);
