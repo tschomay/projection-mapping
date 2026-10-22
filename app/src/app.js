@@ -563,6 +563,7 @@ class App {
 
     // leave Show mode: double-tap, or a long press
     const stage = $('stage');
+    const LONG_PRESS = 900;
     let pressT = 0, lastTap = 0, nextT = 0, down = false;
     stage.addEventListener('pointerdown', () => {
       if (!document.body.classList.contains('show')) return;
@@ -570,15 +571,18 @@ class App {
       clearTimeout(nextT); clearTimeout(pressT);
       if (now - lastTap < 350) { this.setShow(false); lastTap = 0; down = false; return; }
       lastTap = now; down = true;
-      pressT = setTimeout(() => { down = false; this.setShow(false); }, 900);
+      pressT = setTimeout(() => { down = false; this.setShow(false); }, LONG_PRESS);
     });
     // a single tap (lifted before it became a long press) runs the next cue, once it's clear it wasn't the start of
-    // a double-tap; a cancelled touch (a scroll, a palm) does nothing
+    // a double-tap; a cancelled touch (a scroll, a palm) does nothing. Held long enough counts as a long press even if
+    // its timer hasn't run yet: on a busy frame the browser hands over the lift before a late timer.
     const lift = (cancelled) => {
       clearTimeout(pressT);
       if (!down) return;
       down = false;
-      if (cancelled || !this.show.cues.length) return;
+      if (cancelled) return;
+      if (performance.now() - lastTap >= LONG_PRESS) { this.setShow(false); return; }
+      if (!this.show.cues.length) return;
       nextT = setTimeout(() => { if (document.body.classList.contains('show')) this.show.next(); }, Math.max(0, 360 - (performance.now() - lastTap)));
     };
     stage.addEventListener('pointerup', () => lift(false));
