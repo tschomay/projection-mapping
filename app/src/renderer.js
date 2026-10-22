@@ -210,6 +210,7 @@ export class Renderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SURF, 1, 0, gl.RGBA, gl.FLOAT, this.inputData);
     this.paramTex = this.makeTexture(gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_PARAMS, MAX_SURF * 2, 0, gl.RGBA, gl.FLOAT, this.paramData);
+    this.failed = null;
     try { this.program = this.compile(buildFragment(this.effects)); } catch {
       this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
       this.program = this.compile(buildFragment(this.effects));
@@ -241,8 +242,10 @@ export class Renderer {
       return null;
     } catch (err) {
       Object.assign(this, old);
-      this.failed = { key, log: String(err.message || err) };
-      return this.failed.log;
+      const log = String(err.message || err);
+      // (a context lost just now fails every compile: that's not the effects' fault, so it isn't remembered)
+      if (!this.gl.isContextLost()) this.failed = { key, log };
+      return log;
     }
   }
 

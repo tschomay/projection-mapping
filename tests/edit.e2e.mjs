@@ -186,11 +186,11 @@ export default async function run() {
       const app = window.app, ed = app.editor, draw = ed.draw;
       let n = 0;
       ed.draw = function () { n++; if (n <= 3) throw new Error('drawing broke'); return draw.call(this); };
-      await new Promise((r) => setTimeout(r, 400));
+      for (let i = 0; i < 100 && n < 8; i++) await new Promise((r) => setTimeout(r, 50));   // software WebGL: slow frames
       ed.draw = draw;
       return { n, toast: document.getElementById('toast').textContent };
     });
-    t.ok(frames.n > 6 && /drawing broke/.test(frames.toast), `frames carry on after one throws (${frames.n} frames; ${frames.toast})`);
+    t.ok(frames.n >= 8 && /drawing broke/.test(frames.toast), `frames carry on after one throws (${frames.n} frames; ${frames.toast})`);
     // an imported project with a shape that has no points is refused rather than saved (it would break every frame)
     const refused = await page.evaluate(async () => {
       const { parseProject } = await import('./src/store.js');
