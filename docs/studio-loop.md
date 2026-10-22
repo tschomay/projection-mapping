@@ -114,3 +114,37 @@ look straight into the studio and skip the paste, until the surfaces change.
   that won't compile.
 - **Limits:** the request and context are a few hundred bytes. An effect is
   usually 1–4 KB of GLSL, under 2 KB gzipped. That's far below URL limits.
+
+## Future variant: a writer that doesn't know the scene
+
+Not built; the writer as it stands (previewing on the real surfaces) is
+what's wanted for now. Recorded in case the paste step becomes the thing to
+remove.
+
+The writer would build a look with no knowledge of the user's surfaces. It
+would preview on a generic stand-in (a few boxes, a frame-wide canvas) and send
+back only the effect and the description. The app would then decide where it
+goes: the selected surface, every surface, or a composition rectangle spread
+across several (`s.input`, see `inputRect` in `geometry.js`).
+
+What it would save: nothing to copy or paste. The writer remembers where to
+send the effect back, and the request is typed in the writer itself. *Write it
+with Claude* would only open the writer.
+
+What it would cost:
+- **The preview stops matching the result.** Looks that use `s.edge`, `s.uv`
+  on an odd shape, `s.id` or `s.count`, or flow across surfaces with
+  `s.screen`, depend on the real layout. The model also tailors a look to the
+  surfaces it's told about (`describeSurfaces`), so without them it would write
+  something more generic.
+- **Needs its own prompt.** The current one (`SYSTEM` in `ai.js`) assumes
+  real surfaces; this variant would ask for a look that works on any shape.
+- **Placement moves to the app.** After the effect arrives, the app needs an
+  obvious way to say where it goes, since the writer can't.
+
+A middle path, if the paste is the only annoyance: let the writer keep the last
+surfaces it was given (it already does) and start from "describe a look" when
+it has them, with the paste link secondary. The preview stays scene-aware, and
+a paste is only needed after the surfaces change. Neither the writer nor the
+app can tell the other that they have changed, because the two pages can't
+talk to each other (see *Probe results*).
