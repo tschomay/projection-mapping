@@ -5,6 +5,7 @@ import { Renderer } from './renderer.js';
 import { surfaceGeom } from './geometry.js';
 import { generateEffect, claudePlan, getKey, namespaced, effectName } from './ai.js';
 import { readWriterPacket, effectLink } from './share.js';
+import { parseParams, paramRow } from './params.js';
 import { $, MAX_RENDER_PIXELS } from './env.js';
 
 const LAST = 'pmw.last';   // the last request's surfaces, so another look for them needs no paste
@@ -174,8 +175,11 @@ function draw() {
   renderer.frame = [W, H];
   const geoms = job.surfaces.map((s) => surfaceGeom(s, W, H));
   const on = renderer.effectIndex(v ? v.id : 'outline'), outline = renderer.effectIndex('outline');
-  const fx = job.surfaces.map((s) => [!job.target || job.target.includes(s.id) ? on : outline, 0, 0, 0]);
-  renderer.setSurfaces(geoms, fx);
+  const shows = (s) => !job.target || job.target.includes(s.id);
+  const fx = job.surfaces.map((s) => [shows(s) ? on : outline, 0, 0, 0]);
+  // the look's settings at their defaults, as the app sets them (left out, every setting would read as zero)
+  const row = v ? paramRow(parseParams(namespaced(v.id, v.code))) : null;
+  renderer.setSurfaces(geoms, fx, fx, job.surfaces.map((s) => (shows(s) ? row : null)));
   size();
 }
 

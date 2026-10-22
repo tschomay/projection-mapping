@@ -81,14 +81,14 @@ export default async function run() {
     t.ok(link1 && link1.startsWith(origin + '/#fx=') && (await w.getAttribute('#send', 'aria-disabled')) === 'false', 'Add to Surface Mapper links back to the app');
 
     // ask for a change
-    await w.evaluate((a) => { window.__replies.push(a); }, solid([1, 0, 0], 'Now red.'));
+    await w.evaluate((a) => { window.__replies.push(a); }, 'Now red, with a setting.\n```glsl\nfloat c_red = 1.0;   // param: Red, 0..1\nvec3 fx_custom(Surf2 s, float t) {\n  return vec3(c_red, 0.0, 0.0);\n}\n```');
     await w.fill('#change', 'make it red');
     await w.click('#changeGo');
     await w.waitForFunction(() => window.writer.state().versions.length === 2, null, { timeout: 30000 });
     const ask = await w.evaluate(() => window.__samples[2][0].content);
     t.ok(/The current version/.test(ask) && /vec3\(0, 1, 0\)/.test(ask) && /Change it: make it red/.test(ask) && /solid green/.test(ask), 'a change sends the original request, the current code and what to change');
     const red = await centre();
-    t.ok(red[0] > 200 && red[1] < 40, `the preview shows the new version (${red})`);
+    t.ok(red[0] > 200 && red[1] < 40, `the preview shows the new version, its setting at its default as in the app (${red})`);
     t.ok(await w.evaluate(() => document.querySelectorAll('#versions button').length === 2 && document.querySelector('#versions button[aria-pressed="true"]').textContent === '2' && document.getElementById('change').value === ''), 'it becomes version 2');
 
     // edit by hand: an error is shown and changes nothing; working code makes a version
