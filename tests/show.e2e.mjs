@@ -81,6 +81,13 @@ export default async function run() {
     await page.waitForTimeout(600);
     const dbl = await page.evaluate(() => ({ show: document.body.classList.contains('show'), index: window.app.show.index }));
     t.ok(!dbl.show && dbl.index === 1, 'a double-tap leaves Show mode without running a cue ' + JSON.stringify(dbl));
+    // a long press leaves Show mode too, without running a cue on the way out
+    await page.evaluate(() => window.app.setShow(true));
+    await page.waitForTimeout(400);
+    await page.mouse.move(400, 200); await page.mouse.down(); await page.waitForTimeout(1100); await page.mouse.up();
+    await page.waitForTimeout(500);
+    const held = await page.evaluate(() => ({ show: document.body.classList.contains('show'), index: window.app.show.index }));
+    t.ok(!held.show && held.index === 1, 'a long press leaves Show mode without running a cue ' + JSON.stringify(held));
 
     // after some beats: cue 2 follows cue 1 after 4 beats of the song
     // in the app the audio graph is built on the first tap, well before Play; do the same here

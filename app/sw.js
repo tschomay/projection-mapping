@@ -1,8 +1,10 @@
 // Offline support: a show often happens where there's no reliable internet.
 // The app shell is cached on install; fonts are cached the first time they load. VERSION and SHELL are written by
 // tools/sw.mjs (run it after adding or changing app files; the tests check it, and Vercel runs it on deploy).
-const VERSION = 'surface-mapper-02e87ae03e';
+const VERSION = 'surface-mapper-a706672295';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './src/ai.js', './src/app.js', './src/audio.js', './src/beat-worklet.js', './src/camera.js', './src/capture.js', './src/diagnostics.js', './src/editor.js', './src/effects.js', './src/effects/ambient.js', './src/effects/celebrations.js', './src/effects/christmas.js', './src/effects/fall.js', './src/effects/families.js', './src/effects/halloween.js', './src/effects/kit.js', './src/effects/music.js', './src/env.js', './src/geometry.js', './src/isf.js', './src/link.js', './src/media.js', './src/merge.js', './src/outline.js', './src/params.js', './src/photo.js', './src/pick.js', './src/regions.js', './src/renderer.js', './src/segment.js', './src/share.js', './src/show.js', './src/store.js', './src/thumbs.js', './src/ui/content.js', './src/ui/cues.js', './src/ui/edit.js', './src/ui/photo.js', './src/ui/project.js', './src/ui/scan.js', './src/ui/sound.js', './src/ui/surfaces.js', './src/ui/tray.js', './src/writer.js'];
+
+const NET_WAIT_MS = 3000;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -17,9 +19,21 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   const isFont = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
   if (url.origin !== location.origin && !isFont) return;
-  // network first for the app itself (so updates arrive), cache as the fallback when offline
-  e.respondWith(fetch(req).then((res) => {
+  // network first for the app itself (so updates arrive), cache as the fallback when offline. A network that answers
+  // slowly or not at all (venue Wi-Fi that's connected but goes nowhere, a captive portal) mustn't hold the app up:
+  // after NET_WAIT_MS the cached copy is used if there is one, and the network's answer still refreshes the cache.
+  const net = fetch(req).then((res) => {
     if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
     return res;
-  }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('./index.html'))));
+  });
+  net.catch(() => {});
+  const cached = () => caches.match(req, { ignoreSearch: true });
+  e.respondWith((async () => {
+    try {
+      const first = await Promise.race([net, new Promise((r) => setTimeout(r, NET_WAIT_MS)).then(cached)]);
+      return first || await net;
+    } catch {
+      return (await cached()) || (req.mode === 'navigate' && await caches.match('./index.html')) || Response.error();
+    }
+  })());
 });

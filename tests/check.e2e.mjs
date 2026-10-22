@@ -22,6 +22,17 @@ export default async function run() {
     const cam = await page.$eval('#checkList', (el) => el.textContent);
     t.ok(/Camera\d+ × \d+/.test(cam), 'the camera test reports a resolution');
     t.ok(await page.evaluate(() => !window.app.camera.stream), 'the camera is closed again afterwards');
+    // closed while the browser is still opening it (the sheet shut straight away): the stream that arrives is stopped
+    const raced = await page.evaluate(async () => {
+      const md = navigator.mediaDevices, gum = md.getUserMedia.bind(md), got = [];
+      md.getUserMedia = async (c) => { const s = await gum(c); got.push(s); return s; };
+      const cam = window.app.camera, opening = cam.open().then(() => 'opened', (err) => err.message);
+      cam.close();
+      const res = await opening;
+      md.getUserMedia = gum;
+      return { res, stream: !!cam.stream, live: got.flatMap((s) => s.getTracks()).filter((tr) => tr.readyState === 'live').length, n: got.length };
+    });
+    t.ok(raced.n === 1 && raced.live === 0 && !raced.stream, 'a camera closed while opening is stopped when it arrives ' + JSON.stringify(raced));
     await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + '/check.png' : '/dev/null' }).catch(() => {});
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {

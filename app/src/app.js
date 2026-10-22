@@ -25,6 +25,8 @@ import { photoUI } from './ui/photo.js';
 import { editUI } from './ui/edit.js';
 import { trayUI } from './ui/tray.js';
 
+const PORT_HZ = 15;
+
 class App {
   constructor() {
     this.box = $('box');
@@ -115,8 +117,12 @@ class App {
     for (const s of this.project.surfaces) note(s.content);
     for (const cue of this.project.cues || []) Object.values(cue.looks || {}).forEach(note);
     if (this.show.fade) Object.values(this.show.fade.from).forEach(note);
-    const err = this.renderer.setEffects((this.project.effects || []).map((e) => ({ id: e.id, code: namespaced(e.id, e.code) })), used);
-    if (err && !IS_OUTPUT) this.toast('One of this project\'s own effects no longer compiles here.');
+    const own = (this.project.effects || []).map((e) => ({ id: e.id, code: namespaced(e.id, e.code) }));
+    const err = this.renderer.setEffects(own, used);
+    // the built-in looks still work without the project's own (the renderer remembers the failure, so this is cheap)
+    if (err && own.length) this.renderer.setEffects([], used);
+    if (err && err !== this.compileErr && !IS_OUTPUT) this.toast('One of this project\'s own effects no longer compiles here.');
+    this.compileErr = err;
     this.geoms = this.project.surfaces.map((s) => surfaceGeom(s, W, H));
     // media used by surfaces get the four texture slots, in order of first use
     const slots = [];
@@ -153,7 +159,17 @@ class App {
     return e ? parseParams(e.code) : [];
   }
 
+  // Whatever goes wrong in one frame, the next one is still asked for: a show must never freeze on the projector.
   frameLoop(now) {
+    requestAnimationFrame((t) => this.frameLoop(t));
+    try { this.drawFrame(now); } catch (err) {
+      console.error(err);
+      if (!this.frameError) { this.frameError = true; if (!IS_OUTPUT) this.toast('Something went wrong drawing the frame: ' + (err.message || err), 6000); }
+      this.dirty = false;   // not again every frame; the next change tries again
+    }
+  }
+
+  drawFrame(now) {
     const dt = now - (this.lastNow || now); this.lastNow = now;
     if (dt > 0 && dt < 5000) this.fps = this.fps ? this.fps * 0.95 + 50 / dt : 1000 / dt;   // smoothed frame rate; long gaps (a hidden tab) are skipped
     if (this.dirty) this.sync();
@@ -171,13 +187,13 @@ class App {
       if (this.output.connected && now - this.output.lastSeen > 6000) { this.output.connected = false; this.applyMute(); this.layout(); this.renderOutputState(); }
       if (this.playing && this.output.connected && now - (this.lastTimeSync || 0) > 1000) { this.lastTimeSync = now; this.broadcast(true); }
     }
-    requestAnimationFrame((t) => this.frameLoop(t));
   }
 
   // beats so far, from wherever the sound is playing (this device, or a connected output)
   beatCount() { return this.output.connected ? this.remoteBeats : this.audio.beats; }
 
   cueTick() {
+    if (!this.show.cues.length) return;   // runs every 10 ms: nothing to work out without cues
     const sounding = this.output.connected || (this.playing && !!this.soundtrackEl()) || !!this.audio.mic;
     this.show.tick(performance.now(), { active: sounding, beats: this.beatCount() }, this.soundtrackEl() ? this.currentTime() : null, this.playing);
   }
@@ -355,16 +371,24 @@ class App {
   }
 
   // ---------- output window (laptop + projector as second display) ----------
-  post(msg) {
+  // live: the whole project on every move of a drag. Fine for a window on this device, but a second screen gets it as
+  // JSON over the network, so it gets at most PORT_HZ of those a second, and always the last one.
+  post(msg, { live = false } = {}) {
     if (this.channel) this.channel.postMessage(msg);
-    for (const p of this.ports) p.post(msg);
+    if (!this.ports.size) return;
+    const send = (m) => { this.portsAt = performance.now(); for (const p of this.ports) p.post(m); };
+    if (msg.project) { clearTimeout(this.portsT); this.portsT = 0; }
+    const wait = live ? 1000 / PORT_HZ - (performance.now() - (this.portsAt || 0)) : 0;
+    if (wait <= 0) { send(msg); return; }
+    this.portsMsg = msg;
+    this.portsT ||= setTimeout(() => { this.portsT = 0; send(this.portsMsg); }, wait);
   }
 
   broadcast(transportOnly = false) {
     if (IS_OUTPUT || !this.output.connected) return;
     const msg = { type: 'state', playing: this.playing, time: this.currentTime() };
     if (!transportOnly) { msg.project = this.project; msg.fade = this.show.snapshot(performance.now()); msg.media = [...this.media.items.values()].map(({ id, name, kind, url }) => ({ id, name, kind, url })); }
-    this.post(msg);
+    this.post(msg, { live: !transportOnly && !!this.editor?.drag });
   }
 
   hello() { this.post({ type: 'hello', aspect: innerWidth / innerHeight }); }
@@ -414,6 +438,9 @@ class App {
     if (data.project) {
       this.project = data.project;
       this.show.restore(data.fade, performance.now());
+      // media the editor no longer has goes here too, so a long session doesn't pile up video elements
+      const ids = new Set((data.media || []).map((m) => m.id));
+      for (const id of [...this.media.items.keys()]) if (!ids.has(id)) this.media.forget(id);
       for (const m of data.media || []) {
         if (this.media.get(m.id)) continue;
         const item = this.media.addUrl(m);
@@ -536,19 +563,30 @@ class App {
 
     // leave Show mode: double-tap, or a long press
     const stage = $('stage');
-    let pressT = 0, lastTap = 0;
-    let nextT = 0;
+    const LONG_PRESS = 900;
+    let pressT = 0, lastTap = 0, nextT = 0, down = false;
     stage.addEventListener('pointerdown', () => {
       if (!document.body.classList.contains('show')) return;
       const now = performance.now();
-      clearTimeout(nextT);
-      if (now - lastTap < 350) { this.setShow(false); lastTap = 0; return; }
-      lastTap = now;
-      pressT = setTimeout(() => this.setShow(false), 900);
-      // a single tap runs the next cue, once it's clear it wasn't the start of a double-tap
-      if (this.show.cues.length) nextT = setTimeout(() => { if (document.body.classList.contains('show')) this.show.next(); }, 360);
+      clearTimeout(nextT); clearTimeout(pressT);
+      if (now - lastTap < 350) { this.setShow(false); lastTap = 0; down = false; return; }
+      lastTap = now; down = true;
+      pressT = setTimeout(() => { down = false; this.setShow(false); }, LONG_PRESS);
     });
-    stage.addEventListener('pointerup', () => clearTimeout(pressT));
+    // a single tap (lifted before it became a long press) runs the next cue, once it's clear it wasn't the start of
+    // a double-tap; a cancelled touch (a scroll, a palm) does nothing. Held long enough counts as a long press even if
+    // its timer hasn't run yet: on a busy frame the browser hands over the lift before a late timer.
+    const lift = (cancelled) => {
+      clearTimeout(pressT);
+      if (!down) return;
+      down = false;
+      if (cancelled) return;
+      if (performance.now() - lastTap >= LONG_PRESS) { this.setShow(false); return; }
+      if (!this.show.cues.length) return;
+      nextT = setTimeout(() => { if (document.body.classList.contains('show')) this.show.next(); }, Math.max(0, 360 - (performance.now() - lastTap)));
+    };
+    stage.addEventListener('pointerup', () => lift(false));
+    stage.addEventListener('pointercancel', () => lift(true));
     window.addEventListener('keydown', (e) => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
       if (e.key === 'Escape' && document.body.classList.contains('show')) { this.setShow(false); return; }

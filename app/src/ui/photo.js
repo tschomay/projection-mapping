@@ -120,7 +120,7 @@ export const photoUI = {
       $('photoStart').disabled = false;
       status.textContent = 'Hold the phone beside the projector\'s lens, then tap Take the photo.';
     } catch (err) {
-      status.textContent = err.message;
+      if (!err.closed) status.textContent = err.message;
     }
   },
 
