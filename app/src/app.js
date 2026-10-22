@@ -324,7 +324,6 @@ class App {
     this.savedAt = Date.now();
     $('saveState').textContent = ok ? 'Saved on this device' : 'Not saved: this browser blocks storage here. Export a file to keep your work.';
     this.renderProjectList();
-    this.refreshSendLink();
   }
 
   // media worth keeping with the project: on a surface now, in any cue's look, the soundtrack, or the design photo
@@ -627,9 +626,8 @@ class App {
 // each drawer pane's wiring and rendering lives in its own module under ui/
 Object.assign(App.prototype, editUI, trayUI, surfacesUI, contentUI, soundUI, cuesUI, projectUI, scanUI, photoUI);
 
-// offline support when served over http(s); unavailable in embedded previews, which is fine, and not used
-// inside a Claude artifact, where the platform serves the files
-if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.claude) {
+// offline support when served over http(s); unavailable in embedded previews, which is fine
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

@@ -4,7 +4,7 @@
 // With the segmentation model, its masks decide what was tapped, and where a mask closely matches a rectangle found
 // from the photo's straight edges, that rectangle is used: the model is better at telling which thing it is (a
 // textured backsplash, a door behind a towel), the edges at where exactly its sides are. Without the model (offline,
-// in the Claude artifact, or while it downloads), rectangles come from the edges alone and other shapes from a
+// or while it downloads), rectangles come from the edges alone and other shapes from a
 // colour fill. On a set of labelled photos the model with matching gets the right shape first time about twice as
 // often as edges alone (tests/bench/pick.bench.mjs).
 import { quadsAt } from './regions.js';

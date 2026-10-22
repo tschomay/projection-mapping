@@ -1,5 +1,5 @@
 // One-tap project links (share.js): a project packed into #import= opens as a new project in a fresh browser,
-// with its surfaces, own effects and cues; inside a Claude artifact the button opens the installed app instead.
+// with its surfaces, own effects and cues.
 import { serveApp, loadPlaywright, BROWSER_ARGS, reporter } from './serve.mjs';
 
 export default async function run() {
@@ -30,7 +30,7 @@ export default async function run() {
       app.changed();
       document.getElementById('toolsBtn').click(); app.selectTab('project');
     });
-    t.ok(await page.textContent('#sendLink') === 'Share a link', 'outside an artifact the button shares a link');
+    t.ok(await page.textContent('#sendLink') === 'Share a link', 'the button shares a link');
     await page.click('#sendLink');
     await page.waitForFunction(() => document.querySelector('#linkStatus a'));
     const url = await page.getAttribute('#linkStatus a', 'href');
@@ -60,21 +60,6 @@ export default async function run() {
     await ready(page3);
     await page3.waitForFunction(() => /damaged/.test(document.getElementById('toast').textContent), null, { timeout: 5000 }).then(() => t.ok(true, 'a damaged link is reported'), () => t.ok(false, 'a damaged link is reported'));
 
-    // inside a Claude artifact: the button opens the installed app with the project
-    const ctx3 = await browser.newContext({ viewport: { width: 844, height: 390 } });
-    await ctx3.addInitScript(() => { window.claude = { use: async () => null }; });
-    await ctx3.route('https://surface-mapper-alpha.vercel.app/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'ok' }));
-    const page4 = await ctx3.newPage();
-    await page4.goto(server.url);
-    await ready(page4);
-    await page4.evaluate(() => { window.app.addShape('square'); document.getElementById('toolsBtn').click(); window.app.selectTab('project'); });
-    t.ok(await page4.textContent('#sendLink') === 'Open in Surface Mapper', 'in an artifact the button opens Surface Mapper');
-    await page4.waitForFunction(() => document.getElementById('sendLink').href.includes('#import='));
-    const before = await page4.getAttribute('#sendLink', 'href');
-    await page4.evaluate(() => { window.app.addShape('circle'); window.app.save(); });
-    await page4.waitForFunction((b) => document.getElementById('sendLink').href !== b, before, { timeout: 15000 }).then(() => t.ok(true, 'the link follows edits'), () => t.ok(false, 'the link follows edits'));
-    const [popup] = await Promise.all([ctx3.waitForEvent('page', { timeout: 30000 }).catch(() => null), page4.click('#sendLink')]);
-    t.ok(popup && popup.url().startsWith('https://surface-mapper-alpha.vercel.app/#import='), 'one tap opens the app with the project (a plain link): ' + (popup && popup.url().slice(0, 60)));
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();

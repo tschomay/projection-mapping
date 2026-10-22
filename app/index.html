@@ -314,12 +314,11 @@ textarea { background: var(--raise); border: 1px solid var(--line); border-radiu
     <div class="group">
       <h3>Describe a look</h3>
       <textarea id="aiPrompt" rows="2" placeholder="e.g. slow blue waves that flash white on the beat" aria-label="Describe the look"></textarea>
-      <div class="row"><button class="btn primary" id="aiGo" disabled>Write it with Claude</button><button class="btn" id="aiCancel" hidden>Cancel</button></div>
+      <div class="row"><button class="btn primary" id="aiGo">Write it with Claude</button><button class="btn" id="aiCancel" hidden>Cancel</button></div>
       <p class="mono" id="aiStatus" role="status" aria-live="polite"></p>
       <textarea id="aiPacket" rows="3" readonly hidden aria-label="Your request, to paste in Claude"></textarea>
       <div class="row" id="aiKeyRow"><input type="password" id="aiKey" placeholder="AIza… or sk-ant-…" aria-label="Gemini or Anthropic API key" autocomplete="off"><button class="btn" id="aiKeySave">Save key</button></div>
       <p class="note" id="aiKeyNote">Claude writes a new effect for your surfaces on your own Claude plan. This copies your request and opens Claude: paste it there, watch it on your surfaces, ask for changes, then send it back here. Or save your own <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Gemini API key</a> (around 1–3 cents an effect, often free) or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> to write it right here; a key is kept only on this device and never in exported projects. New effects appear in Looks, under Yours. <button class="btn" id="aiKeyForget" hidden>Forget my key</button></p>
-      <p class="note" id="aiPlanNote" hidden>Claude writes a new effect for your surfaces, in about half a minute, on your own Claude plan. Claude asks once before the first one. New effects appear in Looks, under Yours.</p>
     </div>
     <div class="row"><label class="btn file">Add video or image<input type="file" id="addMedia" accept="video/*,image/*" multiple></label></div>
     <div class="group" id="mediaOpts" hidden>
