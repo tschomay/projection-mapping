@@ -31,7 +31,7 @@ export class ConnectionPort {
     this.ackWaiter = null;
     if ('binaryType' in conn) conn.binaryType = 'arraybuffer';
     conn.addEventListener('message', (e) => this.receive(e.data));
-    for (const ev of ['close', 'terminate']) conn.addEventListener(ev, () => { this.ackWaiter?.(); this.onclose(); });
+    for (const ev of ['close', 'terminate']) conn.addEventListener(ev, () => { this.incoming = null; this.ackWaiter?.(); this.onclose(); });
   }
 
   get open() { return !('state' in this.conn) || this.conn.state === 'connected'; }

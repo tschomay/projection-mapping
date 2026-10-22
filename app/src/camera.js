@@ -19,13 +19,18 @@ export class Camera {
 
   async open(deviceId) {
     this.close();
+    const turn = this.turn;
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser has no camera access here. It needs HTTPS.');
     // the main (not ultra-wide) back camera: the analysis assumes a lens without much distortion
     const video = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } };
     Object.assign(video, { width: { ideal: 1280 }, height: { ideal: 720 } });
-    try { this.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false }); } catch (err) {
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video, audio: false }); } catch (err) {
       throw new Error(err.name === 'NotAllowedError' ? 'Camera permission was refused. Allow the camera for this site and try again.' : 'The camera could not be opened: ' + (err.message || err.name));
     }
+    // closed (or opened again) while the browser was still opening it: this stream isn't wanted, so it mustn't stay on
+    if (turn !== this.turn) { for (const t of stream.getTracks()) t.stop(); throw Object.assign(new Error('The camera was closed.'), { closed: true }); }
+    this.stream = stream;
     this.track = this.stream.getVideoTracks()[0];
     this.video.srcObject = this.stream;
     this.video.muted = true; this.video.playsInline = true; this.video.setAttribute('playsinline', '');
@@ -38,6 +43,7 @@ export class Camera {
   }
 
   close() {
+    this.turn = (this.turn || 0) + 1;   // an open still waiting for the browser gives its stream back when it arrives
     if (this.stream) for (const t of this.stream.getTracks()) t.stop();
     this.stream = null; this.video.srcObject = null;
   }

@@ -181,6 +181,22 @@ export default async function run() {
     t.ok(await page.evaluate(() => !window.app.project.surfaces[0].input), 'Flow across puts it back to the part it covers');
     await page.keyboard.press('Control+z');
     t.ok(await page.evaluate(() => !!window.app.project.surfaces[0].input), 'and Undo takes that back');
+    // a frame that throws doesn't stop the frames after it (the projector mustn't freeze), and is said once
+    const frames = await page.evaluate(async () => {
+      const app = window.app, ed = app.editor, draw = ed.draw;
+      let n = 0;
+      ed.draw = function () { n++; if (n <= 3) throw new Error('drawing broke'); return draw.call(this); };
+      await new Promise((r) => setTimeout(r, 400));
+      ed.draw = draw;
+      return { n, toast: document.getElementById('toast').textContent };
+    });
+    t.ok(frames.n > 6 && /drawing broke/.test(frames.toast), `frames carry on after one throws (${frames.n} frames; ${frames.toast})`);
+    // an imported project with a shape that has no points is refused rather than saved (it would break every frame)
+    const refused = await page.evaluate(async () => {
+      const { parseProject } = await import('./src/store.js');
+      try { parseProject(JSON.stringify({ surfaces: [{ pins: [[0, 0], [1, 0], [1, 1], [0, 1]], parts: [{ op: 1 }] }] })); return ''; } catch (err) { return err.message; }
+    });
+    t.ok(/incomplete/.test(refused), 'an imported surface with a shape missing its points is refused');
     t.ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   } finally {
     await browser.close(); server.close();

@@ -12,7 +12,8 @@
 <title>Surface Mapper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<!-- not render-blocking: on venue Wi-Fi that is connected but goes nowhere, the app mustn't wait for the fonts -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: the whole screen is the projector frame; controls float over it in Edit mode and vanish in Show mode. */
 :root {

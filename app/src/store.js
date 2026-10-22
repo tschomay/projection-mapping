@@ -40,7 +40,9 @@ export function parseProject(text) {
   const p = JSON.parse(text);
   if (!p || !Array.isArray(p.surfaces)) throw new Error("That file isn't a projection mapping project.");
   for (const s of p.surfaces) {
-    if (!Array.isArray(s.pins) || s.pins.length !== 4 || !Array.isArray(s.parts) || !s.parts.length) throw new Error('A surface in that file is incomplete.');
+    const point = (q) => Array.isArray(q) && q.length >= 2 && Number.isFinite(q[0]) && Number.isFinite(q[1]);
+    if (!Array.isArray(s.pins) || s.pins.length !== 4 || !s.pins.every(point) || !Array.isArray(s.parts) || !s.parts.length ||
+      !s.parts.every((p) => p && Array.isArray(p.pts) && p.pts.length >= 3 && p.pts.every(point))) throw new Error('A surface in that file is incomplete.');
   }
   return { ...newProject(p.name || 'Imported mapping'), ...p, id: 'p' + Math.random().toString(36).slice(2, 10) };
 }

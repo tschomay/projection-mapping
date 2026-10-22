@@ -12,6 +12,7 @@ const POLY_W = 1024, POLY_H = 8;
 export const MAX_VERTS = POLY_W * POLY_H;
 // bent surfaces: per surface, a WARP_RES x WARP_RES table of uv corrections over homography space [-0.5, 1.5]^2
 const WARP_RES = 96, WARP_LO = -0.5, WARP_SPAN = 2;
+const NO_PARAMS = new Float32Array(MAX_PARAMS * 4);
 
 const VERT = `#version 300 es
 in vec2 position;
@@ -170,6 +171,7 @@ export class Renderer {
     this.warpKeys = new Array(MAX_SURF).fill('');
     this.inputData = new Float32Array(MAX_SURF * 4);
     this.paramData = new Float32Array(MAX_PARAMS * 4 * MAX_SURF * 2);
+    this.mediaInfo = new Float32Array(MAX_MEDIA * 4);
     // just the basics to start with: the app's first sync() compiles the looks in use (setEffects)
     this.effects = EFFECTS.filter((e) => e.id === 'outline' || e.id === 'off');
     // The context can be lost: the browser drops it when graphics memory runs short (or the GPU resets), and
@@ -227,15 +229,20 @@ export class Renderer {
     const all = EFFECTS.concat(custom).filter((e) => !used || used.has(e.id) || e.id === 'outline' || e.id === 'off');
     if (this.lost) { this.effects = all; return null; }   // compiled when the context comes back
     if (all.map((e) => e.id).join() === this.effects.map((e) => e.id).join() && all.every((e, i) => e.code === this.effects[i].code)) return null;
+    // a set that failed isn't compiled again until it changes: the app asks on every change, even every frame of a drag
+    const key = all.map((e) => e.id + '\n' + e.code).join('\n\0');
+    if (this.failed && this.failed.key === key) return this.failed.log;
     const old = { program: this.program, u: this.u };
     try {
       this.program = this.compile(buildFragment(all));
       this.gl.deleteProgram(old.program);
       this.effects = all;
+      this.failed = null;
       return null;
     } catch (err) {
       Object.assign(this, old);
-      return String(err.message || err);
+      this.failed = { key, log: String(err.message || err) };
+      return this.failed.log;
     }
   }
 
@@ -311,7 +318,7 @@ export class Renderer {
       const r = g.input;
       this.inputData.set(r ? [r.x, r.y, r.w, r.h] : [0, 0, 0, 0], si * 4);
       S.fxFrom.set(fxFrom[si], si * 4);
-      const at = si * 2 * MAX_PARAMS * 4, none = new Float32Array(MAX_PARAMS * 4);
+      const at = si * 2 * MAX_PARAMS * 4, none = NO_PARAMS;
       this.paramData.set(rows[si] || none, at);
       this.paramData.set(rowsFrom[si] || none, at + MAX_PARAMS * 4);
     }
@@ -359,9 +366,17 @@ export class Renderer {
       const w = m.isVideo ? m.el.videoWidth : m.el.naturalWidth, h = m.isVideo ? m.el.videoHeight : m.el.naturalHeight;
       const ready = w > 0 && (m.isVideo ? m.el.readyState >= 2 : m.el.complete);
       m.aspect = w && h ? w / h : 1; m.ready = ready;
-      if (!ready || (!m.isVideo && m.uploaded)) return;
+      if (!ready) return;
+      // a video only when it has a new frame: not while paused, nor twice for one frame of a 30 fps video at 60 fps.
+      // Decoded frames counted where the browser does; otherwise every frame while it plays and on a seek when paused.
+      let key = null;
+      if (m.isVideo) {
+        const q = m.el.getVideoPlaybackQuality?.();
+        key = (q ? q.totalVideoFrames : m.el.paused ? '' : performance.now()) + '|' + (m.el.paused ? m.el.currentTime : '') + '|' + w + 'x' + h;
+      }
+      if (m.uploaded && (!m.isVideo || key === m.key)) return;
       gl.bindTexture(gl.TEXTURE_2D, this.mediaTex[i]);
-      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, m.el); m.uploaded = true; } catch { m.ready = false; }
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, m.el); m.uploaded = true; m.key = key; } catch { m.ready = false; }
     });
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   }
@@ -387,8 +402,8 @@ export class Renderer {
     gl.uniform1i(u.uMixType, mix ? mix.type : 0);
     gl.uniform4fv(u.uPart, S.part);
     gl.uniform4fv(u.uPartBox, S.box);
-    const mi = new Float32Array(MAX_MEDIA * 4);
-    this.media.forEach((m, i) => { if (m) mi.set([m.aspect || 1, m.ready ? 1 : 0, 0, 0], i * 4); });
+    const mi = this.mediaInfo.fill(0);
+    this.media.forEach((m, i) => { if (m) { mi[i * 4] = m.aspect || 1; mi[i * 4 + 1] = m.ready ? 1 : 0; } });
     gl.uniform4fv(u.uMediaInfo, mi);
     gl.uniform4f(u.uAudio, audio.bass, audio.mid, audio.treble, audio.level);
     gl.uniform1f(u.uBeat, audio.beat); gl.uniform1f(u.uBeats, audio.beats); gl.uniform1f(u.uHasAudio, audio.active ? 1 : 0);

@@ -226,7 +226,10 @@ export const contentUI = {
     document.querySelectorAll('#spaceSeg button').forEach((b) => b.setAttribute('aria-pressed', String((c.space || 'surface') === b.dataset.space)));
     $('applyAll').disabled = !s;
     const over = this.project.surfaces.filter((x) => x.content?.kind === 'media').map((x) => x.content.mediaId);
-    if (new Set(over).size > MAX_MEDIA) this.toast(`Up to ${MAX_MEDIA} different videos or images can show at once.`);
+    // said once as the limit is passed, not again on every change (a drag changes things on every move)
+    const tooMany = new Set(over).size > MAX_MEDIA;
+    if (tooMany && !this.mediaOver) this.toast(`Up to ${MAX_MEDIA} different videos or images can show at once.`);
+    this.mediaOver = tooMany;
     this.renderTrayState();
   },
 

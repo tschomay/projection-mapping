@@ -72,6 +72,17 @@ export default async function run() {
     });
     t.ok(all.atStart === 'outline,off', `a project with nothing on its surfaces compiles only the basics (${all.atStart})`);
     t.ok(!all.err && all.n === all.total, `all ${all.total} built-in looks compile together in the app's renderer` + (all.err ? ': ' + all.err.split('\n')[0] : ''));
+    // an effect that doesn't compile isn't compiled again and again (the app asks on every change, every drag frame)
+    const memo = await page.evaluate(() => {
+      const r = window.app.renderer, compile = r.compile, before = r.effects.length;
+      let n = 0;
+      r.compile = function (src) { n++; return compile.call(this, src); };
+      const bad = [{ id: 'broken', code: 'vec3 fx_broken(Surf2 s, float t) { return nope; }' }], used = new Set(['broken']);
+      const a = r.setEffects(bad, used), b = r.setEffects(bad, used);
+      r.compile = compile;
+      return { failed: !!a, same: a === b, n, kept: r.effects.length === before };
+    });
+    t.ok(memo.failed && memo.same && memo.n === 1 && memo.kept, 'a set of effects that fails to compile is tried once, and the looks before it stay ' + JSON.stringify(memo));
 
     // ---- export and import from the Content pane ----
     await page.evaluate(() => {

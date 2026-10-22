@@ -68,25 +68,38 @@ export function meshEvaluator(mesh) {
     return p;
   };
   for (let j = -1; j <= ny + 1; j++) for (let i = -1; i <= nx + 1; i++) { const p = at(i, j), o = (j + 1) * w + i + 1; X[o] = p[0]; Y[o] = p[1]; }
-  return (u, v) => {
+  // into(u, v, out) writes the point into out and allocates nothing: meshInverse calls it a few hundred thousand
+  // times for each bent surface's correction table
+  const into = (u, v, out) => {
     const gx = u * nx, gy = v * ny;
     const i = Math.max(0, Math.min(nx - 1, Math.floor(gx))), j = Math.max(0, Math.min(ny - 1, Math.floor(gy)));
     const tx = gx - i, ty = gy - j;
-    const rowX = (r) => { const o = r * w + i; return cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx); };
-    const rowY = (r) => { const o = r * w + i; return cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx); };
-    return [cr(rowX(j), rowX(j + 1), rowX(j + 2), rowX(j + 3), ty), cr(rowY(j), rowY(j + 1), rowY(j + 2), rowY(j + 3), ty)];
+    let o = j * w + i;
+    const x0 = cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx), y0 = cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx); o += w;
+    const x1 = cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx), y1 = cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx); o += w;
+    const x2 = cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx), y2 = cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx); o += w;
+    const x3 = cr(X[o], X[o + 1], X[o + 2], X[o + 3], tx), y3 = cr(Y[o], Y[o + 1], Y[o + 2], Y[o + 3], tx);
+    out[0] = cr(x0, x1, x2, x3, ty); out[1] = cr(y0, y1, y2, y3, ty);
+    return out;
   };
+  const f = (u, v) => into(u, v, [0, 0]);
+  f.into = into;
+  return f;
 }
 export const meshPoint = (mesh, u, v) => meshEvaluator(mesh)(u, v);
 
 // homography space -> content uv (Newton's method; the warp is close to the identity). f: meshEvaluator(mesh).
+const P = new Float64Array(2), FU = new Float64Array(2), FV = new Float64Array(2);
 export function meshInverse(f, q, guess = q) {
+  const at = f.into || ((u, v, out) => { const p = f(u, v); out[0] = p[0]; out[1] = p[1]; return out; });
   let [u, v] = guess;
   for (let it = 0; it < 12; it++) {
-    const p = f(u, v), ex = p[0] - q[0], ey = p[1] - q[1];
+    at(u, v, P);
+    const ex = P[0] - q[0], ey = P[1] - q[1];
     if (Math.abs(ex) + Math.abs(ey) < 1e-7) break;
-    const e = 1e-4, fu = f(u + e, v), fv = f(u, v + e);
-    const a = (fu[0] - p[0]) / e, b = (fv[0] - p[0]) / e, c = (fu[1] - p[1]) / e, d = (fv[1] - p[1]) / e, det = a * d - b * c;
+    const e = 1e-4;
+    at(u + e, v, FU); at(u, v + e, FV);
+    const a = (FU[0] - P[0]) / e, b = (FV[0] - P[0]) / e, c = (FU[1] - P[1]) / e, d = (FV[1] - P[1]) / e, det = a * d - b * c;
     if (Math.abs(det) < 1e-9) break;
     let du = (d * ex - b * ey) / det, dv = (a * ey - c * ex) / det;
     const m = Math.hypot(du, dv); if (m > 0.25) { du *= 0.25 / m; dv *= 0.25 / m; }

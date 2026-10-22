@@ -48,7 +48,7 @@ export const scanUI = {
       $('scanStart').disabled = false;
       status.textContent = 'Aim the camera at the set, then tap Start. Use the main camera, not the ultra-wide one.';
     } catch (err) {
-      status.textContent = err.message;
+      if (!err.closed) status.textContent = err.message;
     }
   },
 

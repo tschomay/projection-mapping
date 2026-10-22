@@ -17,7 +17,7 @@ export class MediaLibrary {
     if (!kind) throw new Error(`${file.name} isn't a video, image or audio file.`);
     id = id || 'm' + Math.random().toString(36).slice(2, 10);
     const url = URL.createObjectURL(file);
-    const item = { id, name: file.name, kind, url, file, el: this.makeElement(kind, url) };
+    const item = { id, name: file.name, kind, url, file, own: true, el: this.makeElement(kind, url) };
     this.items.set(id, item);
     if (persist) putBlob(id, { name: file.name, type: file.type, blob: file }).catch(() => { item.unsaved = true; });
     this.onchange();
@@ -34,18 +34,14 @@ export class MediaLibrary {
 
   // swap in the real bytes for an item whose URL didn't open here (a second screen on another device)
   replaceFile(id, file) {
-    const old = this.items.get(id);
-    if (old && old.el.pause) old.el.pause();
-    this.items.delete(id);   // the old URL belongs to the editor, so it isn't revoked here
+    this.forget(id);   // the old URL belongs to the editor, so it isn't revoked here
     return this.add(file, { persist: false, id });
   }
 
   // the same item with new bytes (a design photo scaled down), saved over the old ones
   swapFile(id, file) {
-    const old = this.items.get(id);
-    if (!old) return null;
-    URL.revokeObjectURL(old.url);
-    this.items.delete(id);
+    if (!this.items.has(id)) return null;
+    this.forget(id);
     return this.add(file, { id });
   }
 
@@ -70,13 +66,20 @@ export class MediaLibrary {
   }
 
   remove(id) {
-    const it = this.items.get(id);
-    if (!it) return;
-    if (it.el.pause) it.el.pause();
-    URL.revokeObjectURL(it.url);
-    this.items.delete(id);
+    if (!this.items.has(id)) return;
+    this.forget(id);
     deleteBlob(id).catch(() => {});
     this.onchange();
+  }
+
+  // let an item go on this page only (its saved bytes stay): a video or audio element gives its decoder back now
+  // rather than whenever it's collected, and a URL made here is revoked
+  forget(id) {
+    const it = this.items.get(id);
+    if (!it) return;
+    if (it.el.pause) { it.el.pause(); it.el.removeAttribute('src'); it.el.load(); }
+    if (it.own) URL.revokeObjectURL(it.url);
+    this.items.delete(id);
   }
 
   get(id) { return this.items.get(id); }
