@@ -1,5 +1,5 @@
 // Project links: the whole mapping (surfaces, custom effects, cues) packed into a URL fragment, so one tap moves
-// a project from one copy of the app to another, for example from the Claude artifact to the installed app.
+// a project from one copy of the app to another, for example from a laptop to the phone.
 // Also what passes between the app and the writer (below).
 // The JSON is gzipped and base64url-encoded after #import=. A fragment never reaches the server. Videos and
 // images aren't in it (only their names), just as with an exported file.

@@ -368,7 +368,7 @@ which map onto "tap again for the one around it". A mask is traced along its
 pixel edges, simplified to at most 96 points, and becomes a surface: a nearly
 four-sided mask gets its corners as pins, anything else gets the smallest
 rectangle around it as pins and the outline as its shape. Where the model
-can't load (offline, or in the Claude artifact), a colour fill from the tap
+can't load (offline), a colour fill from the tap
 that stops at edges stands in. Each tap takes about 0.4 s; encoding the photo
 took 22 s on a sandbox CPU (WebAssembly, one thread), and should be a second
 or two with WebGPU.

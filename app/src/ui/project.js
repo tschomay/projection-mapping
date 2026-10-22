@@ -3,7 +3,7 @@
 import { deviceReport, cameraReport, reportText } from '../diagnostics.js';
 import { $, COARSE } from '../env.js';
 import * as store from '../store.js';
-import { projectLink, readProjectLink, APP_URL } from '../share.js';
+import { projectLink, readProjectLink } from '../share.js';
 
 export const projectUI = {
   initProjectUI() {
@@ -19,16 +19,7 @@ export const projectUI = {
       this.toast('Project deleted.');
     };
     $('exportProj').onclick = () => this.exportProject();
-    // Inside a Claude artifact this is a real link to the installable app, kept up to date as the project is
-    // saved (scripts there can't open windows for most viewers); elsewhere it shares or copies a link.
-    const send = $('sendLink');
-    if (window.claude) {
-      send.textContent = 'Open in Surface Mapper';
-      send.onclick = () => { $('linkStatus').textContent = (this.project.media || []).length ? 'Opened in Surface Mapper. Videos and images stay here; add them again there.' : 'Opened in Surface Mapper.'; };
-      this.refreshSendLink();
-    } else {
-      send.onclick = (e) => { e.preventDefault(); this.sendLink(); };
-    }
+    $('sendLink').onclick = (e) => { e.preventDefault(); this.sendLink(); };
     this.importLink();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) this.catchUp(); });
     $('importProj').onchange = async (e) => {
@@ -48,8 +39,7 @@ export const projectUI = {
     for (const id of ['connectBtn', 'connectBtn2']) $(id).onclick = () => sheet.showModal();
     $('closeConnect').onclick = () => sheet.close();
     sheet.addEventListener('close', () => store.setFlag('connectSeen'));
-    // (not inside a Claude artifact, where the show can't run)
-    if (!store.getFlag('connectSeen') && sheet.showModal && !window.claude) sheet.showModal();
+    if (!store.getFlag('connectSeen') && sheet.showModal) sheet.showModal();
   },
 
   async exportProject() {
@@ -59,21 +49,12 @@ export const projectUI = {
     await this.download(filename, text, 'application/json');
   },
 
-  // save a text file on the device: through the platform inside a Claude artifact, else a plain download link
+  // save a text file on the device
   async download(filename, text, type) {
-    try {
-      const dl = window.claude && (await window.claude.use('downloads'));
-      if (dl) { await dl.save({ filename, data: text }); return; }
-    } catch { /* fall through */ }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
     a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  },
-
-  async refreshSendLink() {
-    if (!window.claude) return;
-    try { $('sendLink').href = await projectLink(this.project, APP_URL); } catch { $('sendLink').hidden = true; }
   },
 
   // one tap: the project as a link (see share.js), shared or copied

@@ -48,8 +48,8 @@ export default async function run() {
     const wctx = await browser.newContext({ viewport: { width: 420, height: 860 } });
     await wctx.addInitScript(() => {
       window.__samples = []; window.__replies = [];
-      const sample = async (input) => {
-        window.__samples.push(input);
+      const sample = async (input, opts) => {
+        window.__samples.push(input); window.__tiers = (window.__tiers || []).concat([opts?.modelTier]);
         const r = window.__replies.shift();
         if (r && r.code) throw r;
         return { text: r, truncated: false };
@@ -78,7 +78,8 @@ export default async function run() {
     await w.fill('#paste', 'Copied from the app: ' + handed.clip);
     await w.waitForFunction(() => window.writer.state().versions.length === 1, null, { timeout: 30000 });
     const s1 = await w.evaluate(() => ({ samples: window.__samples, req: document.getElementById('reqText').textContent, note: document.getElementById('note').textContent, status: document.getElementById('status').textContent }));
-    t.ok(/fx_custom/.test(s1.samples[0][0].content) && /2 surfaces/.test(s1.samples[0][0].content) && /solid green/.test(s1.samples[0][0].content), 'a paste starts writing: the instructions, the surfaces and the look in the first turn');
+    t.ok(/fx_custom/.test(s1.samples[0][0].content) && /2 surfaces/.test(s1.samples[0][0].content) && /solid green/.test(s1.samples[0][0].content), 'a paste starts writing: the instructions, the surfaces and the look in the first turn (sample has no system prompt)');
+    t.ok(await w.evaluate(() => window.__tiers[0] === 'default'), 'on the default model tier');
     t.ok(s1.samples.length === 2 && s1.samples[1].length === 3 && /ERROR/i.test(s1.samples[1][2].content), 'a compile error gets one repair round');
     t.ok(/solid green/.test(s1.req) && /selected/.test(s1.req) && s1.note === 'Green.' && /Fixed a compile error/.test(s1.status), 'it shows the request, for which surface, and the note: ' + JSON.stringify([s1.req, s1.note, s1.status]));
     const green = await centre();

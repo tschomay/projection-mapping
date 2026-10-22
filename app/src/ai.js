@@ -26,7 +26,7 @@ export function setKey(k) {
   } catch { return false; }
 }
 
-// the viewer's Claude plan when the app runs as a Claude artifact, else null (decided at once outside one)
+// the viewer's Claude plan when this page runs as a Claude artifact (the writer), else null (decided at once outside one)
 let planPromise = null;
 export function claudePlan() {
   if (!window.claude?.use) return Promise.resolve(null);

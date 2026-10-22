@@ -8,7 +8,7 @@ export const MODEL_ID = 'Xenova/slimsam-77-uniform';
 let loading = null;
 
 // The model, loaded once. progress(share 0..1) reports the download. Rejects when it can't load (offline, or a
-// page that can't reach the model's hosts, such as a Claude artifact); a later call tries again.
+// page that can't reach the model's hosts); a later call tries again.
 export function loadSegmenter(progress = () => {}) {
   return loading ||= (async () => {
     const T = await import(LIB_URL);

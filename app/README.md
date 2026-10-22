@@ -233,7 +233,7 @@ copy when it's shown again. To publish it, `node tools/writer.mjs <dir>` writes
 | `src/segment.js` | Any shape from a tap: SlimSAM (Segment Anything) through transformers.js, loaded from a CDN on first use |
 | `src/outline.js` | A mask as a surface: traced, simplified, given pins; and the colour fill used without the model |
 | `src/isf.js` | ISF: an effect as an ISF generator file, and an ISF generator as an effect |
-| `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in an artifact, Gemini Interactions API, or Claude API), one compile-repair round |
+| `src/ai.js` | AI-written effects: the prompt (with the real surfaces), the model call (Claude plan in the writer, Gemini Interactions API, or Claude API), one compile-repair round |
 | `src/share.js` | Project links: the project gzipped into `#import=`, for *Share a link*; the request copied for the writer, and the effect it sends back in `#fx=` |
 | `writer.html`, `src/writer.js` | The writer, published as a Claude artifact: a pasted request written on the viewer's Claude plan, previewed on their surfaces, changed by asking or by hand, and sent back |
 | `src/show.js` | Cues and timeline: going to a cue, transitions, cues that start by themselves |

@@ -3,7 +3,7 @@
 // Methods mixed into App (see app.js), so `this` is the app.
 import { MAX_MEDIA } from '../renderer.js';
 import { EFFECTS } from '../effects.js';
-import { generateEffect, describeSurfaces, getKey, setKey, keyKind, claudePlan, namespaced, effectName } from '../ai.js';
+import { generateEffect, describeSurfaces, getKey, setKey, keyKind, namespaced, effectName } from '../ai.js';
 import { writerPacket, readEffectLink, WRITER_URL } from '../share.js';
 import { toISF, fromISF, isfFilename } from '../isf.js';
 import { $ } from '../env.js';
@@ -46,14 +46,11 @@ export const contentUI = {
 
   initAI() {
     const status = $('aiStatus');
-    this.aiPlan = null;   // the viewer's Claude plan, when running as a Claude artifact
-    // Outside an artifact and without a key, Claude writes it in the writer (share.js): always ready
-    this.aiReady = () => !!(this.aiPlan || getKey() || !window.claude);
+    // with a key the effect is written here; without one, Claude writes it in the writer (share.js)
     const showKey = () => {
-      const k = getKey(), plan = !!this.aiPlan;
-      $('aiKeyRow').hidden = plan || !!k; $('aiKeyForget').hidden = plan || !k; $('aiKeyNote').hidden = plan; $('aiPlanNote').hidden = !plan;
-      $('aiGo').disabled = !this.aiReady();
-      $('aiGo').textContent = !plan && keyKind(k) === 'gemini' ? 'Write it with Gemini' : 'Write it with Claude';
+      const k = getKey();
+      $('aiKeyRow').hidden = !!k; $('aiKeyForget').hidden = !k;
+      $('aiGo').textContent = keyKind(k) === 'gemini' ? 'Write it with Gemini' : 'Write it with Claude';
     };
     $('aiKeySave').onclick = () => {
       const k = $('aiKey').value.trim();
@@ -61,10 +58,9 @@ export const contentUI = {
       setKey(k); $('aiKey').value = ''; showKey(); status.textContent = 'Key saved on this device.';
     };
     $('aiKeyForget').onclick = () => { setKey(''); showKey(); status.textContent = 'Key removed from this device.'; };
-    $('aiGo').onclick = () => (this.aiPlan || getKey() ? this.runAI() : this.handToWriter());
+    $('aiGo').onclick = () => (getKey() ? this.runAI() : this.handToWriter());
     $('aiCancel').onclick = () => this.aiAbort?.abort();
     showKey();
-    claudePlan().then((sample) => { if (sample) { this.aiPlan = sample; showKey(); } });
     this.takeEffectLink();
   },
 
@@ -133,7 +129,7 @@ export const contentUI = {
     $('aiGo').disabled = true; $('aiCancel').hidden = false;
     try {
       const res = await generateEffect({
-        sample: this.aiPlan, apiKey: getKey(), request, signal: this.aiAbort.signal,
+        apiKey: getKey(), request, signal: this.aiAbort.signal,
         context: describeSurfaces(this.project.surfaces, this.geoms, this.frame),
         compile: (code) => this.renderer.tryEffect(id, namespaced(id, code)),
         progress: (t) => { status.textContent = t; },
@@ -144,7 +140,7 @@ export const contentUI = {
     } catch (err) {
       status.textContent = err.message;
     } finally {
-      $('aiGo').disabled = !this.aiReady(); $('aiCancel').hidden = true;
+      $('aiGo').disabled = false; $('aiCancel').hidden = true;
     }
   },
 
