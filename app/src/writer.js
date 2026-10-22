@@ -5,6 +5,7 @@ import { Renderer } from './renderer.js';
 import { surfaceGeom } from './geometry.js';
 import { generateEffect, claudePlan, getKey, namespaced, effectName } from './ai.js';
 import { readWriterPacket, effectLink } from './share.js';
+import { parseParams, paramRow, withDefaults, toHex, fromHex } from './params.js';
 import { $, MAX_RENDER_PIXELS } from './env.js';
 
 const LAST = 'pmw.last';   // the last request's surfaces, so another look for them needs no paste
@@ -118,6 +119,7 @@ function show(i, { keepCode = false } = {}) {
   const err = renderer.setEffects([{ id: v.id, code: namespaced(v.id, v.code) }], new Set([v.id]));
   if (err) say($('status'), "This version doesn't compile here.", true);
   draw();
+  renderSettings();
   say($('note'), v.hand ? 'Edited by hand.' : v.note);
   if (!keepCode) { $('code').value = v.code; say($('codeStatus'), ''); }
   renderVersions(); updateSend();
@@ -133,6 +135,46 @@ function renderVersions() {
     b.setAttribute('aria-pressed', String(i === current));
     b.onclick = () => show(i);
     return b;
+  }));
+}
+
+// ---------- settings: dragging changes the preview; letting go makes the value the setting's default in the code ----------
+function renderSettings() {
+  const v = versions[current], params = v ? parseParams(v.code) : [];
+  $('settings').hidden = !params.length;
+  $('settingsBody').replaceChildren(...params.map((p) => {
+    const label = document.createElement('label'), name = document.createElement('span');
+    name.textContent = p.label;
+    let el;
+    if (p.kind === 'toggle') {
+      label.className = 'check';
+      el = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!p.def });
+      label.append(el, name);
+    } else {
+      label.className = 'param';
+      if (p.kind === 'choice') {
+        el = document.createElement('select');
+        el.append(...p.options.map((o) => Object.assign(document.createElement('option'), { value: o.value, textContent: o.label })));
+        el.value = String(p.def);
+      } else if (p.kind === 'colour') el = Object.assign(document.createElement('input'), { type: 'color', value: toHex(p.def) });
+      else el = Object.assign(document.createElement('input'), { type: 'range', min: p.min, max: p.max, step: p.step, value: p.def });
+      label.append(name, el, document.createElement('output'));
+    }
+    el.setAttribute('aria-label', p.label);
+    el.dataset.p = p.name;
+    const value = () => (p.kind === 'toggle' ? el.checked : p.kind === 'colour' ? fromHex(el.value, p.type === 'vec4' ? (p.def[3] ?? 1) : undefined) : Number(el.value));
+    const shown = () => {
+      const out = label.querySelector('output');
+      if (out) out.textContent = p.kind === 'range' ? (p.step >= 1 ? String(Math.round(el.value)) : Number(el.value).toFixed(p.max - p.min > 10 ? 0 : 2)) : '';
+    };
+    el.addEventListener('input', () => { v.values = { ...v.values, [p.name]: value() }; shown(); draw(); });
+    el.addEventListener('change', () => {
+      v.code = withDefaults(v.code, { ...v.values, [p.name]: value() }); v.values = {};
+      if (document.activeElement !== $('code')) $('code').value = v.code;
+      shown(); draw(); updateSend();
+    });
+    shown();
+    return label;
   }));
 }
 
@@ -174,8 +216,11 @@ function draw() {
   renderer.frame = [W, H];
   const geoms = job.surfaces.map((s) => surfaceGeom(s, W, H));
   const on = renderer.effectIndex(v ? v.id : 'outline'), outline = renderer.effectIndex('outline');
-  const fx = job.surfaces.map((s) => [!job.target || job.target.includes(s.id) ? on : outline, 0, 0, 0]);
-  renderer.setSurfaces(geoms, fx);
+  const shows = (s) => !job.target || job.target.includes(s.id);
+  const fx = job.surfaces.map((s) => [shows(s) ? on : outline, 0, 0, 0]);
+  // the look's settings at their defaults, as the app sets them (left out, every setting would read as zero)
+  const row = v ? paramRow(parseParams(v.code), v.values) : null;
+  renderer.setSurfaces(geoms, fx, fx, job.surfaces.map((s) => (shows(s) ? row : null)));
   size();
 }
 

@@ -9,6 +9,12 @@ const BROKEN = 'Green.\n```glsl\nvec3 fx_custom(Surf2 s, float t) {\n  return ve
 
 export default async function run() {
   const t = reporter('writer');
+  // settings written back as defaults: each kind keeps a valid GLSL literal and the rest of the line
+  const { withDefaults, parseParams } = await import('../app/src/params.js');
+  const src = 'vec3 c_col = vec3(1.0, 0.5, 0.0);   // param: Colour\nfloat c_n = 6.0;   // param: How many, 1..12, whole\nbool c_on = true; // param: Flash, toggle\nint c_shape = 0; // param: Shape, choice: A|B\nvec3 fx_custom(Surf2 s, float t) { return c_col; }';
+  const out = withDefaults(src, { c_col: [0, 0.25, 1], c_n: 3, c_on: false, c_shape: 1 });
+  t.ok(/vec3 c_col = vec3\(0\.0, 0\.25, 1\.0\);   \/\/ param: Colour/.test(out) && /float c_n = 3\.0;/.test(out) && /bool c_on = false;/.test(out) && /int c_shape = 1;/.test(out), 'withDefaults writes each kind of setting back as GLSL');
+  t.ok(JSON.stringify(parseParams(out).map((p) => p.def)) === JSON.stringify([[0, 0.25, 1], 3, false, 1]), 'and reading it again gives those values');
   const { chromium } = await loadPlaywright();
   const server = await serveApp();
   const origin = new URL(server.url).origin;
@@ -81,14 +87,24 @@ export default async function run() {
     t.ok(link1 && link1.startsWith(origin + '/#fx=') && (await w.getAttribute('#send', 'aria-disabled')) === 'false', 'Add to Surface Mapper links back to the app');
 
     // ask for a change
-    await w.evaluate((a) => { window.__replies.push(a); }, solid([1, 0, 0], 'Now red.'));
+    await w.evaluate((a) => { window.__replies.push(a); }, 'Now red, with a setting.\n```glsl\nfloat c_red = 1.0;   // param: Red, 0..1\nvec3 fx_custom(Surf2 s, float t) {\n  return vec3(c_red, 0.0, 0.0);\n}\n```');
     await w.fill('#change', 'make it red');
     await w.click('#changeGo');
     await w.waitForFunction(() => window.writer.state().versions.length === 2, null, { timeout: 30000 });
     const ask = await w.evaluate(() => window.__samples[2][0].content);
     t.ok(/The current version/.test(ask) && /vec3\(0, 1, 0\)/.test(ask) && /Change it: make it red/.test(ask) && /solid green/.test(ask), 'a change sends the original request, the current code and what to change');
     const red = await centre();
-    t.ok(red[0] > 200 && red[1] < 40, `the preview shows the new version (${red})`);
+    t.ok(red[0] > 200 && red[1] < 40, `the preview shows the new version, its setting at its default as in the app (${red})`);
+    // its setting: dragging changes the preview, letting go makes it the default in the code that goes back
+    t.ok(await w.evaluate(() => !document.getElementById('settings').hidden && document.querySelectorAll('#settingsBody input[type=range]').length === 1 && document.querySelector('#settingsBody span').textContent === 'Red'), 'the version\'s setting is offered under the preview');
+    await w.evaluate(() => { const el = document.querySelector('#settingsBody input[type=range]'); el.value = '0.5'; el.dispatchEvent(new Event('input')); });
+    const half = await centre();
+    t.ok(half[0] > 100 && half[0] < 160, `dragging it changes the preview (${half})`);
+    t.ok(!/c_red = 0\.5/.test(await w.inputValue('#code')), 'without changing the code yet');
+    await w.evaluate(() => { document.querySelector('#settingsBody input[type=range]').dispatchEvent(new Event('change')); });
+    await w.waitForFunction(() => /c_red = 0\.5;/.test(document.getElementById('code').value), null, { timeout: 5000 }).catch(() => {});
+    t.ok(/float c_red = 0\.5;\s+\/\/ param: Red, 0\.\.1/.test(await w.inputValue('#code')), 'letting go makes it the default in the code, comment kept');
+    t.ok((await centre())[0] < 160, 'and the preview keeps it');
     t.ok(await w.evaluate(() => document.querySelectorAll('#versions button').length === 2 && document.querySelector('#versions button[aria-pressed="true"]').textContent === '2' && document.getElementById('change').value === ''), 'it becomes version 2');
 
     // edit by hand: an error is shown and changes nothing; working code makes a version

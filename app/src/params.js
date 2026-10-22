@@ -71,6 +71,18 @@ export function assignGLSL(params, row) {
   }).join(' ');
 }
 
+// the code with these values as its settings' defaults (the writer's settings, kept with the look itself)
+export function withDefaults(code, values) {
+  return code.replace(LINE, (line, type, name) => (values[name] === undefined ? line : line.replace(/=\s*[^;]+;/, `= ${glslLiteral(type, values[name])};`)));
+}
+const float = (x) => { const s = String(Math.round(Number(x) * 1e4) / 1e4); return /[.e]/.test(s) ? s : s + '.0'; };
+function glslLiteral(type, v) {
+  if (type === 'bool') return v ? 'true' : 'false';
+  if (type === 'int') return String(Math.round(v));
+  if (type === 'vec3' || type === 'vec4') return `${type}(${v.slice(0, type === 'vec3' ? 3 : 4).map(float).join(', ')})`;
+  return float(v);
+}
+
 // colours as the colour picker wants them, and back
 export const toHex = (c) => '#' + c.slice(0, 3).map((x) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0')).join('');
 export const fromHex = (h, alpha) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); return alpha === undefined ? v : [...v, alpha]; };
